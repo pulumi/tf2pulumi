@@ -8,6 +8,7 @@ import (
 
 	"github.com/hashicorp/hil/ast"
 	"github.com/hashicorp/terraform/config"
+	"github.com/hashicorp/terraform/helper/schema"
 	"github.com/pkg/errors"
 	"github.com/pulumi/pulumi/pkg/util/contract"
 
@@ -18,7 +19,16 @@ type nodeGenerator struct{
 	projectName string
 }
 
-func tsName(tfName string, isObjectKey bool) string {
+type schemas struct {
+	tf map[string]*schema.Schema
+	pulumi map[string]*tfbridge.SchemaInfo
+}
+
+func tsName(tfName string, tfSchema *schema.Schema, schemaInfo *tfbridge.SchemaInfo, isObjectKey bool) string {
+	if schemaInfo != nil && schemaInfo.Name != "" {
+		return schemaInfo.Name
+	}
+
 	if strings.ContainsAny(tfName, " -.") {
 		if isObjectKey {
 			return fmt.Sprintf("\"%s\"", tfName)
@@ -30,7 +40,7 @@ func tsName(tfName string, isObjectKey bool) string {
 			return r
 		}, tfName)
 	}
-	return tfbridge.TerraformToPulumiName(tfName, nil, false)
+	return tfbridge.TerraformToPulumiName(tfName, tfSchema, false)
 }
 
 type nodeHILWalker struct{}
@@ -233,14 +243,14 @@ func (g *nodeGenerator) computeHILProperty(n ast.Node) (string, error) {
 	return nodeHILWalker{}.walkNode(n)
 }
 
-func (g *nodeGenerator) computeSliceProperty(s []interface{}, indent string) (string, error) {
+func (g *nodeGenerator) computeSliceProperty(s []interface{}, indent string, elemSch schemas) (string, error) {
 	buf := &bytes.Buffer{}
 
 	fmt.Fprintf(buf, "[")
 	for _, v := range s {
 		// TODO: provider info for customization
 		elemIndent := indent + "    "
-		elem, err := g.computeProperty(v, elemIndent)
+		elem, err := g.computeProperty(v, elemIndent, elemSch)
 		if err != nil {
 			return "", err
 		}
@@ -251,25 +261,45 @@ func (g *nodeGenerator) computeSliceProperty(s []interface{}, indent string) (st
 	return buf.String(), nil
 }
 
-func (g *nodeGenerator) computeMapProperty(m map[string]interface{}, indent string) (string, error) {
+func (g *nodeGenerator) computeMapProperty(m map[string]interface{}, indent string, sch schemas) (string, error) {
 	buf := &bytes.Buffer{}
 
 	fmt.Fprintf(buf, "{")
 	for k, v := range m {
+		var elemTf *schema.Schema
+		if sch.tf != nil {
+			elemTf = sch.tf[k]
+		}
+
+		elemSch := sch
+		if elemTf != nil {
+			if elemResource, ok := elemTf.Elem.(*schema.Resource); ok {
+				elemSch.tf = elemResource.Schema
+			}
+		}
+
+		var elemPulumi *tfbridge.SchemaInfo
+		if sch.pulumi != nil {
+			elemPulumi = sch.pulumi[k]
+			if elemPulumi != nil {
+				elemSch.pulumi = elemPulumi.Fields
+			}
+		}
+
 		// TODO: provider info for customization
 		elemIndent := indent + "    "
-		elem, err := g.computeProperty(v, elemIndent)
+		elem, err := g.computeProperty(v, elemIndent, elemSch)
 		if err != nil {
 			return "", err
 		}
 
-		fmt.Fprintf(buf, "\n%s%s: %s,", elemIndent, tsName(k, true), elem)
+		fmt.Fprintf(buf, "\n%s%s: %s,", elemIndent, tsName(k, elemTf, elemPulumi, true), elem)
 	}
 	fmt.Fprintf(buf, "\n%s}", indent)
 	return buf.String(), nil
 }
 
-func (g *nodeGenerator) computeProperty(v interface{}, indent string) (string, error) {
+func (g *nodeGenerator) computeProperty(v interface{}, indent string, sch schemas) (string, error) {
 	if node, ok := v.(ast.Node); ok {
 		return g.computeHILProperty(node)
 	}
@@ -281,9 +311,9 @@ func (g *nodeGenerator) computeProperty(v interface{}, indent string) (string, e
 	case reflect.String:
 		return fmt.Sprintf("%q", v), nil
 	case reflect.Slice:
-		return g.computeSliceProperty(v.([]interface{}), indent)
+		return g.computeSliceProperty(v.([]interface{}), indent, sch)
 	case reflect.Map:
-		return g.computeMapProperty(v.(map[string]interface{}), indent)
+		return g.computeMapProperty(v.(map[string]interface{}), indent, sch)
 	default:
 		contract.Failf("unexpected property type %v", refV.Type())
 		return "", errors.New("unexpected property type")
@@ -318,7 +348,7 @@ func (g *nodeGenerator) generateVariables(vs []*variableNode) error {
 		if v.defaultValue == nil {
 			fmt.Printf("config.require(\"%s\")", name)
 		} else {
-			def, err := g.computeProperty(v.defaultValue, "")
+			def, err := g.computeProperty(v.defaultValue, "", schemas{})
 			if err != nil {
 				return err
 			}
@@ -346,11 +376,14 @@ func (g *nodeGenerator) generateResource(r *resourceNode) error {
 	provider, resourceType := config.Type[:underscore], config.Type[underscore+1:]
 
 	var resInfo *tfbridge.ResourceInfo
+	var sch schemas
 	if r.provider.info != nil {
 		resInfo = r.provider.info.Resources[config.Type]
+		sch.tf = r.provider.info.P.ResourcesMap[config.Type].Schema
+		sch.pulumi = resInfo.Fields
 	}
 
-	inputs, err := g.computeProperty(r.properties, "")
+	inputs, err := g.computeProperty(r.properties, "", sch)
 	if err != nil {
 		return err
 	}
@@ -377,12 +410,12 @@ func (g *nodeGenerator) generateOutputs(os []*outputNode) error {
 
 	fmt.Printf("\n")
 	for _, o := range os {
-		outputs, err := g.computeProperty(o.value, "")
+		outputs, err := g.computeProperty(o.value, "", schemas{})
 		if err != nil {
 			return err
 		}
 
-		fmt.Printf("export const %s = %s;\n", tsName(o.config.Name, false), outputs)
+		fmt.Printf("export const %s = %s;\n", tsName(o.config.Name, nil, nil, false), outputs)
 	}
 	return nil
 }
