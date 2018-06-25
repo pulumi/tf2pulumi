@@ -1,13 +1,17 @@
 package main
 
 import (
+	"os/exec"
 	"reflect"
 
 	"github.com/hashicorp/hil"
 	"github.com/hashicorp/hil/ast"
 	"github.com/hashicorp/terraform/config"
 	"github.com/pkg/errors"
+	"github.com/pulumi/pulumi/pkg/workspace"
 	"github.com/pulumi/pulumi/pkg/util/contract"
+	"github.com/pulumi/pulumi-terraform/pkg/tfbridge"
+	"github.com/ugorji/go/codec"
 )
 
 // todo: explicit dependencies
@@ -28,10 +32,12 @@ type providerNode struct {
 	config *config.ProviderConfig
 	deps []node
 	properties map[string]interface{}
+	info       *tfbridge.ProviderInfo
 }
 
 type resourceNode struct {
 	config *config.Resource
+	provider *providerNode
 	deps []node
 	properties map[string]interface{}
 }
@@ -274,7 +280,41 @@ func (b *builder) buildProperties(raw *config.RawConfig, dependsOn []string) (ma
 	return v.(map[string]interface{}), deps, nil
 }
 
+func getProviderInfo(p *providerNode) (*tfbridge.ProviderInfo, error) {
+	_, path, err := workspace.GetPluginPath(workspace.ResourcePlugin, p.config.Name, nil)
+	if err != nil {
+		return nil, err
+	} else if path == "" {
+		return nil, errors.Errorf("could not find plugin for provider %s", p.config.Name)
+	}
+
+	// Run the plugin and decode its provider config.
+	cmd := exec.Command(path, "-get-provider-info")
+	out, _ := cmd.StdoutPipe()
+	if err := cmd.Start(); err != nil {
+		return nil, err
+	}
+
+	var info tfbridge.ProviderInfo
+	err = codec.NewDecoder(out, new(codec.JsonHandle)).Decode(&info)
+
+	if cErr := cmd.Wait(); cErr != nil {
+		return nil, cErr
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	return &info, nil
+}
+
 func (b *builder) buildProvider(p *providerNode) error {
+	info, err := getProviderInfo(p)
+	if err != nil {
+		return err
+	}
+	p.info = info
+
 	props, deps, err := b.buildProperties(p.config.RawConfig, nil)
 	if err != nil {
 		return err
@@ -284,6 +324,13 @@ func (b *builder) buildProvider(p *providerNode) error {
 }
 
 func (b *builder) buildResource(r *resourceNode) error {
+	providerName := r.config.ProviderFullName()
+	p, ok := b.providers[providerName]
+	if !ok {
+		return errors.Errorf("could not find provider for resource %s", r.config.Id())
+	}
+	r.provider = p
+
 	props, deps, err := b.buildProperties(r.config.RawConfig, r.config.DependsOn)
 	if err != nil {
 		return err

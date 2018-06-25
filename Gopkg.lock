@@ -269,7 +269,6 @@
   name = "github.com/davecgh/go-spew"
   packages = ["spew"]
   revision = "346938d642f2ec3594ed81d874461961cd0faa76"
-  version = "v1.1.0"
 
 [[projects]]
   name = "github.com/dgrijalva/jwt-go"
@@ -1136,6 +1135,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "a333282d555d3a9be4cda6c363c083d0d577f2baebe1c7c2f9149746499ea365"
+  inputs-digest = "3fcd4181972e31fa75f8bac05de4ca350c899885a3b55269940f58486d52fc0f"
   solver-name = "gps-cdcl"
   solver-version = 1

@@ -345,18 +345,27 @@ func (g *nodeGenerator) generateResource(r *resourceNode) error {
 	}
 	provider, resourceType := config.Type[:underscore], config.Type[underscore+1:]
 
+	var resInfo *tfbridge.ResourceInfo
+	if r.provider.info != nil {
+		resInfo = r.provider.info.Resources[config.Type]
+	}
+
 	inputs, err := g.computeProperty(r.properties, "")
 	if err != nil {
 		return err
 	}
 
-	// TODO: use the provider info to look up any custom names
 	typeName := tfbridge.TerraformToPulumiName(resourceType, nil, true)
 
-	// HACKHACKHACK: don't hardcode ec2
-	module := "ec2"
+	module := ""
+	if resInfo != nil {
+		slash := strings.IndexRune(string(resInfo.Tok), '/')
+		if slash != -1 {
+			module = "." + string(resInfo.Tok[len(r.provider.config.Name)+1:slash])
+		}
+	}
 
-	fmt.Printf("const %s_%s = new %s.%s.%s(\"%s\", %s);\n",
+	fmt.Printf("const %s_%s = new %s%s.%s(\"%s\", %s);\n",
 		config.Type, config.Name, provider, module, typeName, config.Name, inputs)
 	return nil
 }

@@ -35,10 +35,14 @@ func main() {
 		os.Exit(-1)
 	}
 
-	fmt.Printf("module loaded successfully.\n")
+	g, err := buildGraph(mod.Config())
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "could not build graph: %v\n", err)
+		os.Exit(-1)
+	}
 
-	if err = genModule(mod); err != nil {
-		fmt.Fprintf(os.Stderr, "could not process module: %v\n", err)
+	if err = generate(g, &nodeGenerator{projectName: "auto"}); err != nil {
+		fmt.Fprintf(os.Stderr, "generation failed: %v\n", err)
 		os.Exit(-1)
 	}
 }

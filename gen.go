@@ -1,99 +1,106 @@
 package main
 
 import (
-	"reflect"
-
-	"github.com/davecgh/go-spew/spew"
-	"github.com/hashicorp/hil"
-	"github.com/hashicorp/hil/ast"
-	"github.com/hashicorp/terraform/config"
-	"github.com/hashicorp/terraform/config/module"
-
-	_ "github.com/pulumi/pulumi-terraform/pkg/tfbridge"
+	"github.com/pkg/errors"
 )
 
-type propertyWalker struct{}
-
-func (propertyWalker) Map(v reflect.Value) error {
-	// TODO: start map context
-	return nil
+type generator interface {
+	generatePreamble(g *graph) error
+	generateVariables(vs []*variableNode) error
+	generateLocal(l *localNode) error
+	generateResource(r *resourceNode) error
+	generateOutputs(os []*outputNode) error
 }
 
-func (propertyWalker) MapElem(m, k, v reflect.Value) error {
-	// TODO: start element context
-	return nil
-}
-
-func (propertyWalker) Slice(v reflect.Value) error {
-	// TODO: start slice context
-	return nil
-}
-
-func (propertyWalker) SliceElem(i int, v reflect.Value) error {
-	// TODO: start slice element context
-	return nil
-}
-
-func (propertyWalker) Primitive(v reflect.Value) error {
-	if v.Kind() == reflect.Interface {
-		v = v.Elem
-	}
-	if v.Kind() != reflect.String {
+func generateNode(n node, lang generator, done map[node]struct{}) error {
+	if _, ok := done[n]; ok {
 		return nil
 	}
 
-	rootNode, err := hil.Parse(v.String())
+	for _, d := range n.dependencies() {
+		if err := generateNode(d, lang, done); err != nil {
+			return err
+		}
+	}
+
+	var err error
+	switch n := n.(type) {
+	case *localNode:
+		err = lang.generateLocal(n)
+	case *resourceNode:
+		err = lang.generateResource(n)
+	default:
+		return errors.Errorf("unexpected node type %T", n)
+	}
 	if err != nil {
 		return err
 	}
 
-	
-}
-
-func genProvider(p *config.ProviderConfig) error {
-	spew.Dump(p)
+	done[n] = struct{}{}
 	return nil
 }
 
-func genResource(r *config.Resource) error {
-	spew.Dump(r)
-	return nil
-}
-
-func genOutput(o *config.Output) error {
-	spew.Dump(o)
-	return nil
-}
-
-func genModule(m *module.Tree) error {
-	if m == nil {
-		return nil
+func generate(g *graph, lang generator) error {
+	// We currently do not support multiple provider instantiations, so fail if any providers have dependencies on
+	// nodes that do not represent config vars.
+	for _, p := range g.providers {
+		for _, d := range p.deps {
+			if _, ok := d.(*variableNode); !ok {
+				return errors.Errorf("unsupported provider dependency: %v", d)
+			}
+		}
 	}
 
-	conf := m.Config()
+	// Generate any necessary preamble.
+	if err := lang.generatePreamble(g); err != nil {
+		return err
+	}
 
-	for _, p := range conf.ProviderConfigs {
-		if err := genProvider(p); err != nil {
+	// Variables are sources. Generate them first.
+	if err := lang.generateVariables(g.variables); err != nil {
+		return err
+	}
+
+	// Next, collect all resources and locals and generate them in topological order.
+	done := make(map[node]struct{})
+	for _, v := range g.variables {
+		done[v] = struct{}{}
+	}
+	todo := make([]node, 0)
+	for _, l := range g.locals {
+		if len(l.deps) == 0 {
+			if err := generateNode(l, lang, done); err != nil {
+				return err
+			}
+		} else {
+			todo = append(todo, l)
+		}
+	}
+	for _, r := range g.resources {
+		if len(r.deps) == 0 {
+			if err := generateNode(r, lang, done); err != nil {
+				return err
+			}
+		} else {
+			todo = append(todo, r)
+		}
+	}
+	for _, n := range todo {
+		if err := generateNode(n, lang, done); err != nil {
 			return err
 		}
 	}
 
-	for _, r := range conf.Resources {
-		if err := genResource(r); err != nil {
-			return err
+	// Finally, generate all outputs. These are sinks, so all of their dependencies should already have been generated.
+	for _, o := range g.outputs {
+		for _, d := range o.deps {
+			if _, ok := done[d]; !ok {
+				return errors.Errorf("output has unsatisfied dependency %v", d)
+			}
 		}
 	}
-
-	for _, o := range conf.Outputs {
-		if err := genOutput(o); err != nil {
-			return err
-		}
-	}
-
-	for _, c := range m.Children() {
-		if err := genModule(c); err != nil {
-			return err
-		}
+	if err := lang.generateOutputs(g.outputs); err != nil {
+		return err
 	}
 
 	return nil
