@@ -10,8 +10,8 @@ import (
 	"github.com/hashicorp/terraform/config"
 	"github.com/hashicorp/terraform/helper/schema"
 	"github.com/pkg/errors"
-	"github.com/pulumi/pulumi/pkg/util/contract"
 	"github.com/pulumi/pulumi-terraform/pkg/tfbridge"
+	"github.com/pulumi/pulumi/pkg/util/contract"
 )
 
 // TODO:
@@ -22,12 +22,12 @@ import (
 
 type nodeGenerator struct {
 	projectName string
-	graph *graph
+	graph       *graph
 }
 
 type schemas struct {
-	tf *schema.Schema
-	tfRes *schema.Resource
+	tf     *schema.Schema
+	tfRes  *schema.Resource
 	pulumi *tfbridge.SchemaInfo
 }
 
@@ -187,7 +187,7 @@ func (w *nodeHILWalker) walkArithmetic(n *ast.Arithmetic) (string, ast.Type, err
 		op = ">="
 	}
 
-	return "(" + strings.Join(strs, " " + op + " ") + ")", ast.TypeFloat, nil
+	return "(" + strings.Join(strs, " "+op+" ") + ")", ast.TypeFloat, nil
 }
 
 func (w *nodeHILWalker) walkCall(n *ast.Call) (string, ast.Type, error) {
@@ -416,7 +416,7 @@ func (g *nodeGenerator) computeSliceProperty(s []interface{}, indent string, sch
 		}
 		if elemTyp == ast.TypeList {
 			// TF flattens list elements that are themselves lists into the parent list.
-			// 
+			//
 			// TODO: if there is a list element that is dynamically a list, that also needs to be flattened. This is
 			// only knowable at runtime and will require a helper.
 			elem = "..." + elem
@@ -558,7 +558,7 @@ func (g *nodeGenerator) generateResource(r *resourceNode) error {
 			return errors.Errorf("unexpected resource module format %s", mod)
 		}
 
-		module, typeName = "." + mod[:slash], typ
+		module, typeName = "."+mod[:slash], typ
 	}
 
 	fmt.Printf("const %s = new %s%s.%s(\"%s\", %s",
@@ -597,4 +597,3 @@ func (g *nodeGenerator) generateOutputs(os []*outputNode) error {
 	}
 	return nil
 }
-

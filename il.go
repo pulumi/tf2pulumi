@@ -12,9 +12,9 @@ import (
 	"github.com/hashicorp/terraform/helper/schema"
 	"github.com/mitchellh/mapstructure"
 	"github.com/pkg/errors"
-	"github.com/pulumi/pulumi/pkg/workspace"
-	"github.com/pulumi/pulumi/pkg/util/contract"
 	"github.com/pulumi/pulumi-terraform/pkg/tfbridge"
+	"github.com/pulumi/pulumi/pkg/util/contract"
+	"github.com/pulumi/pulumi/pkg/workspace"
 	"github.com/ugorji/go/codec"
 )
 
@@ -26,41 +26,41 @@ type node interface {
 type graph struct {
 	providers map[string]*providerNode
 	resources map[string]*resourceNode
-	outputs map[string]*outputNode
-	locals map[string]*localNode
+	outputs   map[string]*outputNode
+	locals    map[string]*localNode
 	variables map[string]*variableNode
 }
 
 type providerNode struct {
-	config *config.ProviderConfig
-	deps []node
+	config     *config.ProviderConfig
+	deps       []node
 	properties map[string]interface{}
 	info       *tfbridge.ProviderInfo
 }
 
 type resourceNode struct {
-	config *config.Resource
-	provider *providerNode
-	deps []node
+	config       *config.Resource
+	provider     *providerNode
+	deps         []node
 	explicitDeps []node
-	properties map[string]interface{}
+	properties   map[string]interface{}
 }
 
 type outputNode struct {
-	config *config.Output
-	deps []node
+	config       *config.Output
+	deps         []node
 	explicitDeps []node
-	value interface{}
+	value        interface{}
 }
 
 type localNode struct {
-	config *config.Local
-	deps []node
+	config     *config.Local
+	deps       []node
 	properties map[string]interface{}
 }
 
 type variableNode struct {
-	config *config.Variable
+	config       *config.Variable
 	defaultValue interface{}
 }
 
@@ -437,7 +437,7 @@ func (b *builder) buildResource(r *resourceNode) error {
 
 		p = &providerNode{
 			config: &config.ProviderConfig{
-				Name: providerName,
+				Name:      providerName,
 				RawConfig: rawConfig,
 			},
 		}
@@ -560,8 +560,8 @@ func buildGraph(conf *config.Config) (*graph, error) {
 	return &graph{
 		providers: b.providers,
 		resources: b.resources,
-		outputs: b.outputs,
-		locals: b.locals,
+		outputs:   b.outputs,
+		locals:    b.locals,
 		variables: b.variables,
 	}, nil
 }
