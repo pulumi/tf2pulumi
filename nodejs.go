@@ -12,6 +12,8 @@ import (
 	"github.com/pkg/errors"
 	"github.com/pulumi/pulumi-terraform/pkg/tfbridge"
 	"github.com/pulumi/pulumi/pkg/util/contract"
+
+	"github.com/pgavlin/firewalker/il"
 )
 
 // TODO:
@@ -20,7 +22,7 @@ import (
 
 type nodeGenerator struct {
 	projectName string
-	graph       *graph
+	graph       *il.Graph
 }
 
 type schemas struct {
@@ -314,16 +316,16 @@ func (w *nodeHILWalker) walkVariableAccess(n *ast.VariableAccess) (string, ast.T
 		// default
 
 		// look up the resource.
-		r, ok := w.pc.g.graph.resources[v.ResourceId()]
+		r, ok := w.pc.g.graph.Resources[v.ResourceId()]
 		if !ok {
 			return "", ast.TypeInvalid, errors.Errorf("unknown resource %v", v.ResourceId())
 		}
 
 		var resInfo *tfbridge.ResourceInfo
 		var sch schemas
-		if r.provider.info != nil {
-			resInfo = r.provider.info.Resources[v.Type]
-			sch.tfRes = r.provider.info.P.ResourcesMap[v.Type]
+		if r.Provider.Info != nil {
+			resInfo = r.Provider.Info.Resources[v.Type]
+			sch.tfRes = r.Provider.Info.P.ResourcesMap[v.Type]
 			sch.pulumi = &tfbridge.SchemaInfo{Fields: resInfo.Fields}
 		}
 
@@ -364,7 +366,7 @@ func (w *nodeHILWalker) walkVariableAccess(n *ast.VariableAccess) (string, ast.T
 		}
 
 		// look up the variable.
-		vn, ok := w.pc.g.graph.variables[v.Name]
+		vn, ok := w.pc.g.graph.Variables[v.Name]
 		if !ok {
 			return "", ast.TypeInvalid, errors.Errorf("unknown variable %s", v.Name)
 		}
@@ -372,8 +374,8 @@ func (w *nodeHILWalker) walkVariableAccess(n *ast.VariableAccess) (string, ast.T
 		// If the variable does not have a default, its type is string. If it does have a default, its type is string
 		// iff the default's type is also string. Note that we don't try all that hard here.
 		typ := ast.TypeString
-		if vn.defaultValue != nil {
-			if _, ok := vn.defaultValue.(string); !ok {
+		if vn.DefaultValue != nil {
+			if _, ok := vn.DefaultValue.(string); !ok {
 				typ = ast.TypeUnknown
 			}
 		}
@@ -516,14 +518,14 @@ func (g *nodeGenerator) computePropertyWithCount(v interface{}, indent string, s
 	return (&nodePropertyComputer{g: g, countIndex: count}).computeProperty(v, indent, sch)
 }
 
-func (g *nodeGenerator) generatePreamble(gr *graph) error {
+func (g *nodeGenerator) generatePreamble(gr *il.Graph) error {
 	// Stash the graph for later.
 	g.graph = gr
 
 	// Emit imports for the various providers
 	fmt.Printf("import * as pulumi from \"@pulumi/pulumi\";\n")
-	for _, p := range gr.providers {
-		fmt.Printf("import * as %s from \"@pulumi/%s\";\n", p.config.Name, p.config.Name)
+	for _, p := range gr.Providers {
+		fmt.Printf("import * as %s from \"@pulumi/%s\";\n", p.Config.Name, p.Config.Name)
 	}
 	fmt.Printf("import * as fs from \"fs\";")
 	fmt.Printf("\n\n")
@@ -531,7 +533,7 @@ func (g *nodeGenerator) generatePreamble(gr *graph) error {
 	return nil
 }
 
-func (g *nodeGenerator) generateVariables(vs []*variableNode) error {
+func (g *nodeGenerator) generateVariables(vs []*il.VariableNode) error {
 	// If there are no variables, we're done.
 	if len(vs) == 0 {
 		return nil
@@ -540,13 +542,13 @@ func (g *nodeGenerator) generateVariables(vs []*variableNode) error {
 	// Otherwise, new up a config object and declare the various vars.
 	fmt.Printf("const config = new pulumi.Config(\"%s\")\n", g.projectName)
 	for _, v := range vs {
-		name := tfbridge.TerraformToPulumiName(v.config.Name, nil, false)
+		name := tfbridge.TerraformToPulumiName(v.Config.Name, nil, false)
 
 		fmt.Printf("const %s = ", name)
-		if v.defaultValue == nil {
+		if v.DefaultValue == nil {
 			fmt.Printf("config.require(\"%s\")", name)
 		} else {
-			def, _, err := g.computeProperty(v.defaultValue, "", schemas{})
+			def, _, err := g.computeProperty(v.DefaultValue, "", schemas{})
 			if err != nil {
 				return err
 			}
@@ -560,12 +562,12 @@ func (g *nodeGenerator) generateVariables(vs []*variableNode) error {
 	return nil
 }
 
-func (*nodeGenerator) generateLocal(l *localNode) error {
+func (*nodeGenerator) generateLocal(l *il.LocalNode) error {
 	return errors.New("NYI: locals")
 }
 
-func (g *nodeGenerator) generateResource(r *resourceNode) error {
-	config := r.config
+func (g *nodeGenerator) generateResource(r *il.ResourceNode) error {
+	config := r.Config
 
 	underscore := strings.IndexRune(config.Type, '_')
 	if underscore == -1 {
@@ -575,9 +577,9 @@ func (g *nodeGenerator) generateResource(r *resourceNode) error {
 
 	var resInfo *tfbridge.ResourceInfo
 	var sch schemas
-	if r.provider.info != nil {
-		resInfo = r.provider.info.Resources[config.Type]
-		sch.tfRes = r.provider.info.P.ResourcesMap[config.Type]
+	if r.Provider.Info != nil {
+		resInfo = r.Provider.Info.Resources[config.Type]
+		sch.tfRes = r.Provider.Info.P.ResourcesMap[config.Type]
 		sch.pulumi = &tfbridge.SchemaInfo{Fields: resInfo.Fields}
 	}
 
@@ -602,18 +604,18 @@ func (g *nodeGenerator) generateResource(r *resourceNode) error {
 
 	// Build the list of explicit deps, if any.
 	explicitDeps := ""
-	if len(r.explicitDeps) != 0 {
+	if len(r.ExplicitDeps) != 0 {
 		buf := &bytes.Buffer{}
 		fmt.Fprintf(buf, ", {dependsOn: [")
-		for i, n := range r.explicitDeps {
+		for i, n := range r.ExplicitDeps {
 			if i > 0 {
 				fmt.Fprintf(buf, ", ")
 			}
-			depRes := n.(*resourceNode)
-			if depRes.count != nil {
+			depRes := n.(*il.ResourceNode)
+			if depRes.Count != nil {
 				fmt.Fprintf(buf, "...")
 			}
-			fmt.Fprintf(buf, "%s", resName(r.config.Type, r.config.Name))
+			fmt.Fprintf(buf, "%s", resName(depRes.Config.Type, depRes.Config.Name))
 		}
 		fmt.Fprintf(buf, "]}")
 		explicitDeps = buf.String()
@@ -621,9 +623,9 @@ func (g *nodeGenerator) generateResource(r *resourceNode) error {
 
 	name := resName(config.Type, config.Name)
 	qualifiedTypeName := fmt.Sprintf("%s%s.%s", provider, module, typeName)
-	if r.count == nil {
+	if r.Count == nil {
 		// If count is nil, this is a single-instance resource.
-		inputs, _, err := g.computeProperty(r.properties, "", sch)
+		inputs, _, err := g.computeProperty(r.Properties, "", sch)
 		if err != nil {
 			return err
 		}
@@ -631,11 +633,11 @@ func (g *nodeGenerator) generateResource(r *resourceNode) error {
 		fmt.Printf("const %s = new %s(\"%s\", %s%s);\n", name, qualifiedTypeName, config.Name, inputs, explicitDeps)
 	} else {
 		// Otherwise we need to generate multiple resources in a loop.
-		count, _, err := g.computeProperty(r.count, "", schemas{})
+		count, _, err := g.computeProperty(r.Count, "", schemas{})
 		if err != nil {
 			return err
 		}
-		inputs, _, err := g.computePropertyWithCount(r.properties, "    ", sch, "i")
+		inputs, _, err := g.computePropertyWithCount(r.Properties, "    ", sch, "i")
 		if err != nil {
 			return err
 		}
@@ -649,19 +651,19 @@ func (g *nodeGenerator) generateResource(r *resourceNode) error {
 	return nil
 }
 
-func (g *nodeGenerator) generateOutputs(os []*outputNode) error {
+func (g *nodeGenerator) generateOutputs(os []*il.OutputNode) error {
 	if len(os) == 0 {
 		return nil
 	}
 
 	fmt.Printf("\n")
 	for _, o := range os {
-		outputs, _, err := g.computeProperty(o.value, "", schemas{})
+		outputs, _, err := g.computeProperty(o.Value, "", schemas{})
 		if err != nil {
 			return err
 		}
 
-		fmt.Printf("export const %s = %s;\n", tsName(o.config.Name, nil, nil, false), outputs)
+		fmt.Printf("export const %s = %s;\n", tsName(o.Config.Name, nil, nil, false), outputs)
 	}
 	return nil
 }

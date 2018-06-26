@@ -10,6 +10,8 @@ import (
 	"github.com/hashicorp/terraform/svchost"
 	"github.com/hashicorp/terraform/svchost/auth"
 	"github.com/hashicorp/terraform/svchost/disco"
+
+	"github.com/pgavlin/firewalker/il"
 )
 
 type noCredentials struct{}
@@ -35,7 +37,7 @@ func main() {
 		os.Exit(-1)
 	}
 
-	g, err := buildGraph(mod.Config())
+	g, err := il.BuildGraph(mod.Config())
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "could not build graph: %v\n", err)
 		os.Exit(-1)

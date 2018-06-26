@@ -1,4 +1,4 @@
-package main
+package il
 
 import (
 	"os/exec"
@@ -23,112 +23,111 @@ import (
 // - modules
 // - provisioners
 
-type node interface {
-	dependencies() []node
+type Node interface {
+	Dependencies() []Node
 	sortKey() string
 }
 
-type graph struct {
-	providers map[string]*providerNode
-	resources map[string]*resourceNode
-	outputs   map[string]*outputNode
-	locals    map[string]*localNode
-	variables map[string]*variableNode
+type Graph struct {
+	Providers map[string]*ProviderNode
+	Resources map[string]*ResourceNode
+	Outputs   map[string]*OutputNode
+	Locals    map[string]*LocalNode
+	Variables map[string]*VariableNode
 }
 
-type providerNode struct {
-	config     *config.ProviderConfig
-	deps       []node
-	properties map[string]interface{}
-	info       *tfbridge.ProviderInfo
+type ProviderNode struct {
+	Config     *config.ProviderConfig
+	Deps       []Node
+	Properties map[string]interface{}
+	Info       *tfbridge.ProviderInfo
 }
 
-type resourceNode struct {
-	config       *config.Resource
-	provider     *providerNode
-	deps         []node
-	explicitDeps []node
-	count        interface{}
-	properties   map[string]interface{}
+type ResourceNode struct {
+	Config       *config.Resource
+	Provider     *ProviderNode
+	Deps         []Node
+	ExplicitDeps []Node
+	Count        interface{}
+	Properties   map[string]interface{}
 }
 
-type outputNode struct {
-	config       *config.Output
-	deps         []node
-	explicitDeps []node
-	value        interface{}
+type OutputNode struct {
+	Config       *config.Output
+	Deps         []Node
+	ExplicitDeps []Node
+	Value        interface{}
 }
 
-type localNode struct {
-	config     *config.Local
-	deps       []node
-	properties map[string]interface{}
+type LocalNode struct {
+	Config     *config.Local
+	Deps       []Node
+	Properties map[string]interface{}
+}
+type VariableNode struct {
+	Config       *config.Variable
+	DefaultValue interface{}
 }
 
-type variableNode struct {
-	config       *config.Variable
-	defaultValue interface{}
+func (p *ProviderNode) Dependencies() []Node {
+	return p.Deps
 }
 
-func (p *providerNode) dependencies() []node {
-	return p.deps
+func (p *ProviderNode) sortKey() string {
+	return "p" + p.Config.Name
 }
 
-func (p *providerNode) sortKey() string {
-	return "p" + p.config.Name
+func (r *ResourceNode) Dependencies() []Node {
+	return r.Deps
 }
 
-func (r *resourceNode) dependencies() []node {
-	return r.deps
+func (r *ResourceNode) sortKey() string {
+	return "r" + r.Config.Id()
 }
 
-func (r *resourceNode) sortKey() string {
-	return "r" + r.config.Id()
+func (o *OutputNode) Dependencies() []Node {
+	return o.Deps
 }
 
-func (o *outputNode) dependencies() []node {
-	return o.deps
+func (o *OutputNode) sortKey() string {
+	return "o" + o.Config.Name
 }
 
-func (o *outputNode) sortKey() string {
-	return "o" + o.config.Name
+func (l *LocalNode) Dependencies() []Node {
+	return l.Deps
 }
 
-func (l *localNode) dependencies() []node {
-	return l.deps
+func (l *LocalNode) sortKey() string {
+	return "l" + l.Config.Name
 }
 
-func (l *localNode) sortKey() string {
-	return "l" + l.config.Name
-}
-
-func (v *variableNode) dependencies() []node {
+func (v *VariableNode) Dependencies() []Node {
 	return nil
 }
 
-func (v *variableNode) sortKey() string {
-	return "v" + v.config.Name
+func (v *VariableNode) sortKey() string {
+	return "v" + v.Config.Name
 }
 
 type builder struct {
-	providers map[string]*providerNode
-	resources map[string]*resourceNode
-	outputs   map[string]*outputNode
-	locals    map[string]*localNode
-	variables map[string]*variableNode
+	providers map[string]*ProviderNode
+	resources map[string]*ResourceNode
+	outputs   map[string]*OutputNode
+	locals    map[string]*LocalNode
+	variables map[string]*VariableNode
 }
 
 func newBuilder() *builder {
 	return &builder{
-		providers: make(map[string]*providerNode),
-		resources: make(map[string]*resourceNode),
-		outputs:   make(map[string]*outputNode),
-		locals:    make(map[string]*localNode),
-		variables: make(map[string]*variableNode),
+		providers: make(map[string]*ProviderNode),
+		resources: make(map[string]*ResourceNode),
+		outputs:   make(map[string]*OutputNode),
+		locals:    make(map[string]*LocalNode),
+		variables: make(map[string]*VariableNode),
 	}
 }
 
-func (b *builder) getNode(name string) (node, bool) {
+func (b *builder) getNode(name string) (Node, bool) {
 	if p, ok := b.providers[name]; ok {
 		return p, true
 	}
@@ -239,7 +238,7 @@ func (w *propertyWalker) walk(v reflect.Value) (interface{}, error) {
 	}
 }
 
-func (b *builder) buildValue(v interface{}) (interface{}, map[node]struct{}, error) {
+func (b *builder) buildValue(v interface{}) (interface{}, map[Node]struct{}, error) {
 	if v == nil {
 		return nil, nil, nil
 	}
@@ -255,7 +254,7 @@ func (b *builder) buildValue(v interface{}) (interface{}, map[node]struct{}, err
 	}
 
 	// Walk the collected dependencies and convert them to `node`s
-	deps := make(map[node]struct{})
+	deps := make(map[Node]struct{})
 	for k, _ := range walker.deps {
 		tfVar, err := config.NewInterpolatedVariable(k)
 		if err != nil {
@@ -298,7 +297,7 @@ func (b *builder) buildValue(v interface{}) (interface{}, map[node]struct{}, err
 	return prop, deps, nil
 }
 
-func (b *builder) buildProperties(raw *config.RawConfig) (map[string]interface{}, map[node]struct{}, error) {
+func (b *builder) buildProperties(raw *config.RawConfig) (map[string]interface{}, map[Node]struct{}, error) {
 	v, deps, err := b.buildValue(raw.Raw)
 	if err != nil {
 		return nil, nil, err
@@ -306,7 +305,7 @@ func (b *builder) buildProperties(raw *config.RawConfig) (map[string]interface{}
 	return v.(map[string]interface{}), deps, nil
 }
 
-type sortableNodes []node
+type sortableNodes []Node
 
 func (sn sortableNodes) Len() int {
 	return len(sn)
@@ -320,10 +319,10 @@ func (sn sortableNodes) Swap(i, j int) {
 	sn[i], sn[j] = sn[j], sn[i]
 }
 
-func (b *builder) buildDeps(deps map[node]struct{}, dependsOn []string) ([]node, []node, error) {
+func (b *builder) buildDeps(deps map[Node]struct{}, dependsOn []string) ([]Node, []Node, error) {
 	sort.Strings(dependsOn)
 
-	explicitDeps := make([]node, len(dependsOn))
+	explicitDeps := make([]Node, len(dependsOn))
 	for i, name := range dependsOn {
 		if strings.HasPrefix(name, "module.") {
 			return nil, nil, errors.Errorf("module references are not yet supported (%v)", name)
@@ -335,7 +334,7 @@ func (b *builder) buildDeps(deps map[node]struct{}, dependsOn []string) ([]node,
 		deps[r], explicitDeps[i] = struct{}{}, r
 	}
 
-	allDeps := make([]node, 0, len(deps))
+	allDeps := make([]Node, 0, len(deps))
 	for n, _ := range deps {
 		allDeps = append(allDeps, n)
 	}
@@ -379,12 +378,12 @@ func fixupTFSchema(s *schema.Schema) error {
 	return nil
 }
 
-func getProviderInfo(p *providerNode) (*tfbridge.ProviderInfo, error) {
-	_, path, err := workspace.GetPluginPath(workspace.ResourcePlugin, p.config.Name, nil)
+func getProviderInfo(p *ProviderNode) (*tfbridge.ProviderInfo, error) {
+	_, path, err := workspace.GetPluginPath(workspace.ResourcePlugin, p.Config.Name, nil)
 	if err != nil {
 		return nil, err
 	} else if path == "" {
-		return nil, errors.Errorf("could not find plugin for provider %s", p.config.Name)
+		return nil, errors.Errorf("could not find plugin for provider %s", p.Config.Name)
 	}
 
 	// Run the plugin and decode its provider config.
@@ -413,26 +412,26 @@ func getProviderInfo(p *providerNode) (*tfbridge.ProviderInfo, error) {
 	return &info, nil
 }
 
-func (b *builder) buildProvider(p *providerNode) error {
+func (b *builder) buildProvider(p *ProviderNode) error {
 	info, err := getProviderInfo(p)
 	if err != nil {
 		return err
 	}
-	p.info = info
+	p.Info = info
 
-	props, deps, err := b.buildProperties(p.config.RawConfig)
+	props, deps, err := b.buildProperties(p.Config.RawConfig)
 	if err != nil {
 		return err
 	}
 	allDeps, _, err := b.buildDeps(deps, nil)
 	contract.Assert(err == nil)
 
-	p.properties, p.deps = props, allDeps
+	p.Properties, p.Deps = props, allDeps
 	return nil
 }
 
-func (b *builder) buildResource(r *resourceNode) error {
-	providerName := r.config.ProviderFullName()
+func (b *builder) buildResource(r *ResourceNode) error {
+	providerName := r.Config.ProviderFullName()
 	p, ok := b.providers[providerName]
 	if !ok {
 		// fake up a provider entry.
@@ -441,8 +440,8 @@ func (b *builder) buildResource(r *resourceNode) error {
 			return err
 		}
 
-		p = &providerNode{
-			config: &config.ProviderConfig{
+		p = &ProviderNode{
+			Config: &config.ProviderConfig{
 				Name:      providerName,
 				RawConfig: rawConfig,
 			},
@@ -452,9 +451,9 @@ func (b *builder) buildResource(r *resourceNode) error {
 			return err
 		}
 	}
-	r.provider = p
+	r.Provider = p
 
-	count, countDeps, err := b.buildValue(r.config.RawCount.Value())
+	count, countDeps, err := b.buildValue(r.Config.RawCount.Value())
 	if err != nil {
 		return err
 	}
@@ -471,7 +470,7 @@ func (b *builder) buildResource(r *resourceNode) error {
 		}
 	}
 
-	props, deps, err := b.buildProperties(r.config.RawConfig)
+	props, deps, err := b.buildProperties(r.Config.RawConfig)
 	if err != nil {
 		return err
 	}
@@ -480,20 +479,20 @@ func (b *builder) buildResource(r *resourceNode) error {
 	for k, _ := range countDeps {
 		deps[k] = struct{}{}
 	}
-	allDeps, explicitDeps, err := b.buildDeps(deps, r.config.DependsOn)
+	allDeps, explicitDeps, err := b.buildDeps(deps, r.Config.DependsOn)
 	if err != nil {
 		return err
 	}
-	r.count, r.properties, r.deps, r.explicitDeps = count, props, allDeps, explicitDeps
+	r.Count, r.Properties, r.Deps, r.ExplicitDeps = count, props, allDeps, explicitDeps
 	return nil
 }
 
-func (b *builder) buildOutput(o *outputNode) error {
-	props, deps, err := b.buildProperties(o.config.RawConfig)
+func (b *builder) buildOutput(o *OutputNode) error {
+	props, deps, err := b.buildProperties(o.Config.RawConfig)
 	if err != nil {
 		return err
 	}
-	allDeps, explicitDeps, err := b.buildDeps(deps, o.config.DependsOn)
+	allDeps, explicitDeps, err := b.buildDeps(deps, o.Config.DependsOn)
 	if err != nil {
 		return err
 	}
@@ -507,52 +506,52 @@ func (b *builder) buildOutput(o *outputNode) error {
 		}
 	}
 
-	o.value, o.deps, o.explicitDeps = value, allDeps, explicitDeps
+	o.Value, o.Deps, o.ExplicitDeps = value, allDeps, explicitDeps
 	return nil
 }
 
-func (b *builder) buildLocal(l *localNode) error {
-	props, deps, err := b.buildProperties(l.config.RawConfig)
+func (b *builder) buildLocal(l *LocalNode) error {
+	props, deps, err := b.buildProperties(l.Config.RawConfig)
 	if err != nil {
 		return err
 	}
 	allDeps, _, err := b.buildDeps(deps, nil)
 	contract.Assert(err == nil)
 
-	l.properties, l.deps = props, allDeps
+	l.Properties, l.Deps = props, allDeps
 	return nil
 }
 
-func (b *builder) buildVariable(v *variableNode) error {
-	defaultValue, deps, err := b.buildValue(v.config.Default)
+func (b *builder) buildVariable(v *VariableNode) error {
+	defaultValue, deps, err := b.buildValue(v.Config.Default)
 	if err != nil {
 		return err
 	}
 	if len(deps) != 0 {
-		return errors.Errorf("variables may not depend on other nodes (%v)", v.config.Name)
+		return errors.Errorf("variables may not depend on other nodes (%v)", v.Config.Name)
 	}
-	v.defaultValue = defaultValue
+	v.DefaultValue = defaultValue
 	return nil
 }
 
-func buildGraph(conf *config.Config) (*graph, error) {
+func BuildGraph(conf *config.Config) (*Graph, error) {
 	b := newBuilder()
 
 	// First create our nodes.
 	for _, p := range conf.ProviderConfigs {
-		b.providers[p.Name] = &providerNode{config: p}
+		b.providers[p.Name] = &ProviderNode{Config: p}
 	}
 	for _, r := range conf.Resources {
-		b.resources[r.Id()] = &resourceNode{config: r}
+		b.resources[r.Id()] = &ResourceNode{Config: r}
 	}
 	for _, o := range conf.Outputs {
-		b.outputs[o.Name] = &outputNode{config: o}
+		b.outputs[o.Name] = &OutputNode{Config: o}
 	}
 	for _, l := range conf.Locals {
-		b.locals[l.Name] = &localNode{config: l}
+		b.locals[l.Name] = &LocalNode{Config: l}
 	}
 	for _, v := range conf.Variables {
-		b.variables[v.Name] = &variableNode{config: v}
+		b.variables[v.Name] = &VariableNode{Config: v}
 	}
 
 	// Now translate each node's properties and connect any dependency edges.
@@ -585,11 +584,11 @@ func buildGraph(conf *config.Config) (*graph, error) {
 	}
 
 	// put the graph together
-	return &graph{
-		providers: b.providers,
-		resources: b.resources,
-		outputs:   b.outputs,
-		locals:    b.locals,
-		variables: b.variables,
+	return &Graph{
+		Providers: b.providers,
+		Resources: b.resources,
+		Outputs:   b.outputs,
+		Locals:    b.locals,
+		Variables: b.variables,
 	}, nil
 }
