@@ -3,6 +3,7 @@ package main
 import (
 	"os/exec"
 	"reflect"
+	"sort"
 	"strings"
 
 	"github.com/hashicorp/hil"
@@ -19,14 +20,15 @@ import (
 
 type node interface {
 	dependencies() []node
+	sortKey() string
 }
 
 type graph struct {
-	providers []*providerNode
-	resources []*resourceNode
-	outputs []*outputNode
-	locals []*localNode
-	variables []*variableNode
+	providers map[string]*providerNode
+	resources map[string]*resourceNode
+	outputs map[string]*outputNode
+	locals map[string]*localNode
+	variables map[string]*variableNode
 }
 
 type providerNode struct {
@@ -66,20 +68,40 @@ func (p *providerNode) dependencies() []node {
 	return p.deps
 }
 
+func (p *providerNode) sortKey() string {
+	return "p" + p.config.Name
+}
+
 func (r *resourceNode) dependencies() []node {
 	return r.deps
+}
+
+func (r *resourceNode) sortKey() string {
+	return "r" + r.config.Id()
 }
 
 func (o *outputNode) dependencies() []node {
 	return o.deps
 }
 
+func (o *outputNode) sortKey() string {
+	return "o" + o.config.Name
+}
+
 func (l *localNode) dependencies() []node {
 	return l.deps
 }
 
+func (l *localNode) sortKey() string {
+	return "l" + l.config.Name
+}
+
 func (v *variableNode) dependencies() []node {
 	return nil
+}
+
+func (v *variableNode) sortKey() string {
+	return "v" + v.config.Name
 }
 
 type builder struct {
@@ -278,7 +300,23 @@ func (b *builder) buildProperties(raw *config.RawConfig) (map[string]interface{}
 	return v.(map[string]interface{}), deps, nil
 }
 
+type sortableNodes []node
+
+func (sn sortableNodes) Len() int {
+	return len(sn)
+}
+
+func (sn sortableNodes) Less(i, j int) bool {
+	return sn[i].sortKey() < sn[j].sortKey()
+}
+
+func (sn sortableNodes) Swap(i, j int) {
+	sn[i], sn[j] = sn[j], sn[i]
+}
+
 func (b *builder) buildDeps(deps map[node]struct{}, dependsOn []string) ([]node, []node, error) {
+	sort.Strings(dependsOn)
+
 	explicitDeps := make([]node, len(dependsOn))
 	for i, name := range dependsOn {
 		if strings.HasPrefix(name, "module.") {
@@ -295,6 +333,8 @@ func (b *builder) buildDeps(deps map[node]struct{}, dependsOn []string) ([]node,
 	for n, _ := range deps {
 		allDeps = append(allDeps, n)
 	}
+
+	sort.Sort(sortableNodes(allDeps))
 
 	return allDeps, explicitDeps, nil
 }
@@ -462,31 +502,11 @@ func buildGraph(conf *config.Config) (*graph, error) {
 	}
 
 	// put the graph together
-	providers := make([]*providerNode, 0, len(b.providers))
-	for _, p := range b.providers {
-		providers = append(providers, p)
-	}
-	resources := make([]*resourceNode, 0, len(b.resources))
-	for _, r := range b.resources {
-		resources = append(resources, r)
-	}
-	outputs := make([]*outputNode, 0, len(b.outputs))
-	for _, o := range b.outputs {
-		outputs = append(outputs, o)
-	}
-	locals := make([]*localNode, 0, len(b.locals))
-	for _, l := range b.locals {
-		locals = append(locals, l)
-	}
-	variables := make([]*variableNode, 0, len(b.variables))
-	for _, v := range b.variables {
-		variables = append(variables, v)
-	}
 	return &graph{
-		providers: providers,
-		resources: resources,
-		outputs: outputs,
-		locals: locals,
-		variables: variables,
+		providers: b.providers,
+		resources: b.resources,
+		outputs: b.outputs,
+		locals: b.locals,
+		variables: b.variables,
 	}, nil
 }

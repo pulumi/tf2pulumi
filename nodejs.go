@@ -23,6 +23,7 @@ import (
 
 type nodeGenerator struct {
 	projectName string
+	graph *graph
 }
 
 type schemas struct {
@@ -68,6 +69,30 @@ func (s schemas) elemSchemas() schemas {
 	}
 
 	return elemSch
+}
+
+func (s schemas) astType() ast.Type {
+	if s.tf != nil {
+		switch s.tf.Type {
+		case schema.TypeBool:
+			return ast.TypeBool
+		case schema.TypeInt, schema.TypeFloat:
+			return ast.TypeFloat
+		case schema.TypeString:
+			return ast.TypeString
+		case schema.TypeList, schema.TypeSet:
+			// TODO: might need to do max-items-one projection here
+			return ast.TypeList
+		case schema.TypeMap:
+			return ast.TypeMap
+		default:
+			return ast.TypeUnknown
+		}
+	} else if s.tfRes != nil {
+		return ast.TypeMap
+	}
+
+	return ast.TypeUnknown
 }
 
 func resName(typ, name string) string {
@@ -356,7 +381,9 @@ func (g *nodeGenerator) computeMapProperty(m map[string]interface{}, indent stri
 	buf := &bytes.Buffer{}
 
 	fmt.Fprintf(buf, "{")
-	for k, v := range m {
+	for _, k := range sortedKeys(m) {
+		v := m[k]
+
 		propSch := sch.propertySchemas(k)
 
 		propIndent := indent + "    "
@@ -394,10 +421,13 @@ func (g *nodeGenerator) computeProperty(v interface{}, indent string, sch schema
 	}
 }
 
-func (*nodeGenerator) generatePreamble(g *graph) error {
+func (g *nodeGenerator) generatePreamble(gr *graph) error {
+	// Stash the graph for later.
+	g.graph = gr
+
 	// Emit imports for the various providers
 	fmt.Printf("import * as pulumi from \"@pulumi/pulumi\";\n")
-	for _, p := range g.providers {
+	for _, p := range gr.providers {
 		fmt.Printf("import * as %s from \"@pulumi/%s\";\n", p.config.Name, p.config.Name)
 	}
 	fmt.Printf("import * as fs from \"fs\";")
