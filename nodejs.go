@@ -16,16 +16,58 @@ import (
 )
 
 // TODO:
-// - project from array-of-1-element to element
 // - type-driven conversions in general (strings -> numbers, esp. for config)
+// - counts
+// - proper use of apply
+// - assets
 
-type nodeGenerator struct{
+type nodeGenerator struct {
 	projectName string
 }
 
 type schemas struct {
-	tf map[string]*schema.Schema
-	pulumi map[string]*tfbridge.SchemaInfo
+	tf *schema.Schema
+	tfRes *schema.Resource
+	pulumi *tfbridge.SchemaInfo
+}
+
+func (s schemas) propertySchemas(key string) schemas {
+	var propSch schemas
+
+	if s.tfRes != nil && s.tfRes.Schema != nil {
+		propSch.tf = s.tfRes.Schema[key]
+	}
+
+	if propSch.tf != nil {
+		if propResource, ok := propSch.tf.Elem.(*schema.Resource); ok {
+			propSch.tfRes = propResource
+		}
+	}
+
+	if s.pulumi != nil && s.pulumi.Fields != nil {
+		propSch.pulumi = s.pulumi.Fields[key]
+	}
+
+	return propSch
+}
+
+func (s schemas) elemSchemas() schemas {
+	var elemSch schemas
+
+	if s.tf != nil {
+		switch e := s.tf.Elem.(type) {
+		case *schema.Schema:
+			elemSch.tf = e
+		case *schema.Resource:
+			elemSch.tfRes = e
+		}
+	}
+
+	if s.pulumi != nil {
+		elemSch.pulumi = s.pulumi.Elem
+	}
+
+	return elemSch
 }
 
 func resName(typ, name string) string {
@@ -62,10 +104,10 @@ func tsName(tfName string, tfSchema *schema.Schema, schemaInfo *tfbridge.SchemaI
 
 type nodeHILWalker struct{}
 
-func (w nodeHILWalker) walkArithmetic(n *ast.Arithmetic) (string, error) {
-	strs, err := w.walkNodes(n.Exprs)
+func (w nodeHILWalker) walkArithmetic(n *ast.Arithmetic) (string, ast.Type, error) {
+	strs, _, err := w.walkNodes(n.Exprs)
 	if err != nil {
-		return "", err
+		return "", ast.TypeInvalid, err
 	}
 
 	op := ""
@@ -98,105 +140,113 @@ func (w nodeHILWalker) walkArithmetic(n *ast.Arithmetic) (string, error) {
 		op = ">="
 	}
 
-	return "(" + strings.Join(strs, " " + op + " ") + ")", nil
+	return "(" + strings.Join(strs, " " + op + " ") + ")", ast.TypeFloat, nil
 }
 
-func (w nodeHILWalker) walkCall(n *ast.Call) (string, error) {
-	strs, err := w.walkNodes(n.Args)
+func (w nodeHILWalker) walkCall(n *ast.Call) (string, ast.Type, error) {
+	strs, _, err := w.walkNodes(n.Args)
 	if err != nil {
-		return "", err
+		return "", ast.TypeInvalid, err
 	}
 
 	switch n.Func {
 	case "file":
-		return fmt.Sprintf("fs.readFileSync(%s, \"utf-8\")", strs[0]), nil
+		return fmt.Sprintf("fs.readFileSync(%s, \"utf-8\")", strs[0]), ast.TypeString, nil
 	case "lookup":
 		lookup := fmt.Sprintf("(<any>%s)[%s]", strs[0], strs[1])
 		if len(strs) == 3 {
 			lookup += fmt.Sprintf(" || %s", strs[2])
 		}
-		return lookup, nil
+		return lookup, ast.TypeUnknown, nil
 	case "split":
-		// TODO: the spread operator shouldn't be here. This is to make ["${array-thing}"] work, and should be done
-		// when translating the array.
-		return fmt.Sprintf("...%s.split(%s)", strs[1], strs[0]), nil
+		return fmt.Sprintf("%s.split(%s)", strs[1], strs[0]), ast.TypeList, nil
 	default:
-		return "", errors.Errorf("NYI: call to %s", n.Func)
+		return "", ast.TypeInvalid, errors.Errorf("NYI: call to %s", n.Func)
 	}
 }
 
-func (w nodeHILWalker) walkConditional(n *ast.Conditional) (string, error) {
-	cond, err := w.walkNode(n.CondExpr)
+func (w nodeHILWalker) walkConditional(n *ast.Conditional) (string, ast.Type, error) {
+	cond, _, err := w.walkNode(n.CondExpr)
 	if err != nil {
-		return "", err
+		return "", ast.TypeInvalid, err
 	}
-	t, err := w.walkNode(n.TrueExpr)
+	t, tt, err := w.walkNode(n.TrueExpr)
 	if err != nil {
-		return "", err
+		return "", ast.TypeInvalid, err
 	}
-	f, err := w.walkNode(n.FalseExpr)
+	f, tf, err := w.walkNode(n.FalseExpr)
 	if err != nil {
-		return "", err
+		return "", ast.TypeInvalid, err
 	}
 
-	return fmt.Sprintf("(%s ? %s : %s)", cond, t, f), nil
+	typ := tt
+	if tt == ast.TypeUnknown {
+		typ = tf
+	}
+
+	return fmt.Sprintf("(%s ? %s : %s)", cond, t, f), typ, nil
 }
 
-func (w nodeHILWalker) walkIndex(n *ast.Index) (string, error) {
-	target, err := w.walkNode(n.Target)
+func (w nodeHILWalker) walkIndex(n *ast.Index) (string, ast.Type, error) {
+	target, _, err := w.walkNode(n.Target)
 	if err != nil {
-		return "", err
+		return "", ast.TypeInvalid, err
 	}
-	key, err := w.walkNode(n.Key)
+	key, _, err := w.walkNode(n.Key)
 	if err != nil {
-		return "", err
+		return "", ast.TypeInvalid, err
 	}
 
-	return fmt.Sprintf("%s[%s]", target, key), nil
+	return fmt.Sprintf("%s[%s]", target, key), ast.TypeUnknown, nil
 }
 
-func (w nodeHILWalker) walkLiteral(n *ast.LiteralNode) (string, error) {
+func (w nodeHILWalker) walkLiteral(n *ast.LiteralNode) (string, ast.Type, error) {
 	switch n.Typex {
 	case ast.TypeBool, ast.TypeInt, ast.TypeFloat:
-		return fmt.Sprintf("%v", n.Value), nil
+		return fmt.Sprintf("%v", n.Value), n.Typex, nil
 	case ast.TypeString:
-		return fmt.Sprintf("%q", n.Value), nil
+		return fmt.Sprintf("%q", n.Value), n.Typex, nil
 	default:
-		return "", errors.Errorf("Unexpected literal type %v", n.Typex)
+		return "", ast.TypeInvalid, errors.Errorf("Unexpected literal type %v", n.Typex)
 	}
 }
 
-func (w nodeHILWalker) walkOutput(n *ast.Output) (string, error) {
-	strs, err := w.walkNodes(n.Exprs)
+func (w nodeHILWalker) walkOutput(n *ast.Output) (string, ast.Type, error) {
+	strs, typs, err := w.walkNodes(n.Exprs)
 	if err != nil {
-		return "", err
+		return "", ast.TypeInvalid, err
 	}
-	return strings.Join(strs, ""), nil
+
+	typ := ast.TypeString
+	if len(typs) == 1 {
+		typ = typs[0]
+	}
+	return strings.Join(strs, ""), typ, nil
 }
 
-func (w nodeHILWalker) walkVariableAccess(n *ast.VariableAccess) (string, error) {
+func (w nodeHILWalker) walkVariableAccess(n *ast.VariableAccess) (string, ast.Type, error) {
 	tfVar, err := config.NewInterpolatedVariable(n.Name)
 	if err != nil {
-		return "", err
+		return "", ast.TypeInvalid, err
 	}
 
 	switch v := tfVar.(type) {
 	case *config.CountVariable:
 		// "count."
-		return "", errors.New("NYI: count variables")
+		return "", ast.TypeInvalid, errors.New("NYI: count variables")
 	case *config.LocalVariable:
 		// "local."
-		return "", errors.New("NYI: local variables")
+		return "", ast.TypeInvalid, errors.New("NYI: local variables")
 	case *config.ModuleVariable:
 		// "module."
-		return "", errors.New("NYI: module variables")
+		return "", ast.TypeInvalid, errors.New("NYI: module variables")
 	case *config.PathVariable:
 		// "path."
-		return "", errors.New("NYI: path variables")
+		return "", ast.TypeInvalid, errors.New("NYI: path variables")
 	case *config.ResourceVariable:
 		// default
 		if v.Multi {
-			return "", errors.New("NYI: multi-resource variables")
+			return "", ast.TypeInvalid, errors.New("NYI: multi-resource variables")
 		}
 
 		// name{.property}+
@@ -205,29 +255,29 @@ func (w nodeHILWalker) walkVariableAccess(n *ast.VariableAccess) (string, error)
 			// TODO: grab a schema for each element based on the resource type and module for pluralization info
 			elements[i] = tfbridge.TerraformToPulumiName(e, nil, false)
 		}
-		return fmt.Sprintf("%s.%s", resName(v.Type, v.Name), strings.Join(elements, ".")), nil
+		return fmt.Sprintf("%s.%s", resName(v.Type, v.Name), strings.Join(elements, ".")), ast.TypeUnknown, nil
 	case *config.SelfVariable:
 		// "self."
-		return "", errors.New("NYI: self variables")
+		return "", ast.TypeInvalid, errors.New("NYI: self variables")
 	case *config.SimpleVariable:
 		// "[^.]\+"
-		return "", errors.New("NYI: simple variables")
+		return "", ast.TypeInvalid, errors.New("NYI: simple variables")
 	case *config.TerraformVariable:
 		// "terraform."
-		return "", errors.New("NYI: terraform variables")
+		return "", ast.TypeInvalid, errors.New("NYI: terraform variables")
 	case *config.UserVariable:
 		// "var."
 		if v.Elem != "" {
-			return "", errors.New("NYI: user variable elements")
+			return "", ast.TypeInvalid, errors.New("NYI: user variable elements")
 		}
 
-		return tfbridge.TerraformToPulumiName(v.Name, nil, false), nil
+		return tfbridge.TerraformToPulumiName(v.Name, nil, false), ast.TypeUnknown, nil
 	default:
-		return "", errors.Errorf("unexpected variable type %T", v)
+		return "", ast.TypeInvalid, errors.Errorf("unexpected variable type %T", v)
 	}
 }
 
-func (w nodeHILWalker) walkNode(n ast.Node) (string, error) {
+func (w nodeHILWalker) walkNode(n ast.Node) (string, ast.Type, error) {
 	switch n := n.(type) {
 	case *ast.Arithmetic:
 		return w.walkArithmetic(n)
@@ -244,100 +294,103 @@ func (w nodeHILWalker) walkNode(n ast.Node) (string, error) {
 	case *ast.VariableAccess:
 		return w.walkVariableAccess(n)
 	default:
-		return "", errors.Errorf("unexpected HIL node type %T", n)
+		return "", ast.TypeInvalid, errors.Errorf("unexpected HIL node type %T", n)
 	}
 }
 
-func (w nodeHILWalker) walkNodes(ns []ast.Node) ([]string, error) {
-	strs := make([]string, len(ns))
+func (w nodeHILWalker) walkNodes(ns []ast.Node) ([]string, []ast.Type, error) {
+	strs, typs := make([]string, len(ns)), make([]ast.Type, len(ns))
 	for i, n := range ns {
-		s, err := w.walkNode(n)
+		s, t, err := w.walkNode(n)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
-		strs[i] = s
+		strs[i], typs[i] = s, t
 	}
-	return strs, nil
+	return strs, typs, nil
 }
 
-func (g *nodeGenerator) computeHILProperty(n ast.Node) (string, error) {
+func (g *nodeGenerator) computeHILProperty(n ast.Node) (string, ast.Type, error) {
 	// NOTE: this will need to change in order to deal with combinations of resource outputs and other operators: most
 	// translations will not be output-aware, so we'll need to transform things into applies.
 	return nodeHILWalker{}.walkNode(n)
 }
 
-func (g *nodeGenerator) computeSliceProperty(s []interface{}, indent string, elemSch schemas) (string, error) {
+func (g *nodeGenerator) computeSliceProperty(s []interface{}, indent string, sch schemas) (string, ast.Type, error) {
 	buf := &bytes.Buffer{}
+
+	elemSch := sch.elemSchemas()
+	if tfbridge.IsMaxItemsOne(sch.tf, sch.pulumi) {
+		switch len(s) {
+		case 0:
+			return "undefined", ast.TypeUnknown, nil
+		case 1:
+			return g.computeProperty(s[0], indent, elemSch)
+		default:
+			return "", ast.TypeInvalid, errors.Errorf("expected at most one item in list")
+		}
+	}
 
 	fmt.Fprintf(buf, "[")
 	for _, v := range s {
-		elemIndent := indent + "    "
-		elem, err := g.computeProperty(v, elemIndent, elemSch)
-		if err != nil {
-			return "", err
-		}
 
+		elemIndent := indent + "    "
+		elem, elemTyp, err := g.computeProperty(v, elemIndent, elemSch)
+		if err != nil {
+			return "", ast.TypeInvalid, err
+		}
+		if elemTyp == ast.TypeList {
+			// TF flattens list elements that are themselves lists into the parent list.
+			// 
+			// TODO: if there is a list element that is dynamically a list, that also needs to be flattened. This is
+			// only knowable at runtime and will require a helper.
+			elem = "..." + elem
+		}
 		fmt.Fprintf(buf, "\n%s%s,", elemIndent, elem)
 	}
 	fmt.Fprintf(buf, "\n%s]", indent)
-	return buf.String(), nil
+	return buf.String(), ast.TypeList, nil
 }
 
-func (g *nodeGenerator) computeMapProperty(m map[string]interface{}, indent string, sch schemas) (string, error) {
+func (g *nodeGenerator) computeMapProperty(m map[string]interface{}, indent string, sch schemas) (string, ast.Type, error) {
 	buf := &bytes.Buffer{}
 
 	fmt.Fprintf(buf, "{")
 	for k, v := range m {
-		var elemTf *schema.Schema
-		if sch.tf != nil {
-			elemTf = sch.tf[k]
-		}
+		propSch := sch.propertySchemas(k)
 
-		elemSch := sch
-		if elemTf != nil {
-			if elemResource, ok := elemTf.Elem.(*schema.Resource); ok {
-				elemSch.tf = elemResource.Schema
-			}
-		}
-
-		var elemPulumi *tfbridge.SchemaInfo
-		if sch.pulumi != nil {
-			elemPulumi = sch.pulumi[k]
-			if elemPulumi != nil {
-				elemSch.pulumi = elemPulumi.Fields
-			}
-		}
-
-		elemIndent := indent + "    "
-		elem, err := g.computeProperty(v, elemIndent, elemSch)
+		propIndent := indent + "    "
+		prop, _, err := g.computeProperty(v, propIndent, propSch)
 		if err != nil {
-			return "", err
+			return "", ast.TypeInvalid, err
 		}
 
-		fmt.Fprintf(buf, "\n%s%s: %s,", elemIndent, tsName(k, elemTf, elemPulumi, true), elem)
+		fmt.Fprintf(buf, "\n%s%s: %s,", propIndent, tsName(k, propSch.tf, propSch.pulumi, true), prop)
 	}
 	fmt.Fprintf(buf, "\n%s}", indent)
-	return buf.String(), nil
+	return buf.String(), ast.TypeMap, nil
 }
 
-func (g *nodeGenerator) computeProperty(v interface{}, indent string, sch schemas) (string, error) {
+func (g *nodeGenerator) computeProperty(v interface{}, indent string, sch schemas) (string, ast.Type, error) {
 	if node, ok := v.(ast.Node); ok {
 		return g.computeHILProperty(node)
 	}
 
 	refV := reflect.ValueOf(v)
 	switch refV.Kind() {
-	case reflect.Bool, reflect.Int, reflect.Float64:
-		return fmt.Sprintf("%v", v), nil
+	case reflect.Bool:
+		return fmt.Sprintf("%v", v), ast.TypeBool, nil
+	case reflect.Int, reflect.Float64:
+		return fmt.Sprintf("%v", v), ast.TypeFloat, nil
 	case reflect.String:
-		return fmt.Sprintf("%q", v), nil
+		return fmt.Sprintf("%q", v), ast.TypeString, nil
 	case reflect.Slice:
 		return g.computeSliceProperty(v.([]interface{}), indent, sch)
 	case reflect.Map:
 		return g.computeMapProperty(v.(map[string]interface{}), indent, sch)
 	default:
 		contract.Failf("unexpected property type %v", refV.Type())
-		return "", errors.New("unexpected property type")
+		return "", ast.TypeInvalid, errors.New("unexpected property type")
 	}
 }
 
@@ -368,7 +421,7 @@ func (g *nodeGenerator) generateVariables(vs []*variableNode) error {
 		if v.defaultValue == nil {
 			fmt.Printf("config.require(\"%s\")", name)
 		} else {
-			def, err := g.computeProperty(v.defaultValue, "", schemas{})
+			def, _, err := g.computeProperty(v.defaultValue, "", schemas{})
 			if err != nil {
 				return err
 			}
@@ -399,11 +452,11 @@ func (g *nodeGenerator) generateResource(r *resourceNode) error {
 	var sch schemas
 	if r.provider.info != nil {
 		resInfo = r.provider.info.Resources[config.Type]
-		sch.tf = r.provider.info.P.ResourcesMap[config.Type].Schema
-		sch.pulumi = resInfo.Fields
+		sch.tfRes = r.provider.info.P.ResourcesMap[config.Type]
+		sch.pulumi = &tfbridge.SchemaInfo{Fields: resInfo.Fields}
 	}
 
-	inputs, err := g.computeProperty(r.properties, "", sch)
+	inputs, _, err := g.computeProperty(r.properties, "", sch)
 	if err != nil {
 		return err
 	}
@@ -454,7 +507,7 @@ func (g *nodeGenerator) generateOutputs(os []*outputNode) error {
 
 	fmt.Printf("\n")
 	for _, o := range os {
-		outputs, err := g.computeProperty(o.value, "", schemas{})
+		outputs, _, err := g.computeProperty(o.value, "", schemas{})
 		if err != nil {
 			return err
 		}

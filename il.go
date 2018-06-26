@@ -346,10 +346,6 @@ func (b *builder) buildProvider(p *providerNode) error {
 }
 
 func (b *builder) buildResource(r *resourceNode) error {
-	if r.config.RawCount.Value() != nil {
-		return errors.Errorf("count is not yet supported (%s)", r.config.Id())
-	}
-
 	providerName := r.config.ProviderFullName()
 	p, ok := b.providers[providerName]
 	if !ok {
