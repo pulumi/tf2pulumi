@@ -429,7 +429,22 @@ func (b *builder) buildResource(r *resourceNode) error {
 	providerName := r.config.ProviderFullName()
 	p, ok := b.providers[providerName]
 	if !ok {
-		return errors.Errorf("could not find provider for resource %s", r.config.Id())
+		// fake up a provider entry.
+		rawConfig, err := config.NewRawConfig(map[string]interface{}{})
+		if err != nil {
+			return err
+		}
+
+		p = &providerNode{
+			config: &config.ProviderConfig{
+				Name: providerName,
+				RawConfig: rawConfig,
+			},
+		}
+		b.providers[providerName] = p
+		if err = b.buildProvider(p); err != nil {
+			return err
+		}
 	}
 	r.provider = p
 
