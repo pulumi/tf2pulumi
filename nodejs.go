@@ -15,8 +15,6 @@ import (
 )
 
 // TODO:
-// - type-driven conversions in general (strings -> numbers, esp. for config)
-// - counts
 // - proper use of apply
 // - assets
 
@@ -148,7 +146,7 @@ func coerceProperty(value string, valueType, propertyType ast.Type) string {
 }
 
 type nodeHILWalker struct {
-	g *nodeGenerator
+	pc *nodePropertyComputer
 }
 
 func (w *nodeHILWalker) walkArithmetic(n *ast.Arithmetic) (string, ast.Type, error) {
@@ -197,6 +195,9 @@ func (w *nodeHILWalker) walkCall(n *ast.Call) (string, ast.Type, error) {
 	}
 
 	switch n.Func {
+	case "element":
+		// TODO: wrapping semantics
+		return fmt.Sprintf("%s[%s]", strs[0], strs[1]), ast.TypeUnknown, nil
 	case "file":
 		return fmt.Sprintf("fs.readFileSync(%s, \"utf-8\")", strs[0]), ast.TypeString, nil
 	case "lookup":
@@ -264,11 +265,22 @@ func (w *nodeHILWalker) walkOutput(n *ast.Output) (string, ast.Type, error) {
 		return "", ast.TypeInvalid, err
 	}
 
-	typ := ast.TypeString
 	if len(typs) == 1 {
-		typ = typs[0]
+		return strs[0], typs[0], nil
 	}
-	return strings.Join(strs, ""), typ, nil
+
+	buf := &bytes.Buffer{}
+	for i, s := range strs {
+		if i > 0 {
+			fmt.Fprintf(buf, " + ")
+		}
+		if typs[i] == ast.TypeString {
+			fmt.Fprintf(buf, "%s", s)
+		} else {
+			fmt.Fprintf(buf, "`${%s}`", s)
+		}
+	}
+	return buf.String(), ast.TypeString, nil
 }
 
 func (w *nodeHILWalker) walkVariableAccess(n *ast.VariableAccess) (string, ast.Type, error) {
@@ -280,7 +292,15 @@ func (w *nodeHILWalker) walkVariableAccess(n *ast.VariableAccess) (string, ast.T
 	switch v := tfVar.(type) {
 	case *config.CountVariable:
 		// "count."
-		return "", ast.TypeInvalid, errors.New("NYI: count variables")
+		if v.Type != config.CountValueIndex {
+			return "", ast.TypeInvalid, errors.Errorf("unsupported count variable %s", v.FullKey())
+		}
+
+		if w.pc.countIndex == "" {
+			return "", ast.TypeInvalid, errors.Errorf("no count index in scope")
+		}
+
+		return w.pc.countIndex, ast.TypeFloat, nil
 	case *config.LocalVariable:
 		// "local."
 		return "", ast.TypeInvalid, errors.New("NYI: local variables")
@@ -292,12 +312,9 @@ func (w *nodeHILWalker) walkVariableAccess(n *ast.VariableAccess) (string, ast.T
 		return "", ast.TypeInvalid, errors.New("NYI: path variables")
 	case *config.ResourceVariable:
 		// default
-		if v.Multi {
-			return "", ast.TypeInvalid, errors.New("NYI: multi-resource variables")
-		}
 
 		// look up the resource.
-		r, ok := w.g.graph.resources[v.ResourceId()]
+		r, ok := w.pc.g.graph.resources[v.ResourceId()]
 		if !ok {
 			return "", ast.TypeInvalid, errors.Errorf("unknown resource %v", v.ResourceId())
 		}
@@ -316,7 +333,21 @@ func (w *nodeHILWalker) walkVariableAccess(n *ast.VariableAccess) (string, ast.T
 			sch = sch.propertySchemas(e)
 			elements[i] = tfbridge.TerraformToPulumiName(e, sch.tf, false)
 		}
-		return fmt.Sprintf("%s.%s", resName(v.Type, v.Name), strings.Join(elements, ".")), sch.astType(), nil
+
+		// Handle multi-references (splats and indexes)
+		receiver := resName(v.Type, v.Name)
+		accessor, exprType := strings.Join(elements, "."), sch.astType()
+		if v.Multi {
+			if v.Index == -1 {
+				// Splat
+				accessor, exprType = fmt.Sprintf("map(v => v.%s)", accessor), ast.TypeList
+			} else {
+				// Index
+				receiver = fmt.Sprintf("%s[%d]", receiver, v.Index)
+			}
+		}
+
+		return fmt.Sprintf("%s.%s", receiver, accessor), exprType, nil
 	case *config.SelfVariable:
 		// "self."
 		return "", ast.TypeInvalid, errors.New("NYI: self variables")
@@ -333,7 +364,7 @@ func (w *nodeHILWalker) walkVariableAccess(n *ast.VariableAccess) (string, ast.T
 		}
 
 		// look up the variable.
-		vn, ok := w.g.graph.variables[v.Name]
+		vn, ok := w.pc.g.graph.variables[v.Name]
 		if !ok {
 			return "", ast.TypeInvalid, errors.Errorf("unknown variable %s", v.Name)
 		}
@@ -386,13 +417,18 @@ func (w *nodeHILWalker) walkNodes(ns []ast.Node) ([]string, []ast.Type, error) {
 	return strs, typs, nil
 }
 
-func (g *nodeGenerator) computeHILProperty(n ast.Node) (string, ast.Type, error) {
-	// NOTE: this will need to change in order to deal with combinations of resource outputs and other operators: most
-	// translations will not be output-aware, so we'll need to transform things into applies.
-	return (&nodeHILWalker{g: g}).walkNode(n)
+type nodePropertyComputer struct {
+	g *nodeGenerator
+	countIndex string
 }
 
-func (g *nodeGenerator) computeSliceProperty(s []interface{}, indent string, sch schemas) (string, ast.Type, error) {
+func (pc *nodePropertyComputer) computeHILProperty(n ast.Node) (string, ast.Type, error) {
+	// NOTE: this will need to change in order to deal with combinations of resource outputs and other operators: most
+	// translations will not be output-aware, so we'll need to transform things into applies.
+	return (&nodeHILWalker{pc: pc}).walkNode(n)
+}
+
+func (pc *nodePropertyComputer) computeSliceProperty(s []interface{}, indent string, sch schemas) (string, ast.Type, error) {
 	buf := &bytes.Buffer{}
 
 	elemSch := sch.elemSchemas()
@@ -401,7 +437,7 @@ func (g *nodeGenerator) computeSliceProperty(s []interface{}, indent string, sch
 		case 0:
 			return "undefined", ast.TypeUnknown, nil
 		case 1:
-			return g.computeProperty(s[0], indent, elemSch)
+			return pc.computeProperty(s[0], indent, elemSch)
 		default:
 			return "", ast.TypeInvalid, errors.Errorf("expected at most one item in list")
 		}
@@ -410,7 +446,7 @@ func (g *nodeGenerator) computeSliceProperty(s []interface{}, indent string, sch
 	fmt.Fprintf(buf, "[")
 	for _, v := range s {
 		elemIndent := indent + "    "
-		elem, elemTyp, err := g.computeProperty(v, elemIndent, elemSch)
+		elem, elemTyp, err := pc.computeProperty(v, elemIndent, elemSch)
 		if err != nil {
 			return "", ast.TypeInvalid, err
 		}
@@ -427,7 +463,7 @@ func (g *nodeGenerator) computeSliceProperty(s []interface{}, indent string, sch
 	return buf.String(), ast.TypeList, nil
 }
 
-func (g *nodeGenerator) computeMapProperty(m map[string]interface{}, indent string, sch schemas) (string, ast.Type, error) {
+func (pc *nodePropertyComputer) computeMapProperty(m map[string]interface{}, indent string, sch schemas) (string, ast.Type, error) {
 	buf := &bytes.Buffer{}
 
 	fmt.Fprintf(buf, "{")
@@ -437,7 +473,7 @@ func (g *nodeGenerator) computeMapProperty(m map[string]interface{}, indent stri
 		propSch := sch.propertySchemas(k)
 
 		propIndent := indent + "    "
-		prop, propTyp, err := g.computeProperty(v, propIndent, propSch)
+		prop, propTyp, err := pc.computeProperty(v, propIndent, propSch)
 		if err != nil {
 			return "", ast.TypeInvalid, err
 		}
@@ -449,9 +485,9 @@ func (g *nodeGenerator) computeMapProperty(m map[string]interface{}, indent stri
 	return buf.String(), ast.TypeMap, nil
 }
 
-func (g *nodeGenerator) computeProperty(v interface{}, indent string, sch schemas) (string, ast.Type, error) {
+func (pc *nodePropertyComputer) computeProperty(v interface{}, indent string, sch schemas) (string, ast.Type, error) {
 	if node, ok := v.(ast.Node); ok {
-		return g.computeHILProperty(node)
+		return pc.computeHILProperty(node)
 	}
 
 	refV := reflect.ValueOf(v)
@@ -463,13 +499,21 @@ func (g *nodeGenerator) computeProperty(v interface{}, indent string, sch schema
 	case reflect.String:
 		return fmt.Sprintf("%q", v), ast.TypeString, nil
 	case reflect.Slice:
-		return g.computeSliceProperty(v.([]interface{}), indent, sch)
+		return pc.computeSliceProperty(v.([]interface{}), indent, sch)
 	case reflect.Map:
-		return g.computeMapProperty(v.(map[string]interface{}), indent, sch)
+		return pc.computeMapProperty(v.(map[string]interface{}), indent, sch)
 	default:
 		contract.Failf("unexpected property type %v", refV.Type())
 		return "", ast.TypeInvalid, errors.New("unexpected property type")
 	}
+}
+
+func (g *nodeGenerator) computeProperty(v interface{}, indent string, sch schemas) (string, ast.Type, error) {
+	return (&nodePropertyComputer{g: g}).computeProperty(v, indent, sch)
+}
+
+func (g *nodeGenerator) computePropertyWithCount(v interface{}, indent string, sch schemas, count string) (string, ast.Type, error) {
+	return (&nodePropertyComputer{g: g, countIndex: count}).computeProperty(v, indent, sch)
 }
 
 func (g *nodeGenerator) generatePreamble(gr *graph) error {
@@ -537,11 +581,6 @@ func (g *nodeGenerator) generateResource(r *resourceNode) error {
 		sch.pulumi = &tfbridge.SchemaInfo{Fields: resInfo.Fields}
 	}
 
-	inputs, _, err := g.computeProperty(r.properties, "", sch)
-	if err != nil {
-		return err
-	}
-
 	typeName := tfbridge.TerraformToPulumiName(resourceType, nil, true)
 
 	module := ""
@@ -561,22 +600,51 @@ func (g *nodeGenerator) generateResource(r *resourceNode) error {
 		module, typeName = "."+mod[:slash], typ
 	}
 
-	fmt.Printf("const %s = new %s%s.%s(\"%s\", %s",
-		resName(config.Type, config.Name), provider, module, typeName, config.Name, inputs)
-
+	// Build the list of explicit deps, if any.
+	explicitDeps := ""
 	if len(r.explicitDeps) != 0 {
-		fmt.Printf(", {dependsOn: [")
+		buf := &bytes.Buffer{}
+		fmt.Fprintf(buf, ", {dependsOn: [")
 		for i, n := range r.explicitDeps {
 			if i > 0 {
-				fmt.Printf(", ")
+				fmt.Fprintf(buf, ", ")
 			}
-			r := n.(*resourceNode)
-			fmt.Printf("%s", resName(r.config.Type, r.config.Name))
+			depRes := n.(*resourceNode)
+			if depRes.count != nil {
+				fmt.Fprintf(buf, "...")
+			}
+			fmt.Fprintf(buf, "%s", resName(r.config.Type, r.config.Name))
 		}
-		fmt.Printf("]}")
+		fmt.Fprintf(buf, "]}")
+		explicitDeps = buf.String()
 	}
 
-	fmt.Printf(");\n")
+	name := resName(config.Type, config.Name)
+	qualifiedTypeName := fmt.Sprintf("%s%s.%s", provider, module, typeName)
+	if r.count == nil {
+		// If count is nil, this is a single-instance resource.
+		inputs, _, err := g.computeProperty(r.properties, "", sch)
+		if err != nil {
+			return err
+		}
+
+		fmt.Printf("const %s = new %s(\"%s\", %s%s);\n", name, qualifiedTypeName, config.Name, inputs, explicitDeps)
+	} else {
+		// Otherwise we need to generate multiple resources in a loop.
+		count, _, err := g.computeProperty(r.count, "", schemas{})
+		if err != nil {
+			return err
+		}
+		inputs, _, err := g.computePropertyWithCount(r.properties, "    ", sch, "i")
+		if err != nil {
+			return err
+		}
+
+		fmt.Printf("const %s: %s[] = [];\n", name, qualifiedTypeName)
+		fmt.Printf("for (let i = 0; i < %s; i++) {\n", count)
+		fmt.Printf("    %s.push(new %s(`%s-${i}`, %s%s));\n", name, qualifiedTypeName, config.Name, inputs, explicitDeps)
+		fmt.Printf("}\n")
+	}
 
 	return nil
 }

@@ -4,6 +4,7 @@ import (
 	"os/exec"
 	"reflect"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/hashicorp/hil"
@@ -17,6 +18,10 @@ import (
 	"github.com/pulumi/pulumi/pkg/workspace"
 	"github.com/ugorji/go/codec"
 )
+
+// TODO
+// - modules
+// - provisioners
 
 type node interface {
 	dependencies() []node
@@ -43,6 +48,7 @@ type resourceNode struct {
 	provider     *providerNode
 	deps         []node
 	explicitDeps []node
+	count        interface{}
 	properties   map[string]interface{}
 }
 
@@ -448,15 +454,37 @@ func (b *builder) buildResource(r *resourceNode) error {
 	}
 	r.provider = p
 
+	count, countDeps, err := b.buildValue(r.config.RawCount.Value())
+	if err != nil {
+		return err
+	}
+	// If the count is a string that can be parsed as an integer, use the result of the parse as the count. If the
+	// count is exactly one, set the count to nil.
+	if countStr, ok := count.(string); ok {
+		countInt, err := strconv.ParseInt(countStr, 0, 0)
+		if err == nil {
+			if countInt == 1 {
+				count = nil
+			} else {
+				count = float64(countInt)
+			}
+		}
+	}
+
 	props, deps, err := b.buildProperties(r.config.RawConfig)
 	if err != nil {
 		return err
+	}
+
+	// Merge the count dependencies into the overall dependency set and compute the final dependency lists.
+	for k, _ := range countDeps {
+		deps[k] = struct{}{}
 	}
 	allDeps, explicitDeps, err := b.buildDeps(deps, r.config.DependsOn)
 	if err != nil {
 		return err
 	}
-	r.properties, r.deps, r.explicitDeps = props, allDeps, explicitDeps
+	r.count, r.properties, r.deps, r.explicitDeps = count, props, allDeps, explicitDeps
 	return nil
 }
 
