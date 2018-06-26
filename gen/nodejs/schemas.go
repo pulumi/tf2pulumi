@@ -1,7 +1,6 @@
 package nodejs
 
 import (
-	"github.com/hashicorp/hil/ast"
 	"github.com/hashicorp/terraform/helper/schema"
 	"github.com/pulumi/pulumi-terraform/pkg/tfbridge"
 )
@@ -51,27 +50,27 @@ func (s schemas) elemSchemas() schemas {
 	return elemSch
 }
 
-func (s schemas) astType() ast.Type {
+func (s schemas) boundType() boundType {
 	if s.tf != nil {
 		switch s.tf.Type {
 		case schema.TypeBool:
-			return ast.TypeBool
+			return typeBool
 		case schema.TypeInt, schema.TypeFloat:
-			return ast.TypeFloat
+			return typeNumber
 		case schema.TypeString:
-			return ast.TypeString
+			return typeString
 		case schema.TypeList, schema.TypeSet:
 			// TODO: might need to do max-items-one projection here
-			return ast.TypeList
+			return typeList
 		case schema.TypeMap:
-			return ast.TypeMap
+			return typeMap
 		default:
-			return ast.TypeUnknown
+			return typeUnknown
 		}
 	} else if s.tfRes != nil {
-		return ast.TypeMap
+		return typeMap
 	}
 
-	return ast.TypeUnknown
+	return typeUnknown
 }
 

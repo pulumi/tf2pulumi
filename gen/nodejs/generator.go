@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/hashicorp/hil/ast"
 	"github.com/hashicorp/terraform/helper/schema"
 	"github.com/pkg/errors"
 	"github.com/pulumi/pulumi-terraform/pkg/tfbridge"
@@ -54,11 +53,11 @@ func tsName(tfName string, tfSchema *schema.Schema, schemaInfo *tfbridge.SchemaI
 	return tfbridge.TerraformToPulumiName(tfName, tfSchema, false)
 }
 
-func (g *Generator) computeProperty(v interface{}, indent string, sch schemas) (string, ast.Type, error) {
+func (g *Generator) computeProperty(v interface{}, indent string, sch schemas) (string, boundType, error) {
 	return (&propertyComputer{g: g}).computeProperty(v, indent, sch)
 }
 
-func (g *Generator) computePropertyWithCount(v interface{}, indent string, sch schemas, count string) (string, ast.Type, error) {
+func (g *Generator) computePropertyWithCount(v interface{}, indent string, sch schemas, count string) (string, boundType, error) {
 	return (&propertyComputer{g: g, countIndex: count}).computeProperty(v, indent, sch)
 }
 

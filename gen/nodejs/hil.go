@@ -8,21 +8,433 @@ import (
 	"github.com/hashicorp/hil/ast"
 	"github.com/hashicorp/terraform/config"
 	"github.com/pkg/errors"
+	"github.com/pulumi/pulumi/pkg/util/contract"
 	"github.com/pulumi/pulumi-terraform/pkg/tfbridge"
+
+	"github.com/pgavlin/firewalker/il"
 )
 
-type hilWalker struct {
-	pc *propertyComputer
+// We translate from HIL to Typescript in several passes as necessitated by the semantics of `pulumi.Output<T>`:
+// - In the first pass, we generate a type-annotated version of the HIL AST and gather all nested references to
+//   properties of type `pulumi.Output<T>`.
+// - In the second pass, we transform the AST for `pulumi.Output<T>.apply`:
+//    - If there are no nested output references, we skip this transform
+//    - Otherwise, all referenced outputs are folded into a top-level apply and their references are replaced with
+//      the corresponding resolved value
+
+type boundType uint32
+
+const (
+	typeInvalid boundType = 0
+	typeBool    boundType = 1
+	typeString  boundType = 1 << 1
+	typeNumber  boundType = 1 << 2
+	typeUnknown boundType = 1 << 3
+
+	typeList   boundType = 1 << 4
+	typeMap    boundType = 1 << 5
+	typeOutput boundType = 1 << 6
+
+	elementTypeMask boundType = typeBool | typeString | typeNumber | typeUnknown
+)
+
+func (t boundType) isList() bool {
+	return t & typeList != 0
 }
 
-func (w *hilWalker) walkArithmetic(n *ast.Arithmetic) (string, ast.Type, error) {
-	strs, _, err := w.walkNodes(n.Exprs)
+func (t boundType) listOf() boundType {
+	return t | typeList
+}
+
+func (t boundType) isMap() bool {
+	return t & typeMap != 0
+}
+
+func (t boundType) mapOf() boundType {
+	return t | typeMap
+}
+
+func (t boundType) isOutput() bool {
+	return t & typeOutput != 0
+}
+
+func (t boundType) outputOf() boundType {
+	return t | typeOutput
+}
+
+func (t boundType) elementType() boundType {
+	return t & elementTypeMask
+}
+
+type boundNode interface {
+	hil() ast.Node
+	typ() boundType
+}
+
+type boundArithmetic struct {
+	hilNode *ast.Arithmetic
+
+	exprs []boundNode
+}
+
+func (n *boundArithmetic) hil() ast.Node {
+	return n.hilNode
+}
+
+func (n *boundArithmetic) typ() boundType {
+	return typeNumber
+}
+
+type boundCall struct {
+	hilNode *ast.Call
+	exprType boundType
+
+	args []boundNode
+}
+
+func (n *boundCall) hil() ast.Node {
+	return n.hilNode
+}
+
+func (n *boundCall) typ() boundType {
+	return n.exprType
+}
+
+type boundConditional struct {
+	hilNode *ast.Conditional
+	exprType boundType
+
+	condExpr boundNode
+	trueExpr boundNode
+	falseExpr boundNode
+}
+
+func (n *boundConditional) hil() ast.Node {
+	return n.hilNode
+}
+
+func (n *boundConditional) typ() boundType {
+	return n.exprType
+}
+
+type boundIndex struct {
+	hilNode *ast.Index
+	exprType boundType
+
+	targetExpr boundNode
+	keyExpr boundNode
+}
+
+func (n *boundIndex) hil() ast.Node {
+	return n.hilNode
+}
+
+func (n *boundIndex) typ() boundType {
+	return n.exprType
+}
+
+type boundLiteral struct {
+	hilNode *ast.LiteralNode
+	exprType boundType
+}
+
+func (n *boundLiteral) hil() ast.Node {
+	return n.hilNode
+}
+
+func (n *boundLiteral) typ() boundType {
+	return n.exprType
+}
+
+type boundOutput struct {
+	hilNode *ast.Output
+
+	exprs []boundNode
+}
+
+func (n *boundOutput) hil() ast.Node {
+	return n.hilNode
+}
+
+func (n *boundOutput) typ() boundType {
+	return typeString
+}
+
+type boundVariableAccess struct {
+	hilNode *ast.VariableAccess
+	elements []string
+	exprType boundType
+
+	tfVar config.InterpolatedVariable
+	ilNode il.Node
+}
+
+func (n *boundVariableAccess) hil() ast.Node {
+	return n.hilNode
+}
+
+func (n *boundVariableAccess) typ() boundType {
+	return n.exprType
+}
+
+type hilBinder struct {
+	graph *il.Graph
+	hasCountIndex bool
+}
+
+func (b *hilBinder) bindArithmetic(n *ast.Arithmetic) (boundNode, error) {
+	exprs, err := b.bindExprs(n.Exprs)
 	if err != nil {
-		return "", ast.TypeInvalid, err
+		return nil, err
 	}
 
+	return &boundArithmetic{hilNode: n, exprs: exprs}, nil
+}
+
+func (b *hilBinder) bindCall(n *ast.Call) (boundNode, error) {
+	args, err := b.bindExprs(n.Args)
+	if err != nil {
+		return nil, err
+	}
+
+	exprType := typeUnknown
+	switch n.Func {
+	case "element", "lookup":
+		// nothing to do
+	case "file":
+		exprType = typeString
+	case "split":
+		exprType = typeList
+	default:
+		return nil, errors.Errorf("NYI: call to %s", n.Func)
+	}
+
+	return &boundCall{hilNode: n, exprType: exprType, args: args}, nil
+}
+
+func (b *hilBinder) bindConditional(n *ast.Conditional) (boundNode, error) {
+	condExpr, err := b.bindExpr(n.CondExpr)
+	if err != nil {
+		return nil, err
+	}
+	trueExpr, err := b.bindExpr(n.TrueExpr)
+	if err != nil {
+		return nil, err
+	}
+	falseExpr, err := b.bindExpr(n.FalseExpr)
+	if err != nil {
+		return nil, err
+	}
+
+	exprType := trueExpr.typ()
+	if exprType != falseExpr.typ() {
+		exprType = typeUnknown
+	}
+
+	return &boundConditional{
+		hilNode: n,
+		exprType: exprType,
+		condExpr: condExpr,
+		trueExpr: trueExpr,
+		falseExpr: falseExpr,
+	}, nil
+}
+
+func (b *hilBinder) bindIndex(n *ast.Index) (boundNode, error) {
+	boundTarget, err := b.bindExpr(n.Target)
+	if err != nil {
+		return nil, err
+	}
+	boundKey, err := b.bindExpr(n.Key)
+	if err != nil {
+		return nil, err
+	}
+
+	exprType := typeUnknown
+	targetType := boundTarget.typ()
+	if targetType.isList() {
+		exprType = targetType.elementType()
+	}
+
+	return &boundIndex{
+		hilNode: n,
+		exprType: exprType,
+		targetExpr: boundTarget,
+		keyExpr: boundKey,
+	}, nil
+}
+
+func (b *hilBinder) bindLiteral(n *ast.LiteralNode) (boundNode, error) {
+	exprType := typeUnknown
+	switch n.Typex {
+	case ast.TypeBool:
+		exprType = typeBool
+	case ast.TypeInt, ast.TypeFloat:
+		exprType = typeNumber
+	case ast.TypeString:
+		exprType = typeString
+	default:
+		return nil, errors.Errorf("Unexpected literal type %v", n.Typex)
+	}
+
+	return &boundLiteral{hilNode: n, exprType: exprType}, nil
+}
+
+func (b *hilBinder) bindOutput(n *ast.Output) (boundNode, error) {
+	exprs, err := b.bindExprs(n.Exprs)
+	if err != nil {
+		return nil, err
+	}
+
+	// Project a single-element output to the element itself.
+	if len(exprs) == 1 {
+		return exprs[0], nil
+	}
+
+	return &boundOutput{hilNode: n, exprs: exprs}, nil
+}
+
+func (b *hilBinder) bindVariableAccess(n *ast.VariableAccess) (boundNode, error) {
+	tfVar, err := config.NewInterpolatedVariable(n.Name)
+	if err != nil {
+		return nil, err
+	}
+
+	elements, exprType, ilNode := []string(nil), typeUnknown, il.Node(nil)
+	switch v := tfVar.(type) {
+	case *config.CountVariable:
+		// "count."
+		if v.Type != config.CountValueIndex {
+			return nil, errors.Errorf("unsupported count variable %s", v.FullKey())
+		}
+
+		if !b.hasCountIndex {
+			return nil, errors.Errorf("no count index in scope")
+		}
+
+		exprType = typeNumber
+	case *config.LocalVariable:
+		// "local."
+		return nil, errors.New("NYI: local variables")
+	case *config.ModuleVariable:
+		// "module."
+		return nil, errors.New("NYI: module variables")
+	case *config.PathVariable:
+		// "path."
+		return nil, errors.New("NYI: path variables")
+	case *config.ResourceVariable:
+		// default
+
+		// look up the resource.
+		r, ok := b.graph.Resources[v.ResourceId()]
+		if !ok {
+			return nil, errors.Errorf("unknown resource %v", v.ResourceId())
+		}
+		ilNode = r
+
+		var resInfo *tfbridge.ResourceInfo
+		var sch schemas
+		if r.Provider.Info != nil {
+			resInfo = r.Provider.Info.Resources[v.Type]
+			sch.tfRes = r.Provider.Info.P.ResourcesMap[v.Type]
+			sch.pulumi = &tfbridge.SchemaInfo{Fields: resInfo.Fields}
+		}
+
+		// name{.property}+
+		elements = strings.Split(v.Field, ".")
+		for _, e := range elements {
+			sch = sch.propertySchemas(e)
+		}
+
+		// Handle multi-references (splats and indexes)
+		exprType = sch.boundType()
+		if v.Multi && v.Index == -1{
+			exprType = exprType.listOf()
+		}
+	case *config.SelfVariable:
+		// "self."
+		return nil, errors.New("NYI: self variables")
+	case *config.SimpleVariable:
+		// "[^.]\+"
+		return nil, errors.New("NYI: simple variables")
+	case *config.TerraformVariable:
+		// "terraform."
+		return nil, errors.New("NYI: terraform variables")
+	case *config.UserVariable:
+		// "var."
+		if v.Elem != "" {
+			return nil, errors.New("NYI: user variable elements")
+		}
+
+		// look up the variable.
+		vn, ok := b.graph.Variables[v.Name]
+		if !ok {
+			return nil, errors.Errorf("unknown variable %s", v.Name)
+		}
+		ilNode = vn
+
+		// If the variable does not have a default, its type is string. If it does have a default, its type is string
+		// iff the default's type is also string. Note that we don't try all that hard here.
+		exprType = typeString
+		if vn.DefaultValue != nil {
+			if _, ok := vn.DefaultValue.(string); !ok {
+				exprType = typeUnknown
+			}
+		}
+	default:
+		return nil, errors.Errorf("unexpected variable type %T", v)
+	}
+
+	return &boundVariableAccess{
+		hilNode: n,
+		elements: elements,
+		exprType: exprType,
+		tfVar: tfVar,
+		ilNode: ilNode,
+	}, nil
+}
+
+func (b *hilBinder) bindExprs(ns []ast.Node) ([]boundNode, error) {
+	boundNodes := make([]boundNode, len(ns))
+	for i, n := range ns {
+		bn, err := b.bindExpr(n)
+		if err != nil {
+			return nil, err
+		}
+		boundNodes[i] = bn
+	}
+	return boundNodes, nil
+}
+
+func (b *hilBinder) bindExpr(n ast.Node) (boundNode, error) {
+	switch n := n.(type) {
+	case *ast.Arithmetic:
+		return b.bindArithmetic(n)
+	case *ast.Call:
+		return b.bindCall(n)
+	case *ast.Conditional:
+		return b.bindConditional(n)
+	case *ast.Index:
+		return b.bindIndex(n)
+	case *ast.LiteralNode:
+		return b.bindLiteral(n)
+	case *ast.Output:
+		return b.bindOutput(n)
+	case *ast.VariableAccess:
+		return b.bindVariableAccess(n)
+	default:
+		return nil, errors.Errorf("unexpected HIL node type %T", n)
+	}
+}
+
+type hilGenerator struct {
+	w *bytes.Buffer
+	countIndex string
+}
+
+func (g *hilGenerator) genArithmetic(n *boundArithmetic) {
 	op := ""
-	switch n.Op {
+	switch n.hilNode.Op {
 	case ast.ArithmeticOpAdd:
 		op = "+"
 	case ast.ArithmeticOpSub:
@@ -50,236 +462,114 @@ func (w *hilWalker) walkArithmetic(n *ast.Arithmetic) (string, ast.Type, error) 
 	case ast.ArithmeticOpGreaterThanOrEqual:
 		op = ">="
 	}
+	op = fmt.Sprintf(" %s ", op)
 
-	return "(" + strings.Join(strs, " "+op+" ") + ")", ast.TypeFloat, nil
+	g.gen("(")
+	for i, n := range n.exprs {
+		if i != 0 {
+			g.gen(op)
+		}
+		g.gen(n)
+	}
+	g.gen(")")
 }
 
-func (w *hilWalker) walkCall(n *ast.Call) (string, ast.Type, error) {
-	strs, _, err := w.walkNodes(n.Args)
-	if err != nil {
-		return "", ast.TypeInvalid, err
-	}
-
-	switch n.Func {
+func (g *hilGenerator) genCall(n *boundCall) {
+	switch n.hilNode.Func {
 	case "element":
-		// TODO: wrapping semantics
-		return fmt.Sprintf("%s[%s]", strs[0], strs[1]), ast.TypeUnknown, nil
+		g.gen(n.args[0], "[", n.args[1], "]")
 	case "file":
-		return fmt.Sprintf("fs.readFileSync(%s, \"utf-8\")", strs[0]), ast.TypeString, nil
+		g.gen("fs.readFileSync(", n.args[0], ", \"utf-8\")")
 	case "lookup":
-		lookup := fmt.Sprintf("(<any>%s)[%s]", strs[0], strs[1])
-		if len(strs) == 3 {
-			lookup += fmt.Sprintf(" || %s", strs[2])
+		hasDefault := len(n.args) == 3
+		if hasDefault {
+			g.gen("(")
 		}
-		return lookup, ast.TypeUnknown, nil
+		g.gen("(<any>", n.args[0], ")[", n.args[1], "]")
+		if hasDefault {
+			g.gen(" || ", n.args[2], ")")
+		}
 	case "split":
-		return fmt.Sprintf("%s.split(%s)", strs[1], strs[0]), ast.TypeList, nil
+		g.gen(n.args[0], ".split(", n.args[1], ")")
 	default:
-		return "", ast.TypeInvalid, errors.Errorf("NYI: call to %s", n.Func)
+		contract.Failf("unexpected function in genCall: %v", n.hilNode.Func)
 	}
 }
 
-func (w *hilWalker) walkConditional(n *ast.Conditional) (string, ast.Type, error) {
-	cond, _, err := w.walkNode(n.CondExpr)
-	if err != nil {
-		return "", ast.TypeInvalid, err
-	}
-	t, tt, err := w.walkNode(n.TrueExpr)
-	if err != nil {
-		return "", ast.TypeInvalid, err
-	}
-	f, tf, err := w.walkNode(n.FalseExpr)
-	if err != nil {
-		return "", ast.TypeInvalid, err
-	}
-
-	typ := tt
-	if tt == ast.TypeUnknown {
-		typ = tf
-	}
-
-	return fmt.Sprintf("(%s ? %s : %s)", cond, t, f), typ, nil
+func (g *hilGenerator) genConditional(n *boundConditional) {
+	g.gen("(", n.condExpr, " ? ", n.trueExpr, " : ", n.falseExpr, ")")
 }
 
-func (w *hilWalker) walkIndex(n *ast.Index) (string, ast.Type, error) {
-	target, _, err := w.walkNode(n.Target)
-	if err != nil {
-		return "", ast.TypeInvalid, err
-	}
-	key, _, err := w.walkNode(n.Key)
-	if err != nil {
-		return "", ast.TypeInvalid, err
-	}
-
-	return fmt.Sprintf("%s[%s]", target, key), ast.TypeUnknown, nil
+func (g *hilGenerator) genIndex(n *boundIndex) {
+	g.gen(n.targetExpr, "[", n.keyExpr, "]")
 }
 
-func (w *hilWalker) walkLiteral(n *ast.LiteralNode) (string, ast.Type, error) {
-	switch n.Typex {
-	case ast.TypeBool, ast.TypeInt, ast.TypeFloat:
-		return fmt.Sprintf("%v", n.Value), n.Typex, nil
-	case ast.TypeString:
-		return fmt.Sprintf("%q", n.Value), n.Typex, nil
+func (g *hilGenerator) genLiteral(n *boundLiteral) {
+	switch n.exprType {
+	case typeBool, typeNumber:
+		fmt.Fprintf(g.w, "%v", n.hilNode.Value)
+	case typeString:
+		fmt.Fprintf(g.w, "%q", n.hilNode.Value)
 	default:
-		return "", ast.TypeInvalid, errors.Errorf("Unexpected literal type %v", n.Typex)
+		contract.Failf("unexpected literal type in genLiteral: %v", n.exprType)
 	}
 }
 
-func (w *hilWalker) walkOutput(n *ast.Output) (string, ast.Type, error) {
-	strs, typs, err := w.walkNodes(n.Exprs)
-	if err != nil {
-		return "", ast.TypeInvalid, err
-	}
-
-	if len(typs) == 1 {
-		return strs[0], typs[0], nil
-	}
-
-	buf := &bytes.Buffer{}
-	for i, s := range strs {
+func (g *hilGenerator) genOutput(n *boundOutput) {
+	for i, s := range n.exprs {
 		if i > 0 {
-			fmt.Fprintf(buf, " + ")
+			g.gen(" + ")
 		}
-		if typs[i] == ast.TypeString {
-			fmt.Fprintf(buf, "%s", s)
+		if s.typ() == typeString {
+			g.gen(s)
 		} else {
-			fmt.Fprintf(buf, "`${%s}`", s)
+			g.gen("`${", s, "}`")
 		}
 	}
-	return buf.String(), ast.TypeString, nil
 }
 
-func (w *hilWalker) walkVariableAccess(n *ast.VariableAccess) (string, ast.Type, error) {
-	tfVar, err := config.NewInterpolatedVariable(n.Name)
-	if err != nil {
-		return "", ast.TypeInvalid, err
-	}
-
-	switch v := tfVar.(type) {
+func (g *hilGenerator) genVariableAccess(n *boundVariableAccess) {
+	switch v := n.tfVar.(type) {
 	case *config.CountVariable:
-		// "count."
-		if v.Type != config.CountValueIndex {
-			return "", ast.TypeInvalid, errors.Errorf("unsupported count variable %s", v.FullKey())
-		}
-
-		if w.pc.countIndex == "" {
-			return "", ast.TypeInvalid, errors.Errorf("no count index in scope")
-		}
-
-		return w.pc.countIndex, ast.TypeFloat, nil
-	case *config.LocalVariable:
-		// "local."
-		return "", ast.TypeInvalid, errors.New("NYI: local variables")
-	case *config.ModuleVariable:
-		// "module."
-		return "", ast.TypeInvalid, errors.New("NYI: module variables")
-	case *config.PathVariable:
-		// "path."
-		return "", ast.TypeInvalid, errors.New("NYI: path variables")
+		g.gen(g.countIndex)
 	case *config.ResourceVariable:
-		// default
-
-		// look up the resource.
-		r, ok := w.pc.g.graph.Resources[v.ResourceId()]
-		if !ok {
-			return "", ast.TypeInvalid, errors.Errorf("unknown resource %v", v.ResourceId())
-		}
-
-		var resInfo *tfbridge.ResourceInfo
-		var sch schemas
-		if r.Provider.Info != nil {
-			resInfo = r.Provider.Info.Resources[v.Type]
-			sch.tfRes = r.Provider.Info.P.ResourcesMap[v.Type]
-			sch.pulumi = &tfbridge.SchemaInfo{Fields: resInfo.Fields}
-		}
-
-		// name{.property}+
-		elements := strings.Split(v.Field, ".")
-		for i, e := range elements {
-			sch = sch.propertySchemas(e)
-			elements[i] = tfbridge.TerraformToPulumiName(e, sch.tf, false)
-		}
-
-		// Handle multi-references (splats and indexes)
-		receiver := resName(v.Type, v.Name)
-		accessor, exprType := strings.Join(elements, "."), sch.astType()
+		receiver, accessor := resName(v.Type, v.Name), strings.Join(n.elements, ".")
 		if v.Multi {
 			if v.Index == -1 {
-				// Splat
-				accessor, exprType = fmt.Sprintf("map(v => v.%s)", accessor), ast.TypeList
+				accessor = fmt.Sprintf("map(v => v.%s)", accessor)
 			} else {
-				// Index
 				receiver = fmt.Sprintf("%s[%d]", receiver, v.Index)
 			}
 		}
-
-		return fmt.Sprintf("%s.%s", receiver, accessor), exprType, nil
-	case *config.SelfVariable:
-		// "self."
-		return "", ast.TypeInvalid, errors.New("NYI: self variables")
-	case *config.SimpleVariable:
-		// "[^.]\+"
-		return "", ast.TypeInvalid, errors.New("NYI: simple variables")
-	case *config.TerraformVariable:
-		// "terraform."
-		return "", ast.TypeInvalid, errors.New("NYI: terraform variables")
+		g.gen(receiver, ".", accessor)
 	case *config.UserVariable:
-		// "var."
-		if v.Elem != "" {
-			return "", ast.TypeInvalid, errors.New("NYI: user variable elements")
-		}
-
-		// look up the variable.
-		vn, ok := w.pc.g.graph.Variables[v.Name]
-		if !ok {
-			return "", ast.TypeInvalid, errors.Errorf("unknown variable %s", v.Name)
-		}
-
-		// If the variable does not have a default, its type is string. If it does have a default, its type is string
-		// iff the default's type is also string. Note that we don't try all that hard here.
-		typ := ast.TypeString
-		if vn.DefaultValue != nil {
-			if _, ok := vn.DefaultValue.(string); !ok {
-				typ = ast.TypeUnknown
-			}
-		}
-
-		return tfbridge.TerraformToPulumiName(v.Name, nil, false), typ, nil
+		g.gen(tfbridge.TerraformToPulumiName(v.Name, nil, false))
 	default:
-		return "", ast.TypeInvalid, errors.Errorf("unexpected variable type %T", v)
+		contract.Failf("unexpected TF var type in genVariableAccess: %T", n.tfVar)
 	}
 }
 
-func (w *hilWalker) walkNode(n ast.Node) (string, ast.Type, error) {
-	switch n := n.(type) {
-	case *ast.Arithmetic:
-		return w.walkArithmetic(n)
-	case *ast.Call:
-		return w.walkCall(n)
-	case *ast.Conditional:
-		return w.walkConditional(n)
-	case *ast.Index:
-		return w.walkIndex(n)
-	case *ast.LiteralNode:
-		return w.walkLiteral(n)
-	case *ast.Output:
-		return w.walkOutput(n)
-	case *ast.VariableAccess:
-		return w.walkVariableAccess(n)
-	default:
-		return "", ast.TypeInvalid, errors.Errorf("unexpected HIL node type %T", n)
-	}
-}
-
-func (w *hilWalker) walkNodes(ns []ast.Node) ([]string, []ast.Type, error) {
-	strs, typs := make([]string, len(ns)), make([]ast.Type, len(ns))
-	for i, n := range ns {
-		s, t, err := w.walkNode(n)
-		if err != nil {
-			return nil, nil, err
+func (g *hilGenerator) gen(vs ...interface{}) {
+	for _, v := range vs {
+		switch v := v.(type) {
+		case string:
+			g.w.WriteString(v)
+		case *boundArithmetic:
+			g.genArithmetic(v)
+		case *boundCall:
+			g.genCall(v)
+		case *boundConditional:
+			g.genConditional(v)
+		case *boundIndex:
+			g.genIndex(v)
+		case *boundLiteral:
+			g.genLiteral(v)
+		case *boundOutput:
+			g.genOutput(v)
+		case *boundVariableAccess:
+			g.genVariableAccess(v)
+		default:
+			contract.Failf("unexpected type in gen: %T", v)
 		}
-		strs[i], typs[i] = s, t
 	}
-	return strs, typs, nil
 }
-
