@@ -15,6 +15,10 @@ import (
 	"github.com/pulumi/pulumi-terraform/pkg/tfbridge"
 )
 
+// TODO:
+// - project from array-of-1-element to element
+// - type-driven conversions in general (strings -> numbers, esp. for config)
+
 type nodeGenerator struct{
 	projectName string
 }
@@ -22,6 +26,19 @@ type nodeGenerator struct{
 type schemas struct {
 	tf map[string]*schema.Schema
 	pulumi map[string]*tfbridge.SchemaInfo
+}
+
+func resName(typ, name string) string {
+	n := fmt.Sprintf("%s_%s", typ, name)
+	if strings.ContainsAny(n, " -.") {
+		return strings.Map(func(r rune) rune {
+			if r == ' ' || r == '-' || r == '.' {
+				return '_'
+			}
+			return r
+		}, n)
+	}
+	return n
 }
 
 func tsName(tfName string, tfSchema *schema.Schema, schemaInfo *tfbridge.SchemaInfo, isObjectKey bool) string {
@@ -99,6 +116,10 @@ func (w nodeHILWalker) walkCall(n *ast.Call) (string, error) {
 			lookup += fmt.Sprintf(" || %s", strs[2])
 		}
 		return lookup, nil
+	case "split":
+		// TODO: the spread operator shouldn't be here. This is to make ["${array-thing}"] work, and should be done
+		// when translating the array.
+		return fmt.Sprintf("...%s.split(%s)", strs[1], strs[0]), nil
 	default:
 		return "", errors.Errorf("NYI: call to %s", n.Func)
 	}
@@ -184,7 +205,7 @@ func (w nodeHILWalker) walkVariableAccess(n *ast.VariableAccess) (string, error)
 			// TODO: grab a schema for each element based on the resource type and module for pluralization info
 			elements[i] = tfbridge.TerraformToPulumiName(e, nil, false)
 		}
-		return fmt.Sprintf("%s_%s.%s", v.Type, v.Name, strings.Join(elements, ".")), nil
+		return fmt.Sprintf("%s.%s", resName(v.Type, v.Name), strings.Join(elements, ".")), nil
 	case *config.SelfVariable:
 		// "self."
 		return "", errors.New("NYI: self variables")
@@ -406,8 +427,8 @@ func (g *nodeGenerator) generateResource(r *resourceNode) error {
 		module, typeName = "." + mod[:slash], typ
 	}
 
-	fmt.Printf("const %s_%s = new %s%s.%s(\"%s\", %s",
-		config.Type, config.Name, provider, module, typeName, config.Name, inputs)
+	fmt.Printf("const %s = new %s%s.%s(\"%s\", %s",
+		resName(config.Type, config.Name), provider, module, typeName, config.Name, inputs)
 
 	if len(r.explicitDeps) != 0 {
 		fmt.Printf(", {dependsOn: [")
@@ -416,7 +437,7 @@ func (g *nodeGenerator) generateResource(r *resourceNode) error {
 				fmt.Printf(", ")
 			}
 			r := n.(*resourceNode)
-			fmt.Printf("%s_%s", r.config.Type, r.config.Name)
+			fmt.Printf("%s", resName(r.config.Type, r.config.Name))
 		}
 		fmt.Printf("]}")
 	}
