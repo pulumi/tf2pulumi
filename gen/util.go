@@ -1,4 +1,4 @@
-package main
+package gen
 
 import (
 	"reflect"
@@ -7,7 +7,7 @@ import (
 	"github.com/pulumi/pulumi/pkg/util/contract"
 )
 
-func sortedKeys(m interface{}) []string {
+func SortedKeys(m interface{}) []string {
 	mv := reflect.ValueOf(m)
 
 	contract.Require(mv.Type().Kind() == reflect.Map, "m")

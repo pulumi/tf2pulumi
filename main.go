@@ -11,6 +11,7 @@ import (
 	"github.com/hashicorp/terraform/svchost/auth"
 	"github.com/hashicorp/terraform/svchost/disco"
 
+	"github.com/pgavlin/firewalker/gen"
 	"github.com/pgavlin/firewalker/il"
 )
 
@@ -43,7 +44,7 @@ func main() {
 		os.Exit(-1)
 	}
 
-	if err = generate(g, &nodeGenerator{projectName: "auto"}); err != nil {
+	if err = gen.Generate(g, &nodeGenerator{projectName: "auto"}); err != nil {
 		fmt.Fprintf(os.Stderr, "generation failed: %v\n", err)
 		os.Exit(-1)
 	}

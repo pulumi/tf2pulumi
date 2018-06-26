@@ -13,6 +13,7 @@ import (
 	"github.com/pulumi/pulumi-terraform/pkg/tfbridge"
 	"github.com/pulumi/pulumi/pkg/util/contract"
 
+	"github.com/pgavlin/firewalker/gen"
 	"github.com/pgavlin/firewalker/il"
 )
 
@@ -469,7 +470,7 @@ func (pc *nodePropertyComputer) computeMapProperty(m map[string]interface{}, ind
 	buf := &bytes.Buffer{}
 
 	fmt.Fprintf(buf, "{")
-	for _, k := range sortedKeys(m) {
+	for _, k := range gen.SortedKeys(m) {
 		v := m[k]
 
 		propSch := sch.propertySchemas(k)
@@ -518,7 +519,7 @@ func (g *nodeGenerator) computePropertyWithCount(v interface{}, indent string, s
 	return (&nodePropertyComputer{g: g, countIndex: count}).computeProperty(v, indent, sch)
 }
 
-func (g *nodeGenerator) generatePreamble(gr *il.Graph) error {
+func (g *nodeGenerator) GeneratePreamble(gr *il.Graph) error {
 	// Stash the graph for later.
 	g.graph = gr
 
@@ -533,7 +534,7 @@ func (g *nodeGenerator) generatePreamble(gr *il.Graph) error {
 	return nil
 }
 
-func (g *nodeGenerator) generateVariables(vs []*il.VariableNode) error {
+func (g *nodeGenerator) GenerateVariables(vs []*il.VariableNode) error {
 	// If there are no variables, we're done.
 	if len(vs) == 0 {
 		return nil
@@ -562,11 +563,11 @@ func (g *nodeGenerator) generateVariables(vs []*il.VariableNode) error {
 	return nil
 }
 
-func (*nodeGenerator) generateLocal(l *il.LocalNode) error {
+func (*nodeGenerator) GenerateLocal(l *il.LocalNode) error {
 	return errors.New("NYI: locals")
 }
 
-func (g *nodeGenerator) generateResource(r *il.ResourceNode) error {
+func (g *nodeGenerator) GenerateResource(r *il.ResourceNode) error {
 	config := r.Config
 
 	underscore := strings.IndexRune(config.Type, '_')
@@ -632,7 +633,7 @@ func (g *nodeGenerator) generateResource(r *il.ResourceNode) error {
 
 		fmt.Printf("const %s = new %s(\"%s\", %s%s);\n", name, qualifiedTypeName, config.Name, inputs, explicitDeps)
 	} else {
-		// Otherwise we need to generate multiple resources in a loop.
+		// Otherwise we need to Generate multiple resources in a loop.
 		count, _, err := g.computeProperty(r.Count, "", schemas{})
 		if err != nil {
 			return err
@@ -651,7 +652,7 @@ func (g *nodeGenerator) generateResource(r *il.ResourceNode) error {
 	return nil
 }
 
-func (g *nodeGenerator) generateOutputs(os []*il.OutputNode) error {
+func (g *nodeGenerator) GenerateOutputs(os []*il.OutputNode) error {
 	if len(os) == 0 {
 		return nil
 	}

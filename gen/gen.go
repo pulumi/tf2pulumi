@@ -1,4 +1,4 @@
-package main
+package gen
 
 import (
 	"github.com/pkg/errors"
@@ -6,15 +6,17 @@ import (
 	"github.com/pgavlin/firewalker/il"
 )
 
-type generator interface {
-	generatePreamble(g *il.Graph) error
-	generateVariables(vs []*il.VariableNode) error
-	generateLocal(l *il.LocalNode) error
-	generateResource(r *il.ResourceNode) error
-	generateOutputs(os []*il.OutputNode) error
+type Generator interface {
+	GeneratePreamble(g *il.Graph) error
+	GenerateVariables(vs []*il.VariableNode) error
+	GenerateLocal(l *il.LocalNode) error
+	GenerateResource(r *il.ResourceNode) error
+	GenerateOutputs(os []*il.OutputNode) error
 }
 
-func generateNode(n il.Node, lang generator, done map[il.Node]struct{}) error {
+
+
+func generateNode(n il.Node, lang Generator, done map[il.Node]struct{}) error {
 	if _, ok := done[n]; ok {
 		return nil
 	}
@@ -28,9 +30,9 @@ func generateNode(n il.Node, lang generator, done map[il.Node]struct{}) error {
 	var err error
 	switch n := n.(type) {
 	case *il.LocalNode:
-		err = lang.generateLocal(n)
+		err = lang.GenerateLocal(n)
 	case *il.ResourceNode:
-		err = lang.generateResource(n)
+		err = lang.GenerateResource(n)
 	default:
 		return errors.Errorf("unexpected node type %T", n)
 	}
@@ -42,7 +44,7 @@ func generateNode(n il.Node, lang generator, done map[il.Node]struct{}) error {
 	return nil
 }
 
-func generate(g *il.Graph, lang generator) error {
+func Generate(g *il.Graph, lang Generator) error {
 	// We currently do not support multiple provider instantiations, so fail if any providers have dependencies on
 	// nodes that do not represent config vars.
 	for _, p := range g.Providers {
@@ -54,16 +56,16 @@ func generate(g *il.Graph, lang generator) error {
 	}
 
 	// Generate any necessary preamble.
-	if err := lang.generatePreamble(g); err != nil {
+	if err := lang.GeneratePreamble(g); err != nil {
 		return err
 	}
 
 	// Variables are sources. Generate them first.
 	vars := make([]*il.VariableNode, len(g.Variables))
-	for i, k := range sortedKeys(g.Variables) {
+	for i, k := range SortedKeys(g.Variables) {
 		vars[i] = g.Variables[k]
 	}
-	if err := lang.generateVariables(vars); err != nil {
+	if err := lang.GenerateVariables(vars); err != nil {
 		return err
 	}
 
@@ -74,7 +76,7 @@ func generate(g *il.Graph, lang generator) error {
 	}
 	todo := make([]il.Node, 0)
 
-	localKeys, resourceKeys := sortedKeys(g.Locals), sortedKeys(g.Resources)
+	localKeys, resourceKeys := SortedKeys(g.Locals), SortedKeys(g.Resources)
 	for _, k := range localKeys {
 		l := g.Locals[k]
 		if len(l.Deps) == 0 {
@@ -103,7 +105,7 @@ func generate(g *il.Graph, lang generator) error {
 
 	// Finally, generate all outputs. These are sinks, so all of their dependencies should already have been generated.
 	outputs := make([]*il.OutputNode, len(g.Outputs))
-	for i, k := range sortedKeys(g.Outputs) {
+	for i, k := range SortedKeys(g.Outputs) {
 		outputs[i] = g.Outputs[k]
 	}
 	for _, o := range outputs {
@@ -113,7 +115,7 @@ func generate(g *il.Graph, lang generator) error {
 			}
 		}
 	}
-	if err := lang.generateOutputs(outputs); err != nil {
+	if err := lang.GenerateOutputs(outputs); err != nil {
 		return err
 	}
 
