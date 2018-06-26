@@ -9,14 +9,14 @@ import (
 	"github.com/hashicorp/hil"
 	"github.com/hashicorp/hil/ast"
 	"github.com/hashicorp/terraform/config"
+	"github.com/hashicorp/terraform/helper/schema"
+	"github.com/mitchellh/mapstructure"
 	"github.com/pkg/errors"
 	"github.com/pulumi/pulumi/pkg/workspace"
 	"github.com/pulumi/pulumi/pkg/util/contract"
 	"github.com/pulumi/pulumi-terraform/pkg/tfbridge"
 	"github.com/ugorji/go/codec"
 )
-
-// todo: explicit dependencies
 
 type node interface {
 	dependencies() []node
@@ -339,6 +339,40 @@ func (b *builder) buildDeps(deps map[node]struct{}, dependsOn []string) ([]node,
 	return allDeps, explicitDeps, nil
 }
 
+func fixupTFResource(r *schema.Resource) error {
+	for _, s := range r.Schema {
+		if err := fixupTFSchema(s); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func fixupTFSchema(s *schema.Schema) error {
+	rawElem, ok := s.Elem.(map[interface{}]interface{})
+	if !ok {
+		return nil
+	}
+
+	if _, hasType := rawElem["type"]; hasType {
+		var elemSch schema.Schema
+		if err := mapstructure.Decode(rawElem, &elemSch); err != nil {
+			return err
+		}
+		fixupTFSchema(&elemSch)
+		s.Elem = &elemSch
+	} else {
+		var elemRes schema.Resource
+		if err := mapstructure.Decode(rawElem, &elemRes); err != nil {
+			return err
+		}
+		fixupTFResource(&elemRes)
+		s.Elem = &elemRes
+	}
+
+	return nil
+}
+
 func getProviderInfo(p *providerNode) (*tfbridge.ProviderInfo, error) {
 	_, path, err := workspace.GetPluginPath(workspace.ResourcePlugin, p.config.Name, nil)
 	if err != nil {
@@ -355,13 +389,19 @@ func getProviderInfo(p *providerNode) (*tfbridge.ProviderInfo, error) {
 	}
 
 	var info tfbridge.ProviderInfo
-	err = codec.NewDecoder(out, new(codec.JsonHandle)).Decode(&info)
+	json := &codec.JsonHandle{}
+	err = codec.NewDecoder(out, json).Decode(&info)
 
 	if cErr := cmd.Wait(); cErr != nil {
 		return nil, cErr
 	}
 	if err != nil {
 		return nil, err
+	}
+
+	// Fix up schema elems.
+	for _, r := range info.P.ResourcesMap {
+		fixupTFResource(r)
 	}
 
 	return &info, nil

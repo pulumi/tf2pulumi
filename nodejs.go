@@ -11,7 +11,6 @@ import (
 	"github.com/hashicorp/terraform/helper/schema"
 	"github.com/pkg/errors"
 	"github.com/pulumi/pulumi/pkg/util/contract"
-
 	"github.com/pulumi/pulumi-terraform/pkg/tfbridge"
 )
 
@@ -127,9 +126,32 @@ func tsName(tfName string, tfSchema *schema.Schema, schemaInfo *tfbridge.SchemaI
 	return tfbridge.TerraformToPulumiName(tfName, tfSchema, false)
 }
 
-type nodeHILWalker struct{}
+func coerceProperty(value string, valueType, propertyType ast.Type) string {
+	// We only coerce values we know are strings.
+	if valueType == propertyType || valueType != ast.TypeString {
+		return value
+	}
 
-func (w nodeHILWalker) walkArithmetic(n *ast.Arithmetic) (string, ast.Type, error) {
+	switch propertyType {
+	case ast.TypeBool:
+		if value == "\"true\"" {
+			return "true"
+		} else if value == "\"false\"" {
+			return "false"
+		}
+		return fmt.Sprintf("(%s === \"true\")", value)
+	case ast.TypeInt, ast.TypeFloat:
+		return fmt.Sprintf("Number.parseFloat(%s)", value)
+	default:
+		return value
+	}
+}
+
+type nodeHILWalker struct {
+	g *nodeGenerator
+}
+
+func (w *nodeHILWalker) walkArithmetic(n *ast.Arithmetic) (string, ast.Type, error) {
 	strs, _, err := w.walkNodes(n.Exprs)
 	if err != nil {
 		return "", ast.TypeInvalid, err
@@ -168,7 +190,7 @@ func (w nodeHILWalker) walkArithmetic(n *ast.Arithmetic) (string, ast.Type, erro
 	return "(" + strings.Join(strs, " " + op + " ") + ")", ast.TypeFloat, nil
 }
 
-func (w nodeHILWalker) walkCall(n *ast.Call) (string, ast.Type, error) {
+func (w *nodeHILWalker) walkCall(n *ast.Call) (string, ast.Type, error) {
 	strs, _, err := w.walkNodes(n.Args)
 	if err != nil {
 		return "", ast.TypeInvalid, err
@@ -190,7 +212,7 @@ func (w nodeHILWalker) walkCall(n *ast.Call) (string, ast.Type, error) {
 	}
 }
 
-func (w nodeHILWalker) walkConditional(n *ast.Conditional) (string, ast.Type, error) {
+func (w *nodeHILWalker) walkConditional(n *ast.Conditional) (string, ast.Type, error) {
 	cond, _, err := w.walkNode(n.CondExpr)
 	if err != nil {
 		return "", ast.TypeInvalid, err
@@ -212,7 +234,7 @@ func (w nodeHILWalker) walkConditional(n *ast.Conditional) (string, ast.Type, er
 	return fmt.Sprintf("(%s ? %s : %s)", cond, t, f), typ, nil
 }
 
-func (w nodeHILWalker) walkIndex(n *ast.Index) (string, ast.Type, error) {
+func (w *nodeHILWalker) walkIndex(n *ast.Index) (string, ast.Type, error) {
 	target, _, err := w.walkNode(n.Target)
 	if err != nil {
 		return "", ast.TypeInvalid, err
@@ -225,7 +247,7 @@ func (w nodeHILWalker) walkIndex(n *ast.Index) (string, ast.Type, error) {
 	return fmt.Sprintf("%s[%s]", target, key), ast.TypeUnknown, nil
 }
 
-func (w nodeHILWalker) walkLiteral(n *ast.LiteralNode) (string, ast.Type, error) {
+func (w *nodeHILWalker) walkLiteral(n *ast.LiteralNode) (string, ast.Type, error) {
 	switch n.Typex {
 	case ast.TypeBool, ast.TypeInt, ast.TypeFloat:
 		return fmt.Sprintf("%v", n.Value), n.Typex, nil
@@ -236,7 +258,7 @@ func (w nodeHILWalker) walkLiteral(n *ast.LiteralNode) (string, ast.Type, error)
 	}
 }
 
-func (w nodeHILWalker) walkOutput(n *ast.Output) (string, ast.Type, error) {
+func (w *nodeHILWalker) walkOutput(n *ast.Output) (string, ast.Type, error) {
 	strs, typs, err := w.walkNodes(n.Exprs)
 	if err != nil {
 		return "", ast.TypeInvalid, err
@@ -249,7 +271,7 @@ func (w nodeHILWalker) walkOutput(n *ast.Output) (string, ast.Type, error) {
 	return strings.Join(strs, ""), typ, nil
 }
 
-func (w nodeHILWalker) walkVariableAccess(n *ast.VariableAccess) (string, ast.Type, error) {
+func (w *nodeHILWalker) walkVariableAccess(n *ast.VariableAccess) (string, ast.Type, error) {
 	tfVar, err := config.NewInterpolatedVariable(n.Name)
 	if err != nil {
 		return "", ast.TypeInvalid, err
@@ -274,13 +296,27 @@ func (w nodeHILWalker) walkVariableAccess(n *ast.VariableAccess) (string, ast.Ty
 			return "", ast.TypeInvalid, errors.New("NYI: multi-resource variables")
 		}
 
+		// look up the resource.
+		r, ok := w.g.graph.resources[v.ResourceId()]
+		if !ok {
+			return "", ast.TypeInvalid, errors.Errorf("unknown resource %v", v.ResourceId())
+		}
+
+		var resInfo *tfbridge.ResourceInfo
+		var sch schemas
+		if r.provider.info != nil {
+			resInfo = r.provider.info.Resources[v.Type]
+			sch.tfRes = r.provider.info.P.ResourcesMap[v.Type]
+			sch.pulumi = &tfbridge.SchemaInfo{Fields: resInfo.Fields}
+		}
+
 		// name{.property}+
 		elements := strings.Split(v.Field, ".")
 		for i, e := range elements {
-			// TODO: grab a schema for each element based on the resource type and module for pluralization info
-			elements[i] = tfbridge.TerraformToPulumiName(e, nil, false)
+			sch = sch.propertySchemas(e)
+			elements[i] = tfbridge.TerraformToPulumiName(e, sch.tf, false)
 		}
-		return fmt.Sprintf("%s.%s", resName(v.Type, v.Name), strings.Join(elements, ".")), ast.TypeUnknown, nil
+		return fmt.Sprintf("%s.%s", resName(v.Type, v.Name), strings.Join(elements, ".")), sch.astType(), nil
 	case *config.SelfVariable:
 		// "self."
 		return "", ast.TypeInvalid, errors.New("NYI: self variables")
@@ -296,13 +332,28 @@ func (w nodeHILWalker) walkVariableAccess(n *ast.VariableAccess) (string, ast.Ty
 			return "", ast.TypeInvalid, errors.New("NYI: user variable elements")
 		}
 
-		return tfbridge.TerraformToPulumiName(v.Name, nil, false), ast.TypeUnknown, nil
+		// look up the variable.
+		vn, ok := w.g.graph.variables[v.Name]
+		if !ok {
+			return "", ast.TypeInvalid, errors.Errorf("unknown variable %s", v.Name)
+		}
+
+		// If the variable does not have a default, its type is string. If it does have a default, its type is string
+		// iff the default's type is also string. Note that we don't try all that hard here.
+		typ := ast.TypeString
+		if vn.defaultValue != nil {
+			if _, ok := vn.defaultValue.(string); !ok {
+				typ = ast.TypeUnknown
+			}
+		}
+
+		return tfbridge.TerraformToPulumiName(v.Name, nil, false), typ, nil
 	default:
 		return "", ast.TypeInvalid, errors.Errorf("unexpected variable type %T", v)
 	}
 }
 
-func (w nodeHILWalker) walkNode(n ast.Node) (string, ast.Type, error) {
+func (w *nodeHILWalker) walkNode(n ast.Node) (string, ast.Type, error) {
 	switch n := n.(type) {
 	case *ast.Arithmetic:
 		return w.walkArithmetic(n)
@@ -323,7 +374,7 @@ func (w nodeHILWalker) walkNode(n ast.Node) (string, ast.Type, error) {
 	}
 }
 
-func (w nodeHILWalker) walkNodes(ns []ast.Node) ([]string, []ast.Type, error) {
+func (w *nodeHILWalker) walkNodes(ns []ast.Node) ([]string, []ast.Type, error) {
 	strs, typs := make([]string, len(ns)), make([]ast.Type, len(ns))
 	for i, n := range ns {
 		s, t, err := w.walkNode(n)
@@ -338,7 +389,7 @@ func (w nodeHILWalker) walkNodes(ns []ast.Node) ([]string, []ast.Type, error) {
 func (g *nodeGenerator) computeHILProperty(n ast.Node) (string, ast.Type, error) {
 	// NOTE: this will need to change in order to deal with combinations of resource outputs and other operators: most
 	// translations will not be output-aware, so we'll need to transform things into applies.
-	return nodeHILWalker{}.walkNode(n)
+	return (&nodeHILWalker{g: g}).walkNode(n)
 }
 
 func (g *nodeGenerator) computeSliceProperty(s []interface{}, indent string, sch schemas) (string, ast.Type, error) {
@@ -358,7 +409,6 @@ func (g *nodeGenerator) computeSliceProperty(s []interface{}, indent string, sch
 
 	fmt.Fprintf(buf, "[")
 	for _, v := range s {
-
 		elemIndent := indent + "    "
 		elem, elemTyp, err := g.computeProperty(v, elemIndent, elemSch)
 		if err != nil {
@@ -371,7 +421,7 @@ func (g *nodeGenerator) computeSliceProperty(s []interface{}, indent string, sch
 			// only knowable at runtime and will require a helper.
 			elem = "..." + elem
 		}
-		fmt.Fprintf(buf, "\n%s%s,", elemIndent, elem)
+		fmt.Fprintf(buf, "\n%s%s,", elemIndent, coerceProperty(elem, elemTyp, elemSch.astType()))
 	}
 	fmt.Fprintf(buf, "\n%s]", indent)
 	return buf.String(), ast.TypeList, nil
@@ -387,10 +437,11 @@ func (g *nodeGenerator) computeMapProperty(m map[string]interface{}, indent stri
 		propSch := sch.propertySchemas(k)
 
 		propIndent := indent + "    "
-		prop, _, err := g.computeProperty(v, propIndent, propSch)
+		prop, propTyp, err := g.computeProperty(v, propIndent, propSch)
 		if err != nil {
 			return "", ast.TypeInvalid, err
 		}
+		prop = coerceProperty(prop, propTyp, propSch.astType())
 
 		fmt.Fprintf(buf, "\n%s%s: %s,", propIndent, tsName(k, propSch.tf, propSch.pulumi, true), prop)
 	}
