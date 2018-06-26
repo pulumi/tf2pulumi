@@ -3,6 +3,7 @@ package main
 import (
 	"os/exec"
 	"reflect"
+	"strings"
 
 	"github.com/hashicorp/hil"
 	"github.com/hashicorp/hil/ast"
@@ -39,12 +40,14 @@ type resourceNode struct {
 	config *config.Resource
 	provider *providerNode
 	deps []node
+	explicitDeps []node
 	properties map[string]interface{}
 }
 
 type outputNode struct {
 	config *config.Output
 	deps []node
+	explicitDeps []node
 	value interface{}
 }
 
@@ -208,7 +211,7 @@ func (w *propertyWalker) walk(v reflect.Value) (interface{}, error) {
 	}
 }
 
-func (b *builder) buildValue(v interface{}, dependsOn []string) (interface{}, []node, error) {
+func (b *builder) buildValue(v interface{}) (interface{}, map[node]struct{}, error) {
 	if v == nil {
 		return nil, nil, nil
 	}
@@ -223,13 +226,8 @@ func (b *builder) buildValue(v interface{}, dependsOn []string) (interface{}, []
 		return nil, nil, err
 	}
 
-	// Add explicit dependencies to the set.
-	for _, name := range dependsOn {
-		walker.deps[name] = struct{}{}
-	}
-
 	// Walk the collected dependencies and convert them to `node`s
-	deps := make([]node, 0, len(walker.deps))
+	deps := make(map[node]struct{})
 	for k, _ := range walker.deps {
 		tfVar, err := config.NewInterpolatedVariable(k)
 		if err != nil {
@@ -253,31 +251,52 @@ func (b *builder) buildValue(v interface{}, dependsOn []string) (interface{}, []
 			if !ok {
 				return nil, nil, errors.Errorf("unknown local variable %v", v.Name)
 			}
-			deps = append(deps, l)
+			deps[l] = struct{}{}
 		case *config.ResourceVariable:
 			r, ok := b.resources[v.ResourceId()]
 			if !ok {
 				return nil, nil, errors.Errorf("unknown resource %v", v.Name)
 			}
-			deps = append(deps, r)
+			deps[r] = struct{}{}
 		case *config.UserVariable:
 			u, ok := b.variables[v.Name]
 			if !ok {
 				return nil, nil, errors.Errorf("unknown variable %v", v.Name)
 			}
-			deps = append(deps, u)
+			deps[u] = struct{}{}
 		}
 	}
 
 	return prop, deps, nil
 }
 
-func (b *builder) buildProperties(raw *config.RawConfig, dependsOn []string) (map[string]interface{}, []node, error) {
-	v, deps, err := b.buildValue(raw.Raw, dependsOn)
+func (b *builder) buildProperties(raw *config.RawConfig) (map[string]interface{}, map[node]struct{}, error) {
+	v, deps, err := b.buildValue(raw.Raw)
 	if err != nil {
 		return nil, nil, err
 	}
 	return v.(map[string]interface{}), deps, nil
+}
+
+func (b *builder) buildDeps(deps map[node]struct{}, dependsOn []string) ([]node, []node, error) {
+	explicitDeps := make([]node, len(dependsOn))
+	for i, name := range dependsOn {
+		if strings.HasPrefix(name, "module.") {
+			return nil, nil, errors.Errorf("module references are not yet supported (%v)", name)
+		}
+		r, ok := b.resources[name]
+		if !ok {
+			return nil, nil, errors.Errorf("unknown resource %v", name)
+		}
+		deps[r], explicitDeps[i] = struct{}{}, r
+	}
+
+	allDeps := make([]node, 0, len(deps))
+	for n, _ := range deps {
+		allDeps = append(allDeps, n)
+	}
+
+	return allDeps, explicitDeps, nil
 }
 
 func getProviderInfo(p *providerNode) (*tfbridge.ProviderInfo, error) {
@@ -315,11 +334,14 @@ func (b *builder) buildProvider(p *providerNode) error {
 	}
 	p.info = info
 
-	props, deps, err := b.buildProperties(p.config.RawConfig, nil)
+	props, deps, err := b.buildProperties(p.config.RawConfig)
 	if err != nil {
 		return err
 	}
-	p.properties, p.deps = props, deps
+	allDeps, _, err := b.buildDeps(deps, nil)
+	contract.Assert(err == nil)
+
+	p.properties, p.deps = props, allDeps
 	return nil
 }
 
@@ -331,16 +353,24 @@ func (b *builder) buildResource(r *resourceNode) error {
 	}
 	r.provider = p
 
-	props, deps, err := b.buildProperties(r.config.RawConfig, r.config.DependsOn)
+	props, deps, err := b.buildProperties(r.config.RawConfig)
 	if err != nil {
 		return err
 	}
-	r.properties, r.deps = props, deps
+	allDeps, explicitDeps, err := b.buildDeps(deps, r.config.DependsOn)
+	if err != nil {
+		return err
+	}
+	r.properties, r.deps, r.explicitDeps = props, allDeps, explicitDeps
 	return nil
 }
 
 func (b *builder) buildOutput(o *outputNode) error {
-	props, deps, err := b.buildProperties(o.config.RawConfig, o.config.DependsOn)
+	props, deps, err := b.buildProperties(o.config.RawConfig)
+	if err != nil {
+		return err
+	}
+	allDeps, explicitDeps, err := b.buildDeps(deps, o.config.DependsOn)
 	if err != nil {
 		return err
 	}
@@ -354,21 +384,24 @@ func (b *builder) buildOutput(o *outputNode) error {
 		}
 	}
 
-	o.value, o.deps = value, deps
+	o.value, o.deps, o.explicitDeps = value, allDeps, explicitDeps
 	return nil
 }
 
 func (b *builder) buildLocal(l *localNode) error {
-	props, deps, err := b.buildProperties(l.config.RawConfig, nil)
+	props, deps, err := b.buildProperties(l.config.RawConfig)
 	if err != nil {
 		return err
 	}
-	l.properties, l.deps = props, deps
+	allDeps, _, err := b.buildDeps(deps, nil)
+	contract.Assert(err == nil)
+
+	l.properties, l.deps = props, allDeps
 	return nil
 }
 
 func (b *builder) buildVariable(v *variableNode) error {
-	defaultValue, deps, err := b.buildValue(v.config.Default, nil)
+	defaultValue, deps, err := b.buildValue(v.config.Default)
 	if err != nil {
 		return err
 	}

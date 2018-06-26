@@ -240,6 +240,8 @@ func (w nodeHILWalker) walkNodes(ns []ast.Node) ([]string, error) {
 }
 
 func (g *nodeGenerator) computeHILProperty(n ast.Node) (string, error) {
+	// NOTE: this will need to change in order to deal with combinations of resource outputs and other operators: most
+	// translations will not be output-aware, so we'll need to transform things into applies.
 	return nodeHILWalker{}.walkNode(n)
 }
 
@@ -389,14 +391,38 @@ func (g *nodeGenerator) generateResource(r *resourceNode) error {
 
 	module := ""
 	if resInfo != nil {
-		slash := strings.IndexRune(string(resInfo.Tok), '/')
-		if slash != -1 {
-			module = "." + string(resInfo.Tok[len(r.provider.config.Name)+1:slash])
+		components := strings.Split(string(resInfo.Tok), ":")
+		if len(components) != 3 {
+			return errors.Errorf("unexpected resource token format %s", resInfo.Tok)
 		}
+
+		mod, typ := components[1], components[2]
+
+		slash := strings.IndexRune(mod, '/')
+		if slash == -1 {
+			return errors.Errorf("unexpected resource module format %s", mod)
+		}
+
+		module, typeName = "." + mod[:slash], typ
 	}
 
-	fmt.Printf("const %s_%s = new %s%s.%s(\"%s\", %s);\n",
+	fmt.Printf("const %s_%s = new %s%s.%s(\"%s\", %s",
 		config.Type, config.Name, provider, module, typeName, config.Name, inputs)
+
+	if len(r.explicitDeps) != 0 {
+		fmt.Printf(", {dependsOn: [")
+		for i, n := range r.explicitDeps {
+			if i > 0 {
+				fmt.Printf(", ")
+			}
+			r := n.(*resourceNode)
+			fmt.Printf("%s_%s", r.config.Type, r.config.Name)
+		}
+		fmt.Printf("]}")
+	}
+
+	fmt.Printf(");\n")
+
 	return nil
 }
 
