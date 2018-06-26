@@ -248,7 +248,6 @@ func (g *nodeGenerator) computeSliceProperty(s []interface{}, indent string, ele
 
 	fmt.Fprintf(buf, "[")
 	for _, v := range s {
-		// TODO: provider info for customization
 		elemIndent := indent + "    "
 		elem, err := g.computeProperty(v, elemIndent, elemSch)
 		if err != nil {
@@ -286,7 +285,6 @@ func (g *nodeGenerator) computeMapProperty(m map[string]interface{}, indent stri
 			}
 		}
 
-		// TODO: provider info for customization
 		elemIndent := indent + "    "
 		elem, err := g.computeProperty(v, elemIndent, elemSch)
 		if err != nil {
@@ -341,7 +339,6 @@ func (g *nodeGenerator) generateVariables(vs []*variableNode) error {
 	// Otherwise, new up a config object and declare the various vars.
 	fmt.Printf("const config = new pulumi.Config(\"%s\")\n", g.projectName)
 	for _, v := range vs {
-		// TODO: use the provider info to look up any custom names
 		name := tfbridge.TerraformToPulumiName(v.config.Name, nil, false)
 
 		fmt.Printf("const %s = ", name)
