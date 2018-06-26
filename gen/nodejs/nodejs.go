@@ -1,4 +1,4 @@
-package main
+package nodejs
 
 import (
 	"bytes"
@@ -21,8 +21,8 @@ import (
 // - proper use of apply
 // - assets
 
-type nodeGenerator struct {
-	projectName string
+type Generator struct {
+	ProjectName string
 	graph       *il.Graph
 }
 
@@ -148,11 +148,11 @@ func coerceProperty(value string, valueType, propertyType ast.Type) string {
 	}
 }
 
-type nodeHILWalker struct {
-	pc *nodePropertyComputer
+type hilWalker struct {
+	pc *propertyComputer
 }
 
-func (w *nodeHILWalker) walkArithmetic(n *ast.Arithmetic) (string, ast.Type, error) {
+func (w *hilWalker) walkArithmetic(n *ast.Arithmetic) (string, ast.Type, error) {
 	strs, _, err := w.walkNodes(n.Exprs)
 	if err != nil {
 		return "", ast.TypeInvalid, err
@@ -191,7 +191,7 @@ func (w *nodeHILWalker) walkArithmetic(n *ast.Arithmetic) (string, ast.Type, err
 	return "(" + strings.Join(strs, " "+op+" ") + ")", ast.TypeFloat, nil
 }
 
-func (w *nodeHILWalker) walkCall(n *ast.Call) (string, ast.Type, error) {
+func (w *hilWalker) walkCall(n *ast.Call) (string, ast.Type, error) {
 	strs, _, err := w.walkNodes(n.Args)
 	if err != nil {
 		return "", ast.TypeInvalid, err
@@ -216,7 +216,7 @@ func (w *nodeHILWalker) walkCall(n *ast.Call) (string, ast.Type, error) {
 	}
 }
 
-func (w *nodeHILWalker) walkConditional(n *ast.Conditional) (string, ast.Type, error) {
+func (w *hilWalker) walkConditional(n *ast.Conditional) (string, ast.Type, error) {
 	cond, _, err := w.walkNode(n.CondExpr)
 	if err != nil {
 		return "", ast.TypeInvalid, err
@@ -238,7 +238,7 @@ func (w *nodeHILWalker) walkConditional(n *ast.Conditional) (string, ast.Type, e
 	return fmt.Sprintf("(%s ? %s : %s)", cond, t, f), typ, nil
 }
 
-func (w *nodeHILWalker) walkIndex(n *ast.Index) (string, ast.Type, error) {
+func (w *hilWalker) walkIndex(n *ast.Index) (string, ast.Type, error) {
 	target, _, err := w.walkNode(n.Target)
 	if err != nil {
 		return "", ast.TypeInvalid, err
@@ -251,7 +251,7 @@ func (w *nodeHILWalker) walkIndex(n *ast.Index) (string, ast.Type, error) {
 	return fmt.Sprintf("%s[%s]", target, key), ast.TypeUnknown, nil
 }
 
-func (w *nodeHILWalker) walkLiteral(n *ast.LiteralNode) (string, ast.Type, error) {
+func (w *hilWalker) walkLiteral(n *ast.LiteralNode) (string, ast.Type, error) {
 	switch n.Typex {
 	case ast.TypeBool, ast.TypeInt, ast.TypeFloat:
 		return fmt.Sprintf("%v", n.Value), n.Typex, nil
@@ -262,7 +262,7 @@ func (w *nodeHILWalker) walkLiteral(n *ast.LiteralNode) (string, ast.Type, error
 	}
 }
 
-func (w *nodeHILWalker) walkOutput(n *ast.Output) (string, ast.Type, error) {
+func (w *hilWalker) walkOutput(n *ast.Output) (string, ast.Type, error) {
 	strs, typs, err := w.walkNodes(n.Exprs)
 	if err != nil {
 		return "", ast.TypeInvalid, err
@@ -286,7 +286,7 @@ func (w *nodeHILWalker) walkOutput(n *ast.Output) (string, ast.Type, error) {
 	return buf.String(), ast.TypeString, nil
 }
 
-func (w *nodeHILWalker) walkVariableAccess(n *ast.VariableAccess) (string, ast.Type, error) {
+func (w *hilWalker) walkVariableAccess(n *ast.VariableAccess) (string, ast.Type, error) {
 	tfVar, err := config.NewInterpolatedVariable(n.Name)
 	if err != nil {
 		return "", ast.TypeInvalid, err
@@ -387,7 +387,7 @@ func (w *nodeHILWalker) walkVariableAccess(n *ast.VariableAccess) (string, ast.T
 	}
 }
 
-func (w *nodeHILWalker) walkNode(n ast.Node) (string, ast.Type, error) {
+func (w *hilWalker) walkNode(n ast.Node) (string, ast.Type, error) {
 	switch n := n.(type) {
 	case *ast.Arithmetic:
 		return w.walkArithmetic(n)
@@ -408,7 +408,7 @@ func (w *nodeHILWalker) walkNode(n ast.Node) (string, ast.Type, error) {
 	}
 }
 
-func (w *nodeHILWalker) walkNodes(ns []ast.Node) ([]string, []ast.Type, error) {
+func (w *hilWalker) walkNodes(ns []ast.Node) ([]string, []ast.Type, error) {
 	strs, typs := make([]string, len(ns)), make([]ast.Type, len(ns))
 	for i, n := range ns {
 		s, t, err := w.walkNode(n)
@@ -420,18 +420,18 @@ func (w *nodeHILWalker) walkNodes(ns []ast.Node) ([]string, []ast.Type, error) {
 	return strs, typs, nil
 }
 
-type nodePropertyComputer struct {
-	g *nodeGenerator
+type propertyComputer struct {
+	g *Generator
 	countIndex string
 }
 
-func (pc *nodePropertyComputer) computeHILProperty(n ast.Node) (string, ast.Type, error) {
+func (pc *propertyComputer) computeHILProperty(n ast.Node) (string, ast.Type, error) {
 	// NOTE: this will need to change in order to deal with combinations of resource outputs and other operators: most
 	// translations will not be output-aware, so we'll need to transform things into applies.
-	return (&nodeHILWalker{pc: pc}).walkNode(n)
+	return (&hilWalker{pc: pc}).walkNode(n)
 }
 
-func (pc *nodePropertyComputer) computeSliceProperty(s []interface{}, indent string, sch schemas) (string, ast.Type, error) {
+func (pc *propertyComputer) computeSliceProperty(s []interface{}, indent string, sch schemas) (string, ast.Type, error) {
 	buf := &bytes.Buffer{}
 
 	elemSch := sch.elemSchemas()
@@ -466,7 +466,7 @@ func (pc *nodePropertyComputer) computeSliceProperty(s []interface{}, indent str
 	return buf.String(), ast.TypeList, nil
 }
 
-func (pc *nodePropertyComputer) computeMapProperty(m map[string]interface{}, indent string, sch schemas) (string, ast.Type, error) {
+func (pc *propertyComputer) computeMapProperty(m map[string]interface{}, indent string, sch schemas) (string, ast.Type, error) {
 	buf := &bytes.Buffer{}
 
 	fmt.Fprintf(buf, "{")
@@ -488,7 +488,7 @@ func (pc *nodePropertyComputer) computeMapProperty(m map[string]interface{}, ind
 	return buf.String(), ast.TypeMap, nil
 }
 
-func (pc *nodePropertyComputer) computeProperty(v interface{}, indent string, sch schemas) (string, ast.Type, error) {
+func (pc *propertyComputer) computeProperty(v interface{}, indent string, sch schemas) (string, ast.Type, error) {
 	if node, ok := v.(ast.Node); ok {
 		return pc.computeHILProperty(node)
 	}
@@ -511,15 +511,15 @@ func (pc *nodePropertyComputer) computeProperty(v interface{}, indent string, sc
 	}
 }
 
-func (g *nodeGenerator) computeProperty(v interface{}, indent string, sch schemas) (string, ast.Type, error) {
-	return (&nodePropertyComputer{g: g}).computeProperty(v, indent, sch)
+func (g *Generator) computeProperty(v interface{}, indent string, sch schemas) (string, ast.Type, error) {
+	return (&propertyComputer{g: g}).computeProperty(v, indent, sch)
 }
 
-func (g *nodeGenerator) computePropertyWithCount(v interface{}, indent string, sch schemas, count string) (string, ast.Type, error) {
-	return (&nodePropertyComputer{g: g, countIndex: count}).computeProperty(v, indent, sch)
+func (g *Generator) computePropertyWithCount(v interface{}, indent string, sch schemas, count string) (string, ast.Type, error) {
+	return (&propertyComputer{g: g, countIndex: count}).computeProperty(v, indent, sch)
 }
 
-func (g *nodeGenerator) GeneratePreamble(gr *il.Graph) error {
+func (g *Generator) GeneratePreamble(gr *il.Graph) error {
 	// Stash the graph for later.
 	g.graph = gr
 
@@ -534,14 +534,14 @@ func (g *nodeGenerator) GeneratePreamble(gr *il.Graph) error {
 	return nil
 }
 
-func (g *nodeGenerator) GenerateVariables(vs []*il.VariableNode) error {
+func (g *Generator) GenerateVariables(vs []*il.VariableNode) error {
 	// If there are no variables, we're done.
 	if len(vs) == 0 {
 		return nil
 	}
 
 	// Otherwise, new up a config object and declare the various vars.
-	fmt.Printf("const config = new pulumi.Config(\"%s\")\n", g.projectName)
+	fmt.Printf("const config = new pulumi.Config(\"%s\")\n", g.ProjectName)
 	for _, v := range vs {
 		name := tfbridge.TerraformToPulumiName(v.Config.Name, nil, false)
 
@@ -563,11 +563,11 @@ func (g *nodeGenerator) GenerateVariables(vs []*il.VariableNode) error {
 	return nil
 }
 
-func (*nodeGenerator) GenerateLocal(l *il.LocalNode) error {
+func (*Generator) GenerateLocal(l *il.LocalNode) error {
 	return errors.New("NYI: locals")
 }
 
-func (g *nodeGenerator) GenerateResource(r *il.ResourceNode) error {
+func (g *Generator) GenerateResource(r *il.ResourceNode) error {
 	config := r.Config
 
 	underscore := strings.IndexRune(config.Type, '_')
@@ -652,7 +652,7 @@ func (g *nodeGenerator) GenerateResource(r *il.ResourceNode) error {
 	return nil
 }
 
-func (g *nodeGenerator) GenerateOutputs(os []*il.OutputNode) error {
+func (g *Generator) GenerateOutputs(os []*il.OutputNode) error {
 	if len(os) == 0 {
 		return nil
 	}
