@@ -64,6 +64,11 @@ func (g *Generator) computePropertyWithCount(v interface{}, indent string, sch s
 		return "", err
 	}
 
+	prop, err = doAssetRewrite(prop)
+	if err != nil {
+		return "", err
+	}
+
 	prop, err = doApplyRewrite(prop)
 	if err != nil {
 		return "", err

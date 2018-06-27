@@ -2,6 +2,7 @@ package nodejs
 
 import (
 	"bytes"
+	"strconv"
 
 	"github.com/hashicorp/hil/ast"
 	"github.com/pkg/errors"
@@ -112,7 +113,7 @@ func (g *propertyGenerator) indented(f func()) {
 	g.indent = g.indent[:len(g.indent)-4]
 }
 
-func (g *propertyGenerator) generateListProperty(n *boundListProperty) {
+func (g *propertyGenerator) genListProperty(n *boundListProperty) {
 	elemType := n.schemas.elemSchemas().boundType()
 
 	g.gen("[")
@@ -126,14 +127,14 @@ func (g *propertyGenerator) generateListProperty(n *boundListProperty) {
 				g.gen("...")
 			}
 			g.gen("\n", g.indent)
-			g.generateCoercion(v, elemType)
+			g.genCoercion(v, elemType)
 			g.gen(",")
 		}
 	})
 	g.gen("\n", g.indent, "]")
 }
 
-func (g *propertyGenerator) generateMapProperty(n *boundMapProperty) {
+func (g *propertyGenerator) genMapProperty(n *boundMapProperty) {
 	g.gen("{")
 	g.indented(func() {
 		for _, k := range gen.SortedKeys(n.elements) {
@@ -141,33 +142,57 @@ func (g *propertyGenerator) generateMapProperty(n *boundMapProperty) {
 
 			propSch := n.schemas.propertySchemas(k)
 			g.gen("\n", g.indent, tsName(k, propSch.tf, propSch.pulumi, true), ": ")
-			g.generateCoercion(v, propSch.boundType())
+			g.genCoercion(v, propSch.boundType())
 			g.gen(",")
 		}
 	})
 	g.gen("\n", g.indent, "}")
 }
 
-func (g *propertyGenerator) generateCoercion(n boundNode, toType boundType) {
-	// We only coerce values that are known to be strings.
+func (g *propertyGenerator) genCoercion(n boundNode, toType boundType) {
 	// TODO: we really need dynamic coercions here.
-	if n.typ() == toType || n.typ() != typeString {
+	if n.typ() == toType {
 		g.gen(n)
 		return
 	}
 
-	switch toType {
+	switch n.typ() {
 	case typeBool:
-		if lit, ok := n.(*boundLiteral); ok {
-			g.gen(&boundLiteral{exprType: typeBool, value: lit.value.(string) == "true"})
-		} else {
-			g.gen("(", n, " === \"true\")")
+		if toType == typeString {
+			if lit, ok := n.(*boundLiteral); ok {
+				g.gen("\"", strconv.FormatBool(lit.value.(bool)), "\"")
+			} else {
+				g.gen("`${", n, "}`")
+			}
+			return
 		}
 	case typeNumber:
-		g.gen("Number.parseFloat(", n, ")")
-	default:
-		g.gen(n)
+		if toType == typeString {
+			if lit, ok := n.(*boundLiteral); ok {
+				g.gen("\"", strconv.FormatFloat(lit.value.(float64), 'f', -1, 64), "\"")
+			} else {
+				g.gen("`${", n, "}`")
+			}
+			return
+		}
+	case typeString:
+		switch toType {
+		case typeBool:
+			if lit, ok := n.(*boundLiteral); ok {
+				g.gen(strconv.FormatBool(lit.value.(string) == "true"))
+			} else {
+				g.gen("(", n, " === \"true\")")
+			}
+			return
+		case typeNumber:
+			g.gen("Number.parseFloat(", n, ")")
+			return
+		}
 	}
+
+	// If we get here, we weren't able to genereate a coercion. Just generate the node. This is questionable behavior
+	// at best.
+	g.gen(n)
 }
 
 func (g *propertyGenerator) gen(vs ...interface{}) {
@@ -176,9 +201,9 @@ func (g *propertyGenerator) gen(vs ...interface{}) {
 		case string:
 			g.w.WriteString(v)
 		case *boundListProperty:
-			g.generateListProperty(v)
+			g.genListProperty(v)
 		case *boundMapProperty:
-			g.generateMapProperty(v)
+			g.genMapProperty(v)
 		default:
 			g.hil.gen(v)
 		}

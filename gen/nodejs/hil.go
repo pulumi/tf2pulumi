@@ -394,6 +394,10 @@ func (b *hilBinder) bindExpr(n ast.Node) (boundNode, error) {
 
 type boundExprVisitor func(n boundNode) (boundNode, error)
 
+func identityVisitor(n boundNode) (boundNode, error) {
+	return n, nil
+}
+
 func visitBoundArithmetic(n *boundArithmetic, pre, post boundExprVisitor) (boundNode, error) {
 	exprs, err := visitBoundExprs(n.exprs, pre, post)
 	if err != nil {
@@ -607,6 +611,43 @@ func doApplyRewrite(n boundNode) (boundNode, error) {
 	return visitBoundExpr(n, rewriter.enterNode, rewriter.rewriteNode)
 }
 
+func doAssetRewrite(n boundNode) (boundNode, error) {
+	rewriter := func(n boundNode) (boundNode, error) {
+		m, ok := n.(*boundMapProperty)
+		if !ok {
+			return n, nil
+		}
+
+		for k, v := range m.elements {
+			elemSch := m.schemas.propertySchemas(k)
+			if elemSch.pulumi == nil || elemSch.pulumi.Asset == nil {
+				continue
+			}
+
+			asset := elemSch.pulumi.Asset
+
+			builtin := "__asset"
+			if asset.Kind == tfbridge.FileArchive || asset.Kind == tfbridge.BytesArchive {
+				builtin = "__archive"
+			}
+
+			m.elements[k] = &boundCall{
+				hilNode: &ast.Call{Func: builtin},
+				exprType: typeUnknown,
+				args: []boundNode{v},
+			}
+
+			if asset.HashField != "" {
+				delete(m.elements, asset.HashField)
+			}
+		}
+
+		return m, nil
+	}
+
+	return visitBoundExpr(n, identityVisitor, rewriter)
+}
+
 type hilGenerator struct {
 	w          *bytes.Buffer
 	countIndex string
@@ -696,6 +737,10 @@ func (g *hilGenerator) genCall(n *boundCall) {
 		g.genApply(n)
 	case "__applyArg":
 		g.gen(fmt.Sprintf("__arg%d", n.args[0].(*boundLiteral).value.(int)))
+	case "__archive":
+		g.gen("new pulumi.asset.FileArchive(", n.args[0], ")")
+	case "__asset":
+		g.gen("new pulumi.asset.FileAsset(", n.args[0], ")")
 	case "element":
 		g.gen(n.args[0], "[", n.args[1], "]")
 	case "file":
