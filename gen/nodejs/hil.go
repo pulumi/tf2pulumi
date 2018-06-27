@@ -461,7 +461,7 @@ func (g *hilGenerator) genCall(n *boundCall) {
 			g.gen(" || ", n.args[2], ")")
 		}
 	case "split":
-		g.gen(n.args[0], ".split(", n.args[1], ")")
+		g.gen(n.args[1], ".split(", n.args[0], ")")
 	default:
 		contract.Failf("unexpected function in genCall: %v", n.hilNode.Func)
 	}
