@@ -67,7 +67,6 @@ func (t boundType) elementType() boundType {
 }
 
 type boundNode interface {
-	hil() ast.Node
 	typ() boundType
 }
 
@@ -75,10 +74,6 @@ type boundArithmetic struct {
 	hilNode *ast.Arithmetic
 
 	exprs []boundNode
-}
-
-func (n *boundArithmetic) hil() ast.Node {
-	return n.hilNode
 }
 
 func (n *boundArithmetic) typ() boundType {
@@ -90,10 +85,6 @@ type boundCall struct {
 	exprType boundType
 
 	args []boundNode
-}
-
-func (n *boundCall) hil() ast.Node {
-	return n.hilNode
 }
 
 func (n *boundCall) typ() boundType {
@@ -109,10 +100,6 @@ type boundConditional struct {
 	falseExpr boundNode
 }
 
-func (n *boundConditional) hil() ast.Node {
-	return n.hilNode
-}
-
 func (n *boundConditional) typ() boundType {
 	return n.exprType
 }
@@ -125,21 +112,13 @@ type boundIndex struct {
 	keyExpr boundNode
 }
 
-func (n *boundIndex) hil() ast.Node {
-	return n.hilNode
-}
-
 func (n *boundIndex) typ() boundType {
 	return n.exprType
 }
 
 type boundLiteral struct {
-	hilNode *ast.LiteralNode
 	exprType boundType
-}
-
-func (n *boundLiteral) hil() ast.Node {
-	return n.hilNode
+	value    interface{}
 }
 
 func (n *boundLiteral) typ() boundType {
@@ -150,10 +129,6 @@ type boundOutput struct {
 	hilNode *ast.Output
 
 	exprs []boundNode
-}
-
-func (n *boundOutput) hil() ast.Node {
-	return n.hilNode
 }
 
 func (n *boundOutput) typ() boundType {
@@ -167,10 +142,6 @@ type boundVariableAccess struct {
 
 	tfVar config.InterpolatedVariable
 	ilNode il.Node
-}
-
-func (n *boundVariableAccess) hil() ast.Node {
-	return n.hilNode
 }
 
 func (n *boundVariableAccess) typ() boundType {
@@ -277,7 +248,7 @@ func (b *hilBinder) bindLiteral(n *ast.LiteralNode) (boundNode, error) {
 		return nil, errors.Errorf("Unexpected literal type %v", n.Typex)
 	}
 
-	return &boundLiteral{hilNode: n, exprType: exprType}, nil
+	return &boundLiteral{exprType: exprType, value: n.Value}, nil
 }
 
 func (b *hilBinder) bindOutput(n *ast.Output) (boundNode, error) {
@@ -348,7 +319,7 @@ func (b *hilBinder) bindVariableAccess(n *ast.VariableAccess) (boundNode, error)
 
 		// Handle multi-references (splats and indexes)
 		exprType = sch.boundType()
-		if v.Multi && v.Index == -1{
+		if v.Multi && v.Index == -1 {
 			exprType = exprType.listOf()
 		}
 	case *config.SelfVariable:
@@ -507,9 +478,9 @@ func (g *hilGenerator) genIndex(n *boundIndex) {
 func (g *hilGenerator) genLiteral(n *boundLiteral) {
 	switch n.exprType {
 	case typeBool, typeNumber:
-		fmt.Fprintf(g.w, "%v", n.hilNode.Value)
+		fmt.Fprintf(g.w, "%v", n.value)
 	case typeString:
-		fmt.Fprintf(g.w, "%q", n.hilNode.Value)
+		fmt.Fprintf(g.w, "%q", n.value)
 	default:
 		contract.Failf("unexpected literal type in genLiteral: %v", n.exprType)
 	}

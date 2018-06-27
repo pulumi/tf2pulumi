@@ -53,12 +53,21 @@ func tsName(tfName string, tfSchema *schema.Schema, schemaInfo *tfbridge.SchemaI
 	return tfbridge.TerraformToPulumiName(tfName, tfSchema, false)
 }
 
-func (g *Generator) computeProperty(v interface{}, indent string, sch schemas) (string, boundType, error) {
-	return (&propertyComputer{g: g}).computeProperty(v, indent, sch)
+func (g *Generator) computeProperty(v interface{}, indent string, sch schemas) (string, error) {
+	return g.computePropertyWithCount(v, indent, sch, "")
 }
 
-func (g *Generator) computePropertyWithCount(v interface{}, indent string, sch schemas, count string) (string, boundType, error) {
-	return (&propertyComputer{g: g, countIndex: count}).computeProperty(v, indent, sch)
+func (g *Generator) computePropertyWithCount(v interface{}, indent string, sch schemas, count string) (string, error) {
+	binder := &propertyBinder{hil: &hilBinder{graph: g.graph, hasCountIndex: count != ""}}
+	prop, err := binder.bindProperty(v, sch)
+	if err != nil {
+		return "", err
+	}
+
+	buf := &bytes.Buffer{}
+	generator := &propertyGenerator{w: buf, hil: &hilGenerator{w: buf, countIndex: count}, indent: indent}
+	generator.gen(prop)
+	return buf.String(), nil
 }
 
 func (g *Generator) GeneratePreamble(gr *il.Graph) error {
@@ -91,7 +100,7 @@ func (g *Generator) GenerateVariables(vs []*il.VariableNode) error {
 		if v.DefaultValue == nil {
 			fmt.Printf("config.require(\"%s\")", name)
 		} else {
-			def, _, err := g.computeProperty(v.DefaultValue, "", schemas{})
+			def, err := g.computeProperty(v.DefaultValue, "", schemas{})
 			if err != nil {
 				return err
 			}
@@ -168,7 +177,7 @@ func (g *Generator) GenerateResource(r *il.ResourceNode) error {
 	qualifiedTypeName := fmt.Sprintf("%s%s.%s", provider, module, typeName)
 	if r.Count == nil {
 		// If count is nil, this is a single-instance resource.
-		inputs, _, err := g.computeProperty(r.Properties, "", sch)
+		inputs, err := g.computeProperty(r.Properties, "", sch)
 		if err != nil {
 			return err
 		}
@@ -176,11 +185,11 @@ func (g *Generator) GenerateResource(r *il.ResourceNode) error {
 		fmt.Printf("const %s = new %s(\"%s\", %s%s);\n", name, qualifiedTypeName, config.Name, inputs, explicitDeps)
 	} else {
 		// Otherwise we need to Generate multiple resources in a loop.
-		count, _, err := g.computeProperty(r.Count, "", schemas{})
+		count, err := g.computeProperty(r.Count, "", schemas{})
 		if err != nil {
 			return err
 		}
-		inputs, _, err := g.computePropertyWithCount(r.Properties, "    ", sch, "i")
+		inputs, err := g.computePropertyWithCount(r.Properties, "    ", sch, "i")
 		if err != nil {
 			return err
 		}
@@ -201,7 +210,7 @@ func (g *Generator) GenerateOutputs(os []*il.OutputNode) error {
 
 	fmt.Printf("\n")
 	for _, o := range os {
-		outputs, _, err := g.computeProperty(o.Value, "", schemas{})
+		outputs, err := g.computeProperty(o.Value, "", schemas{})
 		if err != nil {
 			return err
 		}

@@ -152,10 +152,12 @@ type propertyWalker struct {
 
 func (w *propertyWalker) walkPrimitive(p reflect.Value) (interface{}, error) {
 	switch p.Kind() {
-	case reflect.Bool, reflect.Int, reflect.Float64:
-		// return these as-is
-		return p.Interface(), nil
-
+	case reflect.Bool:
+		return p.Bool(), nil
+	case reflect.Int:
+		return float64(p.Int()), nil
+	case reflect.Float64:
+		return p.Float(), nil
 	case reflect.String:
 		// attempt to parse the string as HIL. If the result is a simple literal, return that. Otherwise, keep the HIL
 		// itself.
@@ -179,7 +181,6 @@ func (w *propertyWalker) walkPrimitive(p reflect.Value) (interface{}, error) {
 			return nil, err
 		}
 		return rootNode, nil
-
 	default:
 		// walk should have ensured we never reach this point
 		contract.Failf("unexpeted property type %v", p.Type())
