@@ -398,6 +398,225 @@ func (b *hilBinder) bindExpr(n ast.Node) (boundNode, error) {
 	}
 }
 
+type boundExprVisitor func(n boundNode) (boundNode, error)
+
+func visitBoundArithmetic(n *boundArithmetic, pre, post boundExprVisitor) (boundNode, error) {
+	exprs, err := visitBoundExprs(n.exprs, pre, post)
+	if err != nil {
+		return nil, err
+	}
+	if len(exprs) == 0 {
+		return nil, nil
+	}
+	n.exprs = exprs
+	return post(n)
+}
+
+func visitBoundCall(n *boundCall, pre, post boundExprVisitor) (boundNode, error) {
+	exprs, err := visitBoundExprs(n.args, pre, post)
+	if err != nil {
+		return nil, err
+	}
+	n.args = exprs
+	return post(n)
+}
+
+func visitBoundConditional(n *boundConditional, pre, post boundExprVisitor) (boundNode, error) {
+	condExpr, err := visitBoundExpr(n.condExpr, pre, post)
+	if err != nil {
+		return nil, err
+	}
+	trueExpr, err := visitBoundExpr(n.trueExpr, pre, post)
+	if err != nil {
+		return nil, err
+	}
+	falseExpr, err := visitBoundExpr(n.falseExpr, pre, post)
+	if err != nil {
+		return nil, err
+	}
+	n.condExpr, n.trueExpr, n.falseExpr = condExpr, trueExpr, falseExpr
+	return post(n)
+}
+
+func visitBoundIndex(n *boundIndex, pre, post boundExprVisitor) (boundNode, error) {
+	targetExpr, err := visitBoundExpr(n.targetExpr, pre, post)
+	if err != nil {
+		return nil, err
+	}
+	keyExpr, err := visitBoundExpr(n.keyExpr, pre, post)
+	if err != nil {
+		return nil, err
+	}
+	n.targetExpr, n.keyExpr = targetExpr, keyExpr
+	return post(n)
+}
+
+func visitBoundListProperty(n *boundListProperty, pre, post boundExprVisitor) (boundNode, error) {
+	exprs, err := visitBoundExprs(n.elements, pre, post)
+	if err != nil {
+		return nil, err
+	}
+	if len(exprs) == 0 {
+		return nil, nil
+	}
+	n.elements = exprs
+	return post(n)
+}
+
+func visitBoundMapProperty(n *boundMapProperty, pre, post boundExprVisitor) (boundNode, error) {
+	for k, e := range n.elements {
+		ee, err := visitBoundExpr(e, pre, post)
+		if err != nil {
+			return nil, err
+		}
+		if ee == nil {
+			delete(n.elements, k)
+		} else {
+			n.elements[k] = ee
+		}
+	}
+	return post(n)
+}
+
+func visitBoundOutput(n *boundOutput, pre, post boundExprVisitor) (boundNode, error) {
+	exprs, err := visitBoundExprs(n.exprs, pre, post)
+	if err != nil {
+		return nil, err
+	}
+	if len(exprs) == 0 {
+		return nil, nil
+	}
+	n.exprs = exprs
+	return post(n)
+}
+
+func visitBoundExprs(ns []boundNode, pre, post boundExprVisitor) ([]boundNode, error) {
+	nils := 0
+	for i, e := range ns {
+		ee, err := visitBoundExpr(e, pre, post)
+		if err != nil {
+			return nil, err
+		}
+		if ee == nil {
+			nils++
+		}
+		ns[i] = ee
+	}
+	if nils == 0 {
+		return ns, nil
+	} else if nils == len(ns) {
+		return []boundNode{}, nil
+	}
+
+	nns := make([]boundNode, 0, len(ns)-nils)
+	for _, e := range ns {
+		if e != nil {
+			nns = append(nns, e)
+		}
+	}
+	return nns, nil
+}
+
+func visitBoundExpr(n boundNode, pre, post boundExprVisitor) (boundNode, error) {
+	nn, err := pre(n)
+	if err != nil {
+		return nil, err
+	}
+	n = nn
+
+	switch n := n.(type) {
+	case *boundArithmetic:
+		return visitBoundArithmetic(n, pre, post)
+	case *boundCall:
+		return visitBoundCall(n, pre, post)
+	case *boundConditional:
+		return visitBoundConditional(n, pre, post)
+	case *boundIndex:
+		return visitBoundIndex(n, pre, post)
+	case *boundListProperty:
+		return visitBoundListProperty(n, pre, post)
+	case *boundLiteral:
+		return post(n)
+	case *boundMapProperty:
+		return visitBoundMapProperty(n, pre, post)
+	case *boundOutput:
+		return visitBoundOutput(n, pre, post)
+	case *boundVariableAccess:
+		return post(n)
+	default:
+		contract.Failf("unexpected node type in visitBoundExpr: %T", n)
+		return nil, errors.Errorf("unexpected node type in visitBoundExpr: %T", n)
+	}
+}
+
+type applyRewriter struct {
+	output *boundOutput
+	applyArgs []boundNode
+	vars map[il.Node]int
+}
+
+func (r *applyRewriter) rewriteBoundVariableAccess(n *boundVariableAccess) (boundNode, error) {
+	if r.output == nil {
+		return n, nil
+	}
+
+	_, ok := n.tfVar.(*config.ResourceVariable)
+	if !ok {
+		return n, nil
+	}
+
+	idx, ok := r.vars[n.ilNode]
+	if !ok {
+		r.vars[n.ilNode] = len(r.applyArgs)
+		r.applyArgs = append(r.applyArgs, n)
+	}
+
+	return &boundCall{
+		hilNode: &ast.Call{Func: "__applyArg"},
+		exprType: n.typ().elementType(),
+		args: []boundNode{&boundLiteral{exprType: typeNumber, value: idx}},
+	}, nil
+}
+
+func (r *applyRewriter) rewriteBoundOutput(n *boundOutput) (boundNode, error) {
+	r.output = nil
+
+	if len(r.applyArgs) == 0 {
+		return n, nil
+	}
+
+	r.applyArgs = append(r.applyArgs, n)
+
+	return &boundCall{
+		hilNode: &ast.Call{Func: "__apply"},
+		exprType: typeUnknown | typeOutput,
+		args: r.applyArgs,
+	}, nil
+}
+
+func (r *applyRewriter) rewriteNode(n boundNode) (boundNode, error) {
+	switch n := n.(type) {
+	case *boundVariableAccess:
+		return r.rewriteBoundVariableAccess(n)
+	case *boundOutput:
+		return r.rewriteBoundOutput(n)
+	default:
+		return n, nil
+	}
+}
+
+func (r *applyRewriter) enterNode(n boundNode) (boundNode, error) {
+	if o, ok := n.(*boundOutput); ok {
+		r.output, r.applyArgs, r.vars = o, nil, make(map[il.Node]int)
+	}
+	return n, nil
+}
+
+func doApplyRewrite(n boundNode) (boundNode, error) {
+	rewriter := &applyRewriter{}
+	return visitBoundExpr(n, rewriter.enterNode, rewriter.rewriteNode)
+}
+
 type hilGenerator struct {
 	w          *bytes.Buffer
 	countIndex string
@@ -445,8 +664,37 @@ func (g *hilGenerator) genArithmetic(n *boundArithmetic) {
 	g.gen(")")
 }
 
+func (g *hilGenerator) genApply(n *boundCall) {
+	outputs := n.args[:len(n.args)-1]
+	then := n.args[len(n.args)-1]
+
+	if len(outputs) == 1 {
+		g.gen(outputs[0], ".apply(__arg0 => ", then, ")")
+	} else {
+		g.gen("pulumi.all([")
+		for i, o := range outputs {
+			if i > 0 {
+				g.gen(", ")
+			}
+			g.gen(o)
+		}
+		g.gen("]).apply(([")
+		for i := range outputs {
+			if i > 0 {
+				g.gen(", ")
+			}
+			g.gen(fmt.Sprintf("__arg%d", i))
+		}
+		g.gen("]) => ", then, ")")
+	}
+}
+
 func (g *hilGenerator) genCall(n *boundCall) {
 	switch n.hilNode.Func {
+	case "__apply":
+		g.genApply(n)
+	case "__applyArg":
+		g.gen(fmt.Sprintf("__arg%d", n.args[0].(*boundLiteral).value.(int)))
 	case "element":
 		g.gen(n.args[0], "[", n.args[1], "]")
 	case "file":

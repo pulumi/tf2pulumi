@@ -64,6 +64,11 @@ func (g *Generator) computePropertyWithCount(v interface{}, indent string, sch s
 		return "", err
 	}
 
+	prop, err = doApplyRewrite(prop)
+	if err != nil {
+		return "", err
+	}
+
 	buf := &bytes.Buffer{}
 	generator := &propertyGenerator{w: buf, hil: &hilGenerator{w: buf, countIndex: count}, indent: indent}
 	generator.gen(prop)
