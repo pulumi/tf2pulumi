@@ -11,7 +11,7 @@ import (
 )
 
 type boundListProperty struct {
-	schemas schemas
+	schemas  schemas
 	elements []boundNode
 }
 
@@ -101,8 +101,8 @@ func (b *propertyBinder) bindProperty(v interface{}, sch schemas) (boundNode, er
 }
 
 type propertyGenerator struct {
-	w *bytes.Buffer
-	hil *hilGenerator
+	w      *bytes.Buffer
+	hil    *hilGenerator
 	indent string
 }
 

@@ -256,7 +256,7 @@ func (b *builder) buildValue(v interface{}) (interface{}, map[Node]struct{}, err
 
 	// Walk the collected dependencies and convert them to `node`s
 	deps := make(map[Node]struct{})
-	for k, _ := range walker.deps {
+	for k := range walker.deps {
 		tfVar, err := config.NewInterpolatedVariable(k)
 		if err != nil {
 			return nil, nil, err
@@ -336,7 +336,7 @@ func (b *builder) buildDeps(deps map[Node]struct{}, dependsOn []string) ([]Node,
 	}
 
 	allDeps := make([]Node, 0, len(deps))
-	for n, _ := range deps {
+	for n := range deps {
 		allDeps = append(allDeps, n)
 	}
 
@@ -477,7 +477,7 @@ func (b *builder) buildResource(r *ResourceNode) error {
 	}
 
 	// Merge the count dependencies into the overall dependency set and compute the final dependency lists.
-	for k, _ := range countDeps {
+	for k := range countDeps {
 		deps[k] = struct{}{}
 	}
 	allDeps, explicitDeps, err := b.buildDeps(deps, r.Config.DependsOn)

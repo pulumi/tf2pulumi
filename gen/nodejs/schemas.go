@@ -73,4 +73,3 @@ func (s schemas) boundType() boundType {
 
 	return typeUnknown
 }
-

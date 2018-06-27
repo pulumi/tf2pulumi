@@ -8,8 +8,8 @@ import (
 	"github.com/hashicorp/hil/ast"
 	"github.com/hashicorp/terraform/config"
 	"github.com/pkg/errors"
-	"github.com/pulumi/pulumi/pkg/util/contract"
 	"github.com/pulumi/pulumi-terraform/pkg/tfbridge"
+	"github.com/pulumi/pulumi/pkg/util/contract"
 
 	"github.com/pgavlin/firewalker/il"
 )
@@ -39,7 +39,7 @@ const (
 )
 
 func (t boundType) isList() bool {
-	return t & typeList != 0
+	return t&typeList != 0
 }
 
 func (t boundType) listOf() boundType {
@@ -47,7 +47,7 @@ func (t boundType) listOf() boundType {
 }
 
 func (t boundType) isMap() bool {
-	return t & typeMap != 0
+	return t&typeMap != 0
 }
 
 func (t boundType) mapOf() boundType {
@@ -55,7 +55,7 @@ func (t boundType) mapOf() boundType {
 }
 
 func (t boundType) isOutput() bool {
-	return t & typeOutput != 0
+	return t&typeOutput != 0
 }
 
 func (t boundType) outputOf() boundType {
@@ -81,7 +81,7 @@ func (n *boundArithmetic) typ() boundType {
 }
 
 type boundCall struct {
-	hilNode *ast.Call
+	hilNode  *ast.Call
 	exprType boundType
 
 	args []boundNode
@@ -92,11 +92,11 @@ func (n *boundCall) typ() boundType {
 }
 
 type boundConditional struct {
-	hilNode *ast.Conditional
+	hilNode  *ast.Conditional
 	exprType boundType
 
-	condExpr boundNode
-	trueExpr boundNode
+	condExpr  boundNode
+	trueExpr  boundNode
 	falseExpr boundNode
 }
 
@@ -105,11 +105,11 @@ func (n *boundConditional) typ() boundType {
 }
 
 type boundIndex struct {
-	hilNode *ast.Index
+	hilNode  *ast.Index
 	exprType boundType
 
 	targetExpr boundNode
-	keyExpr boundNode
+	keyExpr    boundNode
 }
 
 func (n *boundIndex) typ() boundType {
@@ -136,11 +136,11 @@ func (n *boundOutput) typ() boundType {
 }
 
 type boundVariableAccess struct {
-	hilNode *ast.VariableAccess
+	hilNode  *ast.VariableAccess
 	elements []string
 	exprType boundType
 
-	tfVar config.InterpolatedVariable
+	tfVar  config.InterpolatedVariable
 	ilNode il.Node
 }
 
@@ -149,7 +149,7 @@ func (n *boundVariableAccess) typ() boundType {
 }
 
 type hilBinder struct {
-	graph *il.Graph
+	graph         *il.Graph
 	hasCountIndex bool
 }
 
@@ -203,10 +203,10 @@ func (b *hilBinder) bindConditional(n *ast.Conditional) (boundNode, error) {
 	}
 
 	return &boundConditional{
-		hilNode: n,
-		exprType: exprType,
-		condExpr: condExpr,
-		trueExpr: trueExpr,
+		hilNode:   n,
+		exprType:  exprType,
+		condExpr:  condExpr,
+		trueExpr:  trueExpr,
 		falseExpr: falseExpr,
 	}, nil
 }
@@ -228,10 +228,10 @@ func (b *hilBinder) bindIndex(n *ast.Index) (boundNode, error) {
 	}
 
 	return &boundIndex{
-		hilNode: n,
-		exprType: exprType,
+		hilNode:    n,
+		exprType:   exprType,
 		targetExpr: boundTarget,
-		keyExpr: boundKey,
+		keyExpr:    boundKey,
 	}, nil
 }
 
@@ -357,11 +357,11 @@ func (b *hilBinder) bindVariableAccess(n *ast.VariableAccess) (boundNode, error)
 	}
 
 	return &boundVariableAccess{
-		hilNode: n,
+		hilNode:  n,
 		elements: elements,
 		exprType: exprType,
-		tfVar: tfVar,
-		ilNode: ilNode,
+		tfVar:    tfVar,
+		ilNode:   ilNode,
 	}, nil
 }
 
@@ -399,7 +399,7 @@ func (b *hilBinder) bindExpr(n ast.Node) (boundNode, error) {
 }
 
 type hilGenerator struct {
-	w *bytes.Buffer
+	w          *bytes.Buffer
 	countIndex string
 }
 

@@ -14,8 +14,6 @@ type Generator interface {
 	GenerateOutputs(os []*il.OutputNode) error
 }
 
-
-
 func generateNode(n il.Node, lang Generator, done map[il.Node]struct{}) error {
 	if _, ok := done[n]; ok {
 		return nil
