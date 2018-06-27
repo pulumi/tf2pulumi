@@ -14,14 +14,6 @@ import (
 	"github.com/pgavlin/firewalker/il"
 )
 
-// We translate from HIL to Typescript in several passes as necessitated by the semantics of `pulumi.Output<T>`:
-// - In the first pass, we generate a type-annotated version of the HIL AST and gather all nested references to
-//   properties of type `pulumi.Output<T>`.
-// - In the second pass, we transform the AST for `pulumi.Output<T>.apply`:
-//    - If there are no nested output references, we skip this transform
-//    - Otherwise, all referenced outputs are folded into a top-level apply and their references are replaced with
-//      the corresponding resolved value
-
 type boundType uint32
 
 const (
@@ -138,6 +130,7 @@ func (n *boundOutput) typ() boundType {
 type boundVariableAccess struct {
 	hilNode  *ast.VariableAccess
 	elements []string
+	schemas  schemas
 	exprType boundType
 
 	tfVar  config.InterpolatedVariable
@@ -271,7 +264,7 @@ func (b *hilBinder) bindVariableAccess(n *ast.VariableAccess) (boundNode, error)
 		return nil, err
 	}
 
-	elements, exprType, ilNode := []string(nil), typeUnknown, il.Node(nil)
+	elements, sch, exprType, ilNode := []string(nil), schemas{}, typeUnknown, il.Node(nil)
 	switch v := tfVar.(type) {
 	case *config.CountVariable:
 		// "count."
@@ -304,7 +297,6 @@ func (b *hilBinder) bindVariableAccess(n *ast.VariableAccess) (boundNode, error)
 		ilNode = r
 
 		var resInfo *tfbridge.ResourceInfo
-		var sch schemas
 		if r.Provider.Info != nil {
 			resInfo = r.Provider.Info.Resources[v.Type]
 			sch.tfRes = r.Provider.Info.P.ResourcesMap[v.Type]
@@ -313,12 +305,13 @@ func (b *hilBinder) bindVariableAccess(n *ast.VariableAccess) (boundNode, error)
 
 		// name{.property}+
 		elements = strings.Split(v.Field, ".")
+		elemSch := sch
 		for _, e := range elements {
-			sch = sch.propertySchemas(e)
+			elemSch = elemSch.propertySchemas(e)
 		}
 
 		// Handle multi-references (splats and indexes)
-		exprType = sch.boundType()
+		exprType = elemSch.boundType()
 		if v.Multi && v.Index == -1 {
 			exprType = exprType.listOf()
 		}
@@ -359,6 +352,7 @@ func (b *hilBinder) bindVariableAccess(n *ast.VariableAccess) (boundNode, error)
 	return &boundVariableAccess{
 		hilNode:  n,
 		elements: elements,
+		schemas:  sch,
 		exprType: exprType,
 		tfVar:    tfVar,
 		ilNode:   ilNode,
@@ -552,7 +546,6 @@ func visitBoundExpr(n boundNode, pre, post boundExprVisitor) (boundNode, error) 
 type applyRewriter struct {
 	output *boundOutput
 	applyArgs []boundNode
-	vars map[il.Node]int
 }
 
 func (r *applyRewriter) rewriteBoundVariableAccess(n *boundVariableAccess) (boundNode, error) {
@@ -565,11 +558,8 @@ func (r *applyRewriter) rewriteBoundVariableAccess(n *boundVariableAccess) (boun
 		return n, nil
 	}
 
-	idx, ok := r.vars[n.ilNode]
-	if !ok {
-		r.vars[n.ilNode] = len(r.applyArgs)
-		r.applyArgs = append(r.applyArgs, n)
-	}
+	idx := len(r.applyArgs)
+	r.applyArgs = append(r.applyArgs, n)
 
 	return &boundCall{
 		hilNode: &ast.Call{Func: "__applyArg"},
@@ -607,7 +597,7 @@ func (r *applyRewriter) rewriteNode(n boundNode) (boundNode, error) {
 
 func (r *applyRewriter) enterNode(n boundNode) (boundNode, error) {
 	if o, ok := n.(*boundOutput); ok {
-		r.output, r.applyArgs, r.vars = o, nil, make(map[il.Node]int)
+		r.output, r.applyArgs = o, nil
 	}
 	return n, nil
 }
@@ -664,19 +654,30 @@ func (g *hilGenerator) genArithmetic(n *boundArithmetic) {
 	g.gen(")")
 }
 
+func (g *hilGenerator) genApplyArg(n *boundVariableAccess) {
+	rv := n.tfVar.(*config.ResourceVariable)
+
+	if !rv.Multi {
+		g.gen(n)
+	} else {
+		g.gen("pulumi.all(", n, ")")
+	}
+}
+
 func (g *hilGenerator) genApply(n *boundCall) {
 	outputs := n.args[:len(n.args)-1]
 	then := n.args[len(n.args)-1]
 
 	if len(outputs) == 1 {
-		g.gen(outputs[0], ".apply(__arg0 => ", then, ")")
+		g.genApplyArg(outputs[0].(*boundVariableAccess))
+		g.gen(".apply(__arg0 => ", then, ")")
 	} else {
 		g.gen("pulumi.all([")
 		for i, o := range outputs {
 			if i > 0 {
 				g.gen(", ")
 			}
-			g.gen(o)
+			g.genApplyArg(o.(*boundVariableAccess))
 		}
 		g.gen("]).apply(([")
 		for i := range outputs {
@@ -735,16 +736,15 @@ func (g *hilGenerator) genLiteral(n *boundLiteral) {
 }
 
 func (g *hilGenerator) genOutput(n *boundOutput) {
-	for i, s := range n.exprs {
-		if i > 0 {
-			g.gen(" + ")
-		}
-		if s.typ() == typeString {
-			g.gen(s)
+	g.gen("`")
+	for _, s := range n.exprs {
+		if lit, ok := s.(*boundLiteral); ok && lit.exprType == typeString {
+			g.gen(lit.value.(string))
 		} else {
-			g.gen("`${", s, "}`")
+			g.gen("${", s, "}")
 		}
 	}
+	g.gen("`")
 }
 
 func (g *hilGenerator) genVariableAccess(n *boundVariableAccess) {
@@ -752,7 +752,13 @@ func (g *hilGenerator) genVariableAccess(n *boundVariableAccess) {
 	case *config.CountVariable:
 		g.gen(g.countIndex)
 	case *config.ResourceVariable:
-		receiver, accessor := resName(v.Type, v.Name), strings.Join(n.elements, ".")
+		elements, elemSch := make([]string, len(n.elements)), n.schemas
+		for i, e := range n.elements {
+			elemSch = elemSch.propertySchemas(e)
+			elements[i] = tfbridge.TerraformToPulumiName(e, elemSch.tf, false)
+		}
+
+		receiver, accessor := resName(v.Type, v.Name), strings.Join(elements, ".")
 		if v.Multi {
 			if v.Index == -1 {
 				accessor = fmt.Sprintf("map(v => v.%s)", accessor)
