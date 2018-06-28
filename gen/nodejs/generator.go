@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/hashicorp/terraform/config"
 	"github.com/hashicorp/terraform/helper/schema"
 	"github.com/pkg/errors"
 	"github.com/pulumi/pulumi-terraform/pkg/tfbridge"
@@ -115,39 +116,29 @@ func (*Generator) GenerateLocal(l *il.LocalNode) error {
 }
 
 func (g *Generator) GenerateResource(r *il.ResourceNode) error {
-	config := r.Config
-
-	underscore := strings.IndexRune(config.Type, '_')
+	underscore := strings.IndexRune(r.Config.Type, '_')
 	if underscore == -1 {
 		return errors.New("NYI: single-resource providers")
 	}
-	provider, resourceType := config.Type[:underscore], config.Type[underscore+1:]
+	provider, resourceType := r.Config.Type[:underscore], r.Config.Type[underscore+1:]
 
-	var resInfo *tfbridge.ResourceInfo
-	var sch il.Schemas
-	if r.Provider.Info != nil {
-		resInfo = r.Provider.Info.Resources[config.Type]
-		sch.TFRes = r.Provider.Info.P.ResourcesMap[config.Type]
-		sch.Pulumi = &tfbridge.SchemaInfo{Fields: resInfo.Fields}
-	}
-
-	typeName := tfbridge.TerraformToPulumiName(resourceType, nil, true)
+	memberName := tfbridge.TerraformToPulumiName(resourceType, nil, true)
 
 	module := ""
-	if resInfo != nil {
-		components := strings.Split(string(resInfo.Tok), ":")
+	if tok, ok := r.Tok(); ok {
+		components := strings.Split(tok, ":")
 		if len(components) != 3 {
-			return errors.Errorf("unexpected resource token format %s", resInfo.Tok)
+			return errors.Errorf("unexpected resource token format %s", tok)
 		}
 
 		mod, typ := components[1], components[2]
 
 		slash := strings.IndexRune(mod, '/')
 		if slash == -1 {
-			return errors.Errorf("unexpected resource module format %s", mod)
+			slash = len(mod)
 		}
 
-		module, typeName = "."+mod[:slash], typ
+		module, memberName = "."+mod[:slash], typ
 	}
 
 	// Build the list of explicit deps, if any.
@@ -169,8 +160,8 @@ func (g *Generator) GenerateResource(r *il.ResourceNode) error {
 		explicitDeps = buf.String()
 	}
 
-	name := resName(config.Type, config.Name)
-	qualifiedTypeName := fmt.Sprintf("%s%s.%s", provider, module, typeName)
+	name := resName(r.Config.Type, r.Config.Name)
+	qualifiedMemberName := fmt.Sprintf("%s%s.%s", provider, module, memberName)
 	if r.Count == nil {
 		// If count is nil, this is a single-instance resource.
 		inputs, err := g.computeProperty(r.Properties, "", "")
@@ -178,7 +169,12 @@ func (g *Generator) GenerateResource(r *il.ResourceNode) error {
 			return err
 		}
 
-		fmt.Printf("const %s = new %s(\"%s\", %s%s);\n", name, qualifiedTypeName, config.Name, inputs, explicitDeps)
+		if r.Config.Mode == config.ManagedResourceMode {
+			fmt.Printf("const %s = new %s(\"%s\", %s%s);\n", name, qualifiedMemberName, r.Config.Name, inputs, explicitDeps)
+		} else {
+			// TODO: explicit dependencies
+			fmt.Printf("const %s = pulumi.output(%s(%s));\n", name, qualifiedMemberName, inputs)
+		}
 	} else {
 		// Otherwise we need to Generate multiple resources in a loop.
 		count, err := g.computeProperty(r.Count, "", "")
@@ -190,9 +186,19 @@ func (g *Generator) GenerateResource(r *il.ResourceNode) error {
 			return err
 		}
 
-		fmt.Printf("const %s: %s[] = [];\n", name, qualifiedTypeName)
+		arrElementType := qualifiedMemberName
+		if r.Config.Mode == config.DataResourceMode {
+			arrElementType = fmt.Sprintf("Output<%s%s.%sResult>", provider, module, strings.ToUpper(memberName))
+		}
+
+		fmt.Printf("const %s: %s[] = [];\n", name, arrElementType)
 		fmt.Printf("for (let i = 0; i < %s; i++) {\n", count)
-		fmt.Printf("    %s.push(new %s(`%s-${i}`, %s%s));\n", name, qualifiedTypeName, config.Name, inputs, explicitDeps)
+		if r.Config.Mode == config.ManagedResourceMode {
+			fmt.Printf("    %s.push(new %s(`%s-${i}`, %s%s));\n", name, qualifiedMemberName, r.Config.Name, inputs, explicitDeps)
+		} else {
+			// TODO: explicit dependencies
+			fmt.Printf("    %s.push(pulumi.output(%s(%s)));\n", name, qualifiedMemberName, inputs)
+		}
 		fmt.Printf("}\n")
 	}
 

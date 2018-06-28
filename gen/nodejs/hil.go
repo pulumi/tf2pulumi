@@ -162,6 +162,8 @@ func (g *hilGenerator) genVariableAccess(n *il.BoundVariableAccess) {
 	case *config.CountVariable:
 		g.gen(g.countIndex)
 	case *config.ResourceVariable:
+		isDataSource := n.ILNode.(*il.ResourceNode).Config.Mode == config.DataResourceMode
+
 		elements, elemSch := make([]string, len(n.Elements)), n.Schemas
 		for i, e := range n.Elements {
 			elemSch = elemSch.PropertySchemas(e)
@@ -171,11 +173,19 @@ func (g *hilGenerator) genVariableAccess(n *il.BoundVariableAccess) {
 		receiver, accessor := resName(v.Type, v.Name), strings.Join(elements, ".")
 		if v.Multi {
 			if v.Index == -1 {
-				accessor = fmt.Sprintf("map(v => v.%s)", accessor)
+				selector := fmt.Sprintf("v => v.%s", accessor)
+				if isDataSource {
+					selector = fmt.Sprintf("v => v.apply(%s)", selector)
+				}
+				accessor = fmt.Sprintf("map(%s)", selector)
 			} else {
 				receiver = fmt.Sprintf("%s[%d]", receiver, v.Index)
 			}
 		}
+		if isDataSource {
+			accessor = fmt.Sprintf("apply(v => v.%s)", accessor)
+		}
+
 		g.gen(receiver, ".", accessor)
 	case *config.UserVariable:
 		g.gen(tfbridge.TerraformToPulumiName(v.Name, nil, false))

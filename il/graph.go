@@ -1,6 +1,7 @@
 package il
 
 import (
+	_ "log"
 	"os/exec"
 	"reflect"
 	"sort"
@@ -77,6 +78,36 @@ func (p *ProviderNode) sortKey() string {
 
 func (r *ResourceNode) Dependencies() []Node {
 	return r.Deps
+}
+
+func (r *ResourceNode) Schemas() Schemas {
+	switch {
+	case r.Provider == nil || r.Provider.Info == nil:
+		return Schemas{}
+	case r.Config.Mode == config.ManagedResourceMode:
+		resInfo := r.Provider.Info.Resources[r.Config.Type]
+		return Schemas{
+			TFRes: r.Provider.Info.P.ResourcesMap[r.Config.Type],
+			Pulumi: &tfbridge.SchemaInfo{Fields: resInfo.Fields},
+		}
+	default:
+		dsInfo := r.Provider.Info.DataSources[r.Config.Type]
+		return Schemas{
+			TFRes: r.Provider.Info.P.DataSourcesMap[r.Config.Type],
+			Pulumi: &tfbridge.SchemaInfo{Fields: dsInfo.Fields},
+		}
+	}
+}
+
+func (r *ResourceNode) Tok() (string, bool) {
+	switch {
+	case r.Provider == nil || r.Provider.Info == nil:
+		return "", false
+	case r.Config.Mode == config.ManagedResourceMode:
+		return string(r.Provider.Info.Resources[r.Config.Type].Tok), true
+	default:
+		return string(r.Provider.Info.DataSources[r.Config.Type].Tok), true
+	}
 }
 
 func (r *ResourceNode) sortKey() string {
@@ -253,6 +284,10 @@ func fixupTFSchema(s *schema.Schema) error {
 }
 
 func getProviderInfo(p *ProviderNode) (*tfbridge.ProviderInfo, error) {
+	if info, ok := builtinProviderInfo[p.Config.Name]; ok {
+		return info, nil
+	}
+
 	_, path, err := workspace.GetPluginPath(workspace.ResourcePlugin, p.Config.Name, nil)
 	if err != nil {
 		return nil, err
@@ -353,15 +388,7 @@ func (b *builder) buildResource(r *ResourceNode) error {
 		}
 	}
 
-	// Fetch the resource's schemas, if any.
-	var sch Schemas
-	if r.Provider.Info != nil {
-		resInfo := r.Provider.Info.Resources[r.Config.Type]
-		sch.TFRes = r.Provider.Info.P.ResourcesMap[r.Config.Type]
-		sch.Pulumi = &tfbridge.SchemaInfo{Fields: resInfo.Fields}
-	}
-
-	props, deps, err := b.buildProperties(r.Config.RawConfig, sch, count != nil)
+	props, deps, err := b.buildProperties(r.Config.RawConfig, r.Schemas(), count != nil)
 	if err != nil {
 		return err
 	}
@@ -428,7 +455,7 @@ func (b *builder) buildVariable(v *VariableNode) error {
 func BuildGraph(conf *config.Config) (*Graph, error) {
 	b := newBuilder()
 
-	// First create our nodes.
+	// Next create our nodes.
 	for _, p := range conf.ProviderConfigs {
 		b.providers[p.Name] = &ProviderNode{Config: p}
 	}

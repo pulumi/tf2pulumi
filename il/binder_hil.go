@@ -6,7 +6,6 @@ import (
 	"github.com/hashicorp/hil/ast"
 	"github.com/hashicorp/terraform/config"
 	"github.com/pkg/errors"
-	"github.com/pulumi/pulumi-terraform/pkg/tfbridge"
 )
 
 func (b *propertyBinder) bindArithmetic(n *ast.Arithmetic) (BoundExpr, error) {
@@ -168,11 +167,7 @@ func (b *propertyBinder) bindVariableAccess(n *ast.VariableAccess) (BoundExpr, e
 		}
 
 		// fetch the resource's schema info
-		if r.Provider.Info != nil {
-			resInfo := r.Provider.Info.Resources[v.Type]
-			sch.TFRes = r.Provider.Info.P.ResourcesMap[v.Type]
-			sch.Pulumi = &tfbridge.SchemaInfo{Fields: resInfo.Fields}
-		}
+		sch = r.Schemas()
 
 		// name{.property}+
 		elements = strings.Split(v.Field, ".")
