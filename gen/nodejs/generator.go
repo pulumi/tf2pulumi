@@ -74,6 +74,10 @@ func (g *Generator) GeneratePreamble(gr *il.Graph) error {
 	// Emit imports for the various providers
 	fmt.Printf("import * as pulumi from \"@pulumi/pulumi\";\n")
 	for _, p := range gr.Providers {
+		if p.Config.Name == "archive" {
+			continue
+		}
+
 		fmt.Printf("import * as %s from \"@pulumi/%s\";\n", p.Config.Name, p.Config.Name)
 	}
 	fmt.Printf("import * as fs from \"fs\";")
@@ -116,6 +120,10 @@ func (*Generator) GenerateLocal(l *il.LocalNode) error {
 }
 
 func (g *Generator) GenerateResource(r *il.ResourceNode) error {
+	if r.Provider.Config.Name == "archive" {
+		return g.generateArchive(r)
+	}
+
 	underscore := strings.IndexRune(r.Config.Type, '_')
 	if underscore == -1 {
 		return errors.New("NYI: single-resource providers")

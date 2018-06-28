@@ -103,7 +103,16 @@ func (g *hilGenerator) genCall(n *il.BoundCall) {
 	case "__applyArg":
 		g.gen(fmt.Sprintf("__arg%d", n.Args[0].(*il.BoundLiteral).Value.(int)))
 	case "__archive":
-		g.gen("new pulumi.asset.FileArchive(", n.Args[0], ")")
+		arg := n.Args[0]
+		if v, ok := arg.(*il.BoundVariableAccess); ok {
+			if r, ok := v.ILNode.(*il.ResourceNode); ok && r.Provider.Config.Name == "archive" {
+				// Just generate a reference to the asset itself.
+				g.gen(resName(r.Config.Type, r.Config.Name))
+				return
+			}
+		}
+
+		g.gen("new pulumi.asset.FileArchive(", arg, ")")
 	case "__asset":
 		g.gen("new pulumi.asset.FileAsset(", n.Args[0], ")")
 	case "element":
