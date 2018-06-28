@@ -12,10 +12,6 @@ import (
 	"github.com/pgavlin/firewalker/il"
 )
 
-// TODO:
-// - proper use of apply
-// - assets
-
 type Generator struct {
 	ProjectName string
 	graph       *il.Graph
@@ -53,23 +49,22 @@ func tsName(tfName string, tfSchema *schema.Schema, schemaInfo *tfbridge.SchemaI
 	return tfbridge.TerraformToPulumiName(tfName, tfSchema, false)
 }
 
-func (g *Generator) computeProperty(v interface{}, indent string, sch schemas) (string, error) {
+func (g *Generator) computeProperty(v interface{}, indent string, sch il.Schemas) (string, error) {
 	return g.computePropertyWithCount(v, indent, sch, "")
 }
 
-func (g *Generator) computePropertyWithCount(v interface{}, indent string, sch schemas, count string) (string, error) {
-	binder := &propertyBinder{hil: &hilBinder{graph: g.graph, hasCountIndex: count != ""}}
-	prop, err := binder.bindProperty(v, sch)
+func (g *Generator) computePropertyWithCount(v interface{}, indent string, sch il.Schemas, count string) (string, error) {
+	prop, err := il.Bind(v, sch, g.graph, count != "")
 	if err != nil {
 		return "", err
 	}
 
-	prop, err = doAssetRewrite(prop)
+	prop, err = il.RewriteAssets(prop)
 	if err != nil {
 		return "", err
 	}
 
-	prop, err = doApplyRewrite(prop)
+	prop, err = il.RewriteApplies(prop)
 	if err != nil {
 		return "", err
 	}
@@ -110,7 +105,7 @@ func (g *Generator) GenerateVariables(vs []*il.VariableNode) error {
 		if v.DefaultValue == nil {
 			fmt.Printf("config.require(\"%s\")", name)
 		} else {
-			def, err := g.computeProperty(v.DefaultValue, "", schemas{})
+			def, err := g.computeProperty(v.DefaultValue, "", il.Schemas{})
 			if err != nil {
 				return err
 			}
@@ -138,11 +133,11 @@ func (g *Generator) GenerateResource(r *il.ResourceNode) error {
 	provider, resourceType := config.Type[:underscore], config.Type[underscore+1:]
 
 	var resInfo *tfbridge.ResourceInfo
-	var sch schemas
+	var sch il.Schemas
 	if r.Provider.Info != nil {
 		resInfo = r.Provider.Info.Resources[config.Type]
-		sch.tfRes = r.Provider.Info.P.ResourcesMap[config.Type]
-		sch.pulumi = &tfbridge.SchemaInfo{Fields: resInfo.Fields}
+		sch.TFRes = r.Provider.Info.P.ResourcesMap[config.Type]
+		sch.Pulumi = &tfbridge.SchemaInfo{Fields: resInfo.Fields}
 	}
 
 	typeName := tfbridge.TerraformToPulumiName(resourceType, nil, true)
@@ -195,7 +190,7 @@ func (g *Generator) GenerateResource(r *il.ResourceNode) error {
 		fmt.Printf("const %s = new %s(\"%s\", %s%s);\n", name, qualifiedTypeName, config.Name, inputs, explicitDeps)
 	} else {
 		// Otherwise we need to Generate multiple resources in a loop.
-		count, err := g.computeProperty(r.Count, "", schemas{})
+		count, err := g.computeProperty(r.Count, "", il.Schemas{})
 		if err != nil {
 			return err
 		}
@@ -220,7 +215,7 @@ func (g *Generator) GenerateOutputs(os []*il.OutputNode) error {
 
 	fmt.Printf("\n")
 	for _, o := range os {
-		outputs, err := g.computeProperty(o.Value, "", schemas{})
+		outputs, err := g.computeProperty(o.Value, "", il.Schemas{})
 		if err != nil {
 			return err
 		}

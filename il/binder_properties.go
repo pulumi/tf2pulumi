@@ -78,3 +78,7 @@ func (b *propertyBinder) bindProperty(v interface{}, sch Schemas) (BoundNode, er
 	}
 }
 
+func Bind(v interface{}, sch Schemas, g *Graph, hasCountIndex bool) (BoundNode, error) {
+	binder := &propertyBinder{hil: &hilBinder{graph: g, hasCountIndex: hasCountIndex}}
+	return binder.bindProperty(v, sch)
+}

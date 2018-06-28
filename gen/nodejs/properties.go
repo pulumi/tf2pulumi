@@ -4,102 +4,9 @@ import (
 	"bytes"
 	"strconv"
 
-	"github.com/hashicorp/hil/ast"
-	"github.com/pkg/errors"
-	"github.com/pulumi/pulumi-terraform/pkg/tfbridge"
-
 	"github.com/pgavlin/firewalker/gen"
+	"github.com/pgavlin/firewalker/il"
 )
-
-type boundListProperty struct {
-	schemas  schemas
-	elements []boundNode
-}
-
-func (n *boundListProperty) typ() boundType {
-	return n.schemas.elemSchemas().boundType().listOf()
-}
-
-type boundMapProperty struct {
-	schemas  schemas
-	elements map[string]boundNode
-}
-
-func (n *boundMapProperty) typ() boundType {
-	return typeMap
-}
-
-type propertyBinder struct {
-	hil *hilBinder
-}
-
-func (b *propertyBinder) bindListProperty(s []interface{}, sch schemas) (boundNode, error) {
-	if tfbridge.IsMaxItemsOne(sch.tf, sch.pulumi) {
-		switch len(s) {
-		case 0:
-			return nil, nil
-		case 1:
-			return b.bindProperty(s[0], sch.elemSchemas())
-		default:
-			return nil, errors.Errorf("expected at most one item in list")
-		}
-	}
-
-	elements := make([]boundNode, 0, len(s))
-	for _, v := range s {
-		elem, err := b.bindProperty(v, sch.elemSchemas())
-		if err != nil {
-			return nil, err
-		}
-		if elem == nil {
-			continue
-		}
-		elements = append(elements, elem)
-	}
-
-	// Terraform spreads nested lists into their containing list. If this list is contains exactly one element that is
-	// also a list, do the spread now by simply returning the sole element.
-	if len(elements) == 1 && elements[0].typ().isList() {
-		return elements[0], nil
-	}
-
-	return &boundListProperty{schemas: sch, elements: elements}, nil
-}
-
-func (b *propertyBinder) bindMapProperty(m map[string]interface{}, sch schemas) (boundNode, error) {
-	elements := make(map[string]boundNode)
-	for k, v := range m {
-		bv, err := b.bindProperty(v, sch.propertySchemas(k))
-		if err != nil {
-			return nil, err
-		}
-		if bv == nil {
-			continue
-		}
-		elements[k] = bv
-	}
-
-	return &boundMapProperty{schemas: sch, elements: elements}, nil
-}
-
-func (b *propertyBinder) bindProperty(v interface{}, sch schemas) (boundNode, error) {
-	switch v := v.(type) {
-	case bool:
-		return &boundLiteral{exprType: typeBool, value: v}, nil
-	case float64:
-		return &boundLiteral{exprType: typeNumber, value: v}, nil
-	case string:
-		return &boundLiteral{exprType: typeString, value: v}, nil
-	case ast.Node:
-		return b.hil.bindExpr(v)
-	case []interface{}:
-		return b.bindListProperty(v, sch)
-	case map[string]interface{}:
-		return b.bindMapProperty(v, sch)
-	default:
-		return nil, errors.Errorf("unexpected property type %T", v)
-	}
-}
 
 type propertyGenerator struct {
 	w      *bytes.Buffer
@@ -113,17 +20,17 @@ func (g *propertyGenerator) indented(f func()) {
 	g.indent = g.indent[:len(g.indent)-4]
 }
 
-func (g *propertyGenerator) genListProperty(n *boundListProperty) {
-	elemType := n.schemas.elemSchemas().boundType()
+func (g *propertyGenerator) genListProperty(n *il.BoundListProperty) {
+	elemType := n.Schemas.ElemSchemas().Type()
 
 	g.gen("[")
 	g.indented(func() {
-		for _, v := range n.elements {
+		for _, v := range n.Elements {
 			// TF flattens list elements that are themselves lists into the parent list.
 			//
 			// TODO: if there is a list element that is dynamically a list, that also needs to be flattened. This is
 			// only knowable at runtime and will require a helper.
-			if v.typ().isList() {
+			if v.Type().IsList() {
 				g.gen("...")
 			}
 			g.gen("\n", g.indent)
@@ -134,57 +41,57 @@ func (g *propertyGenerator) genListProperty(n *boundListProperty) {
 	g.gen("\n", g.indent, "]")
 }
 
-func (g *propertyGenerator) genMapProperty(n *boundMapProperty) {
+func (g *propertyGenerator) genMapProperty(n *il.BoundMapProperty) {
 	g.gen("{")
 	g.indented(func() {
-		for _, k := range gen.SortedKeys(n.elements) {
-			v := n.elements[k]
+		for _, k := range gen.SortedKeys(n.Elements) {
+			v := n.Elements[k]
 
-			propSch := n.schemas.propertySchemas(k)
-			g.gen("\n", g.indent, tsName(k, propSch.tf, propSch.pulumi, true), ": ")
-			g.genCoercion(v, propSch.boundType())
+			propSch := n.Schemas.PropertySchemas(k)
+			g.gen("\n", g.indent, tsName(k, propSch.TF, propSch.Pulumi, true), ": ")
+			g.genCoercion(v, propSch.Type())
 			g.gen(",")
 		}
 	})
 	g.gen("\n", g.indent, "}")
 }
 
-func (g *propertyGenerator) genCoercion(n boundNode, toType boundType) {
+func (g *propertyGenerator) genCoercion(n il.BoundNode, toType il.Type) {
 	// TODO: we really need dynamic coercions here.
-	if n.typ() == toType {
+	if n.Type() == toType {
 		g.gen(n)
 		return
 	}
 
-	switch n.typ() {
-	case typeBool:
-		if toType == typeString {
-			if lit, ok := n.(*boundLiteral); ok {
-				g.gen("\"", strconv.FormatBool(lit.value.(bool)), "\"")
+	switch n.Type() {
+	case il.TypeBool:
+		if toType == il.TypeString {
+			if lit, ok := n.(*il.BoundLiteral); ok {
+				g.gen("\"", strconv.FormatBool(lit.Value.(bool)), "\"")
 			} else {
 				g.gen("`${", n, "}`")
 			}
 			return
 		}
-	case typeNumber:
-		if toType == typeString {
-			if lit, ok := n.(*boundLiteral); ok {
-				g.gen("\"", strconv.FormatFloat(lit.value.(float64), 'f', -1, 64), "\"")
+	case il.TypeNumber:
+		if toType == il.TypeString {
+			if lit, ok := n.(*il.BoundLiteral); ok {
+				g.gen("\"", strconv.FormatFloat(lit.Value.(float64), 'f', -1, 64), "\"")
 			} else {
 				g.gen("`${", n, "}`")
 			}
 			return
 		}
-	case typeString:
+	case il.TypeString:
 		switch toType {
-		case typeBool:
-			if lit, ok := n.(*boundLiteral); ok {
-				g.gen(strconv.FormatBool(lit.value.(string) == "true"))
+		case il.TypeBool:
+			if lit, ok := n.(*il.BoundLiteral); ok {
+				g.gen(strconv.FormatBool(lit.Value.(string) == "true"))
 			} else {
 				g.gen("(", n, " === \"true\")")
 			}
 			return
-		case typeNumber:
+		case il.TypeNumber:
 			g.gen("Number.parseFloat(", n, ")")
 			return
 		}
@@ -200,9 +107,9 @@ func (g *propertyGenerator) gen(vs ...interface{}) {
 		switch v := v.(type) {
 		case string:
 			g.w.WriteString(v)
-		case *boundListProperty:
+		case *il.BoundListProperty:
 			g.genListProperty(v)
-		case *boundMapProperty:
+		case *il.BoundMapProperty:
 			g.genMapProperty(v)
 		default:
 			g.hil.gen(v)

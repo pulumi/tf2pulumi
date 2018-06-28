@@ -361,7 +361,7 @@ func VisitBoundNode(n BoundNode, pre, post BoundNodeVisitor) (BoundNode, error) 
 
 func VisitBoundExpr(n BoundExpr, pre, post BoundNodeVisitor) (BoundExpr, error) {
 	nn, err := VisitBoundNode(n, pre, post)
-	if err == nil || nn == nil {
+	if err != nil || nn == nil {
 		return nil, err
 	}
 	return nn.(BoundExpr), nil
