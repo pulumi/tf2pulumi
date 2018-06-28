@@ -26,7 +26,11 @@ func (b *propertyBinder) bindCall(n *ast.Call) (BoundExpr, error) {
 
 	exprType := TypeUnknown
 	switch n.Func {
-	case "element", "lookup":
+	case "element":
+		if args[0].Type().IsList() {
+			exprType = args[0].Type().ElementType()
+		}
+	case "lookup":
 		// nothing to do
 	case "file":
 		exprType = TypeString
