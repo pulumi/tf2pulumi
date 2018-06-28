@@ -5,6 +5,7 @@ import (
 
 	"github.com/hashicorp/hil"
 	"github.com/hashicorp/hil/ast"
+	"github.com/hashicorp/terraform/helper/schema"
 	"github.com/pkg/errors"
 	"github.com/pulumi/pulumi/pkg/util/contract"
 	"github.com/pulumi/pulumi-terraform/pkg/tfbridge"
@@ -18,7 +19,8 @@ type propertyBinder struct {
 func (b *propertyBinder) bindListProperty(s reflect.Value, sch Schemas) (BoundNode, error) {
 	contract.Require(s.Kind() == reflect.Slice, "s")
 
-	if tfbridge.IsMaxItemsOne(sch.TF, sch.Pulumi) {
+	isMaxItemsOne := sch.TF != nil && sch.TF.Type == schema.TypeMap || tfbridge.IsMaxItemsOne(sch.TF, sch.Pulumi)
+	if isMaxItemsOne {
 		switch s.Len() {
 		case 0:
 			return nil, nil
