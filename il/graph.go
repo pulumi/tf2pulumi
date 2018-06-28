@@ -7,8 +7,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/hashicorp/hil"
-	"github.com/hashicorp/hil/ast"
 	"github.com/hashicorp/terraform/config"
 	"github.com/hashicorp/terraform/helper/schema"
 	"github.com/mitchellh/mapstructure"
@@ -39,7 +37,7 @@ type Graph struct {
 type ProviderNode struct {
 	Config     *config.ProviderConfig
 	Deps       []Node
-	Properties map[string]interface{}
+	Properties *BoundMapProperty
 	Info       *tfbridge.ProviderInfo
 }
 
@@ -48,25 +46,25 @@ type ResourceNode struct {
 	Provider     *ProviderNode
 	Deps         []Node
 	ExplicitDeps []Node
-	Count        interface{}
-	Properties   map[string]interface{}
+	Count        BoundNode
+	Properties   *BoundMapProperty
 }
 
 type OutputNode struct {
 	Config       *config.Output
 	Deps         []Node
 	ExplicitDeps []Node
-	Value        interface{}
+	Value        BoundNode
 }
 
 type LocalNode struct {
 	Config     *config.Local
 	Deps       []Node
-	Properties map[string]interface{}
+	Properties *BoundMapProperty
 }
 type VariableNode struct {
 	Config       *config.Variable
-	DefaultValue interface{}
+	DefaultValue BoundNode
 }
 
 func (p *ProviderNode) Dependencies() []Node {
@@ -146,164 +144,39 @@ func (b *builder) getNode(name string) (Node, bool) {
 	return nil, false
 }
 
-type propertyWalker struct {
-	deps map[string]struct{}
-}
-
-func (w *propertyWalker) walkPrimitive(p reflect.Value) (interface{}, error) {
-	switch p.Kind() {
-	case reflect.Bool:
-		return p.Bool(), nil
-	case reflect.Int:
-		return float64(p.Int()), nil
-	case reflect.Float64:
-		return p.Float(), nil
-	case reflect.String:
-		// attempt to parse the string as HIL. If the result is a simple literal, return that. Otherwise, keep the HIL
-		// itself.
-		rootNode, err := hil.Parse(p.String())
-		if err != nil {
-			return nil, err
-		}
-		contract.Assert(rootNode != nil)
-
-		if lit, ok := rootNode.(*ast.LiteralNode); ok && lit.Typex == ast.TypeString {
-			return lit.Value, nil
-		}
-
-		rootNode.Accept(func(n ast.Node) ast.Node {
-			if v, ok := n.(*ast.VariableAccess); ok {
-				w.deps[v.Name] = struct{}{}
-			}
-			return n
-		})
-		if err != nil {
-			return nil, err
-		}
-		return rootNode, nil
-	default:
-		// walk should have ensured we never reach this point
-		contract.Failf("unexpeted property type %v", p.Type())
-		return nil, errors.New("unexpected property type")
-	}
-}
-
-func (w *propertyWalker) walkSlice(s reflect.Value) ([]interface{}, error) {
-	contract.Require(s.Kind() == reflect.Slice, "s")
-
-	// iterate over slice elements
-	result := make([]interface{}, s.Len())
-	for i := 0; i < s.Len(); i++ {
-		v, err := w.walk(s.Index(i))
-		if err != nil {
-			return nil, err
-		}
-		result[i] = v
-	}
-	return result, nil
-}
-
-func (w *propertyWalker) walkMap(m reflect.Value) (map[string]interface{}, error) {
-	contract.Require(m.Kind() == reflect.Map, "m")
-
-	// grab the key type and ensure it is of type string
-	if m.Type().Key().Kind() != reflect.String {
-		return nil, errors.Errorf("unexpected key type %v", m.Type().Key())
-	}
-
-	// iterate over the map elements
-	result := make(map[string]interface{})
-	for _, k := range m.MapKeys() {
-		v, err := w.walk(m.MapIndex(k))
-		if err != nil {
-			return nil, err
-		}
-		result[k.String()] = v
-	}
-	return result, nil
-}
-
-func (w *propertyWalker) walk(v reflect.Value) (interface{}, error) {
-	if v.Kind() == reflect.Interface {
-		v = v.Elem()
-	}
-	switch v.Kind() {
-	case reflect.Bool, reflect.Int, reflect.Float64, reflect.String:
-		return w.walkPrimitive(v)
-	case reflect.Slice:
-		return w.walkSlice(v)
-	case reflect.Map:
-		return w.walkMap(v)
-	default:
-		return nil, errors.Errorf("unexpected property type %v", v.Type())
-	}
-}
-
-func (b *builder) buildValue(v interface{}) (interface{}, map[Node]struct{}, error) {
+func (b *builder) buildValue(v interface{}, sch Schemas, hasCountIndex bool) (BoundNode, map[Node]struct{}, error) {
 	if v == nil {
 		return nil, nil, nil
 	}
 
-	// Walk the value, perform any necessary conversions (HIL parsing in particular), and collect dependency
-	// information.
-	walker := &propertyWalker{
-		deps: make(map[string]struct{}),
+	// Bind the value.
+	binder := &propertyBinder{
+		builder: b,
+		hasCountIndex: hasCountIndex,
 	}
-	prop, err := walker.walk(reflect.ValueOf(v))
+	prop, err := binder.bindProperty(reflect.ValueOf(v), sch)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	// Walk the collected dependencies and convert them to `node`s
+	// Walk the bound value and collect its dependencies.
 	deps := make(map[Node]struct{})
-	for k := range walker.deps {
-		tfVar, err := config.NewInterpolatedVariable(k)
-		if err != nil {
-			return nil, nil, err
+	VisitBoundNode(prop, IdentityVisitor, func(n BoundNode) (BoundNode, error) {
+		if v, ok := n.(*BoundVariableAccess); ok {
+			deps[v.ILNode] = struct{}{}
 		}
-
-		switch v := tfVar.(type) {
-		case *config.CountVariable:
-		case *config.PathVariable:
-		case *config.SelfVariable:
-		case *config.SimpleVariable:
-		case *config.TerraformVariable:
-			// nothing to do
-
-		case *config.ModuleVariable:
-			// unsupported
-			return nil, nil, errors.Errorf("module variable references are not yet supported (%v)", v.Name)
-
-		case *config.LocalVariable:
-			l, ok := b.locals[v.Name]
-			if !ok {
-				return nil, nil, errors.Errorf("unknown local variable %v", v.Name)
-			}
-			deps[l] = struct{}{}
-		case *config.ResourceVariable:
-			r, ok := b.resources[v.ResourceId()]
-			if !ok {
-				return nil, nil, errors.Errorf("unknown resource %v", v.Name)
-			}
-			deps[r] = struct{}{}
-		case *config.UserVariable:
-			u, ok := b.variables[v.Name]
-			if !ok {
-				return nil, nil, errors.Errorf("unknown variable %v", v.Name)
-			}
-			deps[u] = struct{}{}
-		}
-	}
+		return n, nil
+	})
 
 	return prop, deps, nil
 }
 
-func (b *builder) buildProperties(raw *config.RawConfig) (map[string]interface{}, map[Node]struct{}, error) {
-	v, deps, err := b.buildValue(raw.Raw)
+func (b *builder) buildProperties(raw *config.RawConfig, sch Schemas, hasCountIndex bool) (*BoundMapProperty, map[Node]struct{}, error) {
+	v, deps, err := b.buildValue(raw.Raw, sch, hasCountIndex)
 	if err != nil {
 		return nil, nil, err
 	}
-	return v.(map[string]interface{}), deps, nil
+	return v.(*BoundMapProperty), deps, nil
 }
 
 type sortableNodes []Node
@@ -420,7 +293,7 @@ func (b *builder) buildProvider(p *ProviderNode) error {
 	}
 	p.Info = info
 
-	props, deps, err := b.buildProperties(p.Config.RawConfig)
+	props, deps, err := b.buildProperties(p.Config.RawConfig, Schemas{}, false)
 	if err != nil {
 		return err
 	}
@@ -431,7 +304,11 @@ func (b *builder) buildProvider(p *ProviderNode) error {
 	return nil
 }
 
-func (b *builder) buildResource(r *ResourceNode) error {
+func (b *builder) ensureProvider(r *ResourceNode) error {
+	if r.Provider != nil {
+		return nil
+	}
+
 	providerName := r.Config.ProviderFullName()
 	p, ok := b.providers[providerName]
 	if !ok {
@@ -453,25 +330,38 @@ func (b *builder) buildResource(r *ResourceNode) error {
 		}
 	}
 	r.Provider = p
+	return nil
+}
 
-	count, countDeps, err := b.buildValue(r.Config.RawCount.Value())
+func (b *builder) buildResource(r *ResourceNode) error {
+	b.ensureProvider(r)
+
+	count, countDeps, err := b.buildValue(r.Config.RawCount.Value(), Schemas{}, false)
 	if err != nil {
 		return err
 	}
 	// If the count is a string that can be parsed as an integer, use the result of the parse as the count. If the
 	// count is exactly one, set the count to nil.
-	if countStr, ok := count.(string); ok {
-		countInt, err := strconv.ParseInt(countStr, 0, 0)
+	if countLit, ok := count.(*BoundLiteral); ok && countLit.ExprType == TypeString {
+		countInt, err := strconv.ParseInt(countLit.Value.(string), 0, 0)
 		if err == nil {
 			if countInt == 1 {
 				count = nil
 			} else {
-				count = float64(countInt)
+				count = &BoundLiteral{ExprType: TypeNumber, Value: float64(countInt)}
 			}
 		}
 	}
 
-	props, deps, err := b.buildProperties(r.Config.RawConfig)
+	// Fetch the resource's schemas, if any.
+	var sch Schemas
+	if r.Provider.Info != nil {
+		resInfo := r.Provider.Info.Resources[r.Config.Type]
+		sch.TFRes = r.Provider.Info.P.ResourcesMap[r.Config.Type]
+		sch.Pulumi = &tfbridge.SchemaInfo{Fields: resInfo.Fields}
+	}
+
+	props, deps, err := b.buildProperties(r.Config.RawConfig, sch, count != nil)
 	if err != nil {
 		return err
 	}
@@ -489,7 +379,7 @@ func (b *builder) buildResource(r *ResourceNode) error {
 }
 
 func (b *builder) buildOutput(o *OutputNode) error {
-	props, deps, err := b.buildProperties(o.Config.RawConfig)
+	props, deps, err := b.buildProperties(o.Config.RawConfig, Schemas{}, false)
 	if err != nil {
 		return err
 	}
@@ -500,9 +390,9 @@ func (b *builder) buildOutput(o *OutputNode) error {
 
 	// In general, an output should have a single property named "value". If this is the case, promote it to the
 	// output's value.
-	value := (interface{})(props)
-	if len(props) == 1 {
-		if v, ok := props["value"]; ok {
+	value := BoundNode(props)
+	if len(props.Elements) == 1 {
+		if v, ok := props.Elements["value"]; ok {
 			value = v
 		}
 	}
@@ -512,7 +402,7 @@ func (b *builder) buildOutput(o *OutputNode) error {
 }
 
 func (b *builder) buildLocal(l *LocalNode) error {
-	props, deps, err := b.buildProperties(l.Config.RawConfig)
+	props, deps, err := b.buildProperties(l.Config.RawConfig, Schemas{}, false)
 	if err != nil {
 		return err
 	}
@@ -524,7 +414,7 @@ func (b *builder) buildLocal(l *LocalNode) error {
 }
 
 func (b *builder) buildVariable(v *VariableNode) error {
-	defaultValue, deps, err := b.buildValue(v.Config.Default)
+	defaultValue, deps, err := b.buildValue(v.Config.Default, Schemas{}, false)
 	if err != nil {
 		return err
 	}

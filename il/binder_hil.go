@@ -9,12 +9,7 @@ import (
 	"github.com/pulumi/pulumi-terraform/pkg/tfbridge"
 )
 
-type hilBinder struct {
-	graph         *Graph
-	hasCountIndex bool
-}
-
-func (b *hilBinder) bindArithmetic(n *ast.Arithmetic) (BoundExpr, error) {
+func (b *propertyBinder) bindArithmetic(n *ast.Arithmetic) (BoundExpr, error) {
 	exprs, err := b.bindExprs(n.Exprs)
 	if err != nil {
 		return nil, err
@@ -23,7 +18,7 @@ func (b *hilBinder) bindArithmetic(n *ast.Arithmetic) (BoundExpr, error) {
 	return &BoundArithmetic{HILNode: n, Exprs: exprs}, nil
 }
 
-func (b *hilBinder) bindCall(n *ast.Call) (BoundExpr, error) {
+func (b *propertyBinder) bindCall(n *ast.Call) (BoundExpr, error) {
 	args, err := b.bindExprs(n.Args)
 	if err != nil {
 		return nil, err
@@ -44,7 +39,7 @@ func (b *hilBinder) bindCall(n *ast.Call) (BoundExpr, error) {
 	return &BoundCall{HILNode: n, ExprType: exprType, Args: args}, nil
 }
 
-func (b *hilBinder) bindConditional(n *ast.Conditional) (BoundExpr, error) {
+func (b *propertyBinder) bindConditional(n *ast.Conditional) (BoundExpr, error) {
 	condExpr, err := b.bindExpr(n.CondExpr)
 	if err != nil {
 		return nil, err
@@ -72,7 +67,7 @@ func (b *hilBinder) bindConditional(n *ast.Conditional) (BoundExpr, error) {
 	}, nil
 }
 
-func (b *hilBinder) bindIndex(n *ast.Index) (BoundExpr, error) {
+func (b *propertyBinder) bindIndex(n *ast.Index) (BoundExpr, error) {
 	boundTarget, err := b.bindExpr(n.Target)
 	if err != nil {
 		return nil, err
@@ -96,7 +91,7 @@ func (b *hilBinder) bindIndex(n *ast.Index) (BoundExpr, error) {
 	}, nil
 }
 
-func (b *hilBinder) bindLiteral(n *ast.LiteralNode) (BoundExpr, error) {
+func (b *propertyBinder) bindLiteral(n *ast.LiteralNode) (BoundExpr, error) {
 	exprType := TypeUnknown
 	switch n.Typex {
 	case ast.TypeBool:
@@ -111,7 +106,7 @@ func (b *hilBinder) bindLiteral(n *ast.LiteralNode) (BoundExpr, error) {
 
 	return &BoundLiteral{ExprType: exprType, Value: n.Value}, nil
 }
-func (b *hilBinder) bindOutput(n *ast.Output) (BoundExpr, error) {
+func (b *propertyBinder) bindOutput(n *ast.Output) (BoundExpr, error) {
 	exprs, err := b.bindExprs(n.Exprs)
 	if err != nil {
 		return nil, err
@@ -125,7 +120,7 @@ func (b *hilBinder) bindOutput(n *ast.Output) (BoundExpr, error) {
 	return &BoundOutput{HILNode: n, Exprs: exprs}, nil
 }
 
-func (b *hilBinder) bindVariableAccess(n *ast.VariableAccess) (BoundExpr, error) {
+func (b *propertyBinder) bindVariableAccess(n *ast.VariableAccess) (BoundExpr, error) {
 	tfVar, err := config.NewInterpolatedVariable(n.Name)
 	if err != nil {
 		return nil, err
@@ -157,15 +152,20 @@ func (b *hilBinder) bindVariableAccess(n *ast.VariableAccess) (BoundExpr, error)
 		// default
 
 		// look up the resource.
-		r, ok := b.graph.Resources[v.ResourceId()]
+		r, ok := b.builder.resources[v.ResourceId()]
 		if !ok {
 			return nil, errors.Errorf("unknown resource %v", v.ResourceId())
 		}
 		ilNode = r
 
-		var resInfo *tfbridge.ResourceInfo
+		// ensure that the resource has a provider.
+		if err := b.builder.ensureProvider(r); err != nil {
+			return nil, err
+		}
+
+		// fetch the resource's schema info
 		if r.Provider.Info != nil {
-			resInfo = r.Provider.Info.Resources[v.Type]
+			resInfo := r.Provider.Info.Resources[v.Type]
 			sch.TFRes = r.Provider.Info.P.ResourcesMap[v.Type]
 			sch.Pulumi = &tfbridge.SchemaInfo{Fields: resInfo.Fields}
 		}
@@ -198,7 +198,7 @@ func (b *hilBinder) bindVariableAccess(n *ast.VariableAccess) (BoundExpr, error)
 		}
 
 		// look up the variable.
-		vn, ok := b.graph.Variables[v.Name]
+		vn, ok := b.builder.variables[v.Name]
 		if !ok {
 			return nil, errors.Errorf("unknown variable %s", v.Name)
 		}
@@ -207,10 +207,8 @@ func (b *hilBinder) bindVariableAccess(n *ast.VariableAccess) (BoundExpr, error)
 		// If the variable does not have a default, its type is string. If it does have a default, its type is string
 		// iff the default's type is also string. Note that we don't try all that hard here.
 		exprType = TypeString
-		if vn.DefaultValue != nil {
-			if _, ok := vn.DefaultValue.(string); !ok {
-				exprType = TypeUnknown
-			}
+		if vn.DefaultValue != nil && vn.DefaultValue.Type() != TypeString {
+			exprType = TypeUnknown
 		}
 	default:
 		return nil, errors.Errorf("unexpected variable type %T", v)
@@ -226,7 +224,7 @@ func (b *hilBinder) bindVariableAccess(n *ast.VariableAccess) (BoundExpr, error)
 	}, nil
 }
 
-func (b *hilBinder) bindExprs(ns []ast.Node) ([]BoundExpr, error) {
+func (b *propertyBinder) bindExprs(ns []ast.Node) ([]BoundExpr, error) {
 	boundExprs := make([]BoundExpr, len(ns))
 	for i, n := range ns {
 		bn, err := b.bindExpr(n)
@@ -238,7 +236,7 @@ func (b *hilBinder) bindExprs(ns []ast.Node) ([]BoundExpr, error) {
 	return boundExprs, nil
 }
 
-func (b *hilBinder) bindExpr(n ast.Node) (BoundExpr, error) {
+func (b *propertyBinder) bindExpr(n ast.Node) (BoundExpr, error) {
 	switch n := n.(type) {
 	case *ast.Arithmetic:
 		return b.bindArithmetic(n)

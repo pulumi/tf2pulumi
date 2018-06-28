@@ -1,30 +1,37 @@
 package il
 
 import (
+	"reflect"
+
+	"github.com/hashicorp/hil"
 	"github.com/hashicorp/hil/ast"
 	"github.com/pkg/errors"
+	"github.com/pulumi/pulumi/pkg/util/contract"
 	"github.com/pulumi/pulumi-terraform/pkg/tfbridge"
 )
 
 type propertyBinder struct {
-	hil *hilBinder
+	builder *builder
+	hasCountIndex bool
 }
 
-func (b *propertyBinder) bindListProperty(s []interface{}, sch Schemas) (BoundNode, error) {
+func (b *propertyBinder) bindListProperty(s reflect.Value, sch Schemas) (BoundNode, error) {
+	contract.Require(s.Kind() == reflect.Slice, "s")
+
 	if tfbridge.IsMaxItemsOne(sch.TF, sch.Pulumi) {
-		switch len(s) {
+		switch s.Len() {
 		case 0:
 			return nil, nil
 		case 1:
-			return b.bindProperty(s[0], sch.ElemSchemas())
+			return b.bindProperty(s.Index(0), sch.ElemSchemas())
 		default:
 			return nil, errors.Errorf("expected at most one item in list")
 		}
 	}
 
-	elements := make([]BoundNode, 0, len(s))
-	for _, v := range s {
-		elem, err := b.bindProperty(v, sch.ElemSchemas())
+	elements := make([]BoundNode, 0, s.Len())
+	for i := 0; i < s.Len(); i++ {
+		elem, err := b.bindProperty(s.Index(i), sch.ElemSchemas())
 		if err != nil {
 			return nil, err
 		}
@@ -43,42 +50,60 @@ func (b *propertyBinder) bindListProperty(s []interface{}, sch Schemas) (BoundNo
 	return &BoundListProperty{Schemas: sch, Elements: elements}, nil
 }
 
-func (b *propertyBinder) bindMapProperty(m map[string]interface{}, sch Schemas) (BoundNode, error) {
+func (b *propertyBinder) bindMapProperty(m reflect.Value, sch Schemas) (BoundNode, error) {
+	contract.Require(m.Kind() == reflect.Map, "m")
+
+	// Grab the key type and ensure it is of type string
+	if m.Type().Key().Kind() != reflect.String {
+		return nil, errors.Errorf("unexpected key type %v", m.Type().Key())
+	}
+
 	elements := make(map[string]BoundNode)
-	for k, v := range m {
-		bv, err := b.bindProperty(v, sch.PropertySchemas(k))
+	for _, k := range m.MapKeys() {
+		bv, err := b.bindProperty(m.MapIndex(k), sch.PropertySchemas(k.String()))
 		if err != nil {
 			return nil, err
 		}
 		if bv == nil {
 			continue
 		}
-		elements[k] = bv
+		elements[k.String()] = bv
 	}
 
 	return &BoundMapProperty{Schemas: sch, Elements: elements}, nil
 }
 
-func (b *propertyBinder) bindProperty(v interface{}, sch Schemas) (BoundNode, error) {
-	switch v := v.(type) {
-	case bool:
-		return &BoundLiteral{ExprType: TypeBool, Value: v}, nil
-	case float64:
-		return &BoundLiteral{ExprType: TypeNumber, Value: v}, nil
-	case string:
-		return &BoundLiteral{ExprType: TypeString, Value: v}, nil
-	case ast.Node:
-		return b.hil.bindExpr(v)
-	case []interface{}:
-		return b.bindListProperty(v, sch)
-	case map[string]interface{}:
-		return b.bindMapProperty(v, sch)
-	default:
-		return nil, errors.Errorf("unexpected property type %T", v)
+func (b *propertyBinder) bindProperty(p reflect.Value, sch Schemas) (BoundNode, error) {
+	if p.Kind() == reflect.Interface {
+		p = p.Elem()
 	}
-}
 
-func Bind(v interface{}, sch Schemas, g *Graph, hasCountIndex bool) (BoundNode, error) {
-	binder := &propertyBinder{hil: &hilBinder{graph: g, hasCountIndex: hasCountIndex}}
-	return binder.bindProperty(v, sch)
+	switch p.Kind() {
+	case reflect.Bool:
+		return &BoundLiteral{ExprType: TypeBool, Value: p.Bool()}, nil
+	case reflect.Int:
+		return &BoundLiteral{ExprType: TypeNumber, Value: p.Int()}, nil
+	case reflect.Float64:
+		return &BoundLiteral{ExprType: TypeNumber, Value: p.Float()}, nil
+	case reflect.String:
+		// attempt to parse the string as HIL. If the result is a simple literal, return that. Otherwise, keep the HIL
+		// itself.
+		rootNode, err := hil.Parse(p.String())
+		if err != nil {
+			return nil, err
+		}
+		contract.Assert(rootNode != nil)
+
+		if lit, ok := rootNode.(*ast.LiteralNode); ok && lit.Typex == ast.TypeString {
+			return &BoundLiteral{ExprType: TypeString, Value: lit.Value}, nil
+		}
+
+		return b.bindExpr(rootNode)
+	case reflect.Slice:
+		return b.bindListProperty(p, sch)
+	case reflect.Map:
+		return b.bindMapProperty(p, sch)
+	default:
+		return nil, errors.Errorf("unexpected property type %v", p.Type())
+	}
 }
