@@ -888,6 +888,12 @@
   version = "v1.14.1"
 
 [[projects]]
+  name = "github.com/terraform-providers/terraform-provider-http"
+  packages = ["http"]
+  revision = "a30a0b92af3ba8391a8fc19e428b85edc7aaf4a3"
+  version = "v1.0.1"
+
+[[projects]]
   name = "github.com/terraform-providers/terraform-provider-openstack"
   packages = ["openstack"]
   revision = "4080a521c6ea4872f38bae658ac17b774eefcfe1"
@@ -1141,6 +1147,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "8e8a0de1c143813cc2f6e5288494e459c576dfe9ed0a86ea6ad0465ce897632f"
+  inputs-digest = "bb3d305b60ba77d08eaf62d36e3a715ee039cabbd92fc38846fc39d5e4a77424"
   solver-name = "gps-cdcl"
   solver-version = 1

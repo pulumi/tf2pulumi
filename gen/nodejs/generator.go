@@ -74,14 +74,17 @@ func (g *Generator) GeneratePreamble(gr *il.Graph) error {
 	// Emit imports for the various providers
 	fmt.Printf("import * as pulumi from \"@pulumi/pulumi\";\n")
 	for _, p := range gr.Providers {
-		if p.Config.Name == "archive" {
-			continue
+		switch p.Config.Name {
+		case "archive":
+			// Nothing to do
+		case "http":
+			fmt.Printf("import rpn = require(\"request-promise-native\");\n")
+		default:
+			fmt.Printf("import * as %s from \"@pulumi/%s\";\n", p.Config.Name, p.Config.Name)
 		}
-
-		fmt.Printf("import * as %s from \"@pulumi/%s\";\n", p.Config.Name, p.Config.Name)
 	}
-	fmt.Printf("import * as fs from \"fs\";")
-	fmt.Printf("\n\n")
+	fmt.Printf("import * as fs from \"fs\";\n")
+	fmt.Printf("\n")
 
 	return nil
 }
@@ -120,8 +123,11 @@ func (*Generator) GenerateLocal(l *il.LocalNode) error {
 }
 
 func (g *Generator) GenerateResource(r *il.ResourceNode) error {
-	if r.Provider.Config.Name == "archive" {
+	switch r.Provider.Config.Name {
+	case "archive":
 		return g.generateArchive(r)
+	case "http":
+		return g.generateHTTP(r)
 	}
 
 	underscore := strings.IndexRune(r.Config.Type, '_')

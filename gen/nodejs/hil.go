@@ -171,7 +171,13 @@ func (g *hilGenerator) genVariableAccess(n *il.BoundVariableAccess) {
 	case *config.CountVariable:
 		g.gen(g.countIndex)
 	case *config.ResourceVariable:
-		isDataSource := n.ILNode.(*il.ResourceNode).Config.Mode == config.DataResourceMode
+		r := n.ILNode.(*il.ResourceNode)
+		if r.Provider.Config.Name == "http" {
+			g.gen(resName(v.Type, v.Name))
+			return
+		}
+
+		isDataSource := r.Config.Mode == config.DataResourceMode
 
 		elements, elemSch := make([]string, len(n.Elements)), n.Schemas
 		for i, e := range n.Elements {
