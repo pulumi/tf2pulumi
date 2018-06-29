@@ -60,7 +60,6 @@ func (s Schemas) Type() Type {
 		case schema.TypeString:
 			return TypeString
 		case schema.TypeList, schema.TypeSet:
-			// TODO: might need to do max-items-one projection here
 			return s.ElemSchemas().Type().ListOf()
 		case schema.TypeMap:
 			return TypeMap

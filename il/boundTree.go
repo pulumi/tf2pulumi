@@ -7,6 +7,8 @@ import (
 	"github.com/pulumi/pulumi/pkg/util/contract"
 )
 
+// TODO: real, actual output types :groan:
+
 type Type uint32
 
 const (

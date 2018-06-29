@@ -194,7 +194,9 @@ func (b *builder) buildValue(v interface{}, sch Schemas, hasCountIndex bool) (Bo
 	deps := make(map[Node]struct{})
 	VisitBoundNode(prop, IdentityVisitor, func(n BoundNode) (BoundNode, error) {
 		if v, ok := n.(*BoundVariableAccess); ok {
-			deps[v.ILNode] = struct{}{}
+			if v.ILNode != nil {
+				deps[v.ILNode] = struct{}{}
+			}
 		}
 		return n, nil
 	})

@@ -18,17 +18,24 @@ type Generator struct {
 	graph       *il.Graph
 }
 
-func resName(typ, name string) string {
-	n := fmt.Sprintf("%s_%s", typ, name)
-	if strings.ContainsAny(n, " -.") {
-		return strings.Map(func(r rune) rune {
-			if r == ' ' || r == '-' || r == '.' {
-				return '_'
-			}
-			return r
-		}, n)
+func cleanName(name string) string {
+	if !strings.ContainsAny(name, " -.") {
+		return name
 	}
-	return n
+	return strings.Map(func(r rune) rune {
+		if r == ' ' || r == '-' || r == '.' {
+			return '_'
+		}
+		return r
+	}, name)
+}
+
+func localName(name string) string {
+	return cleanName(name)
+}
+
+func resName(typ, name string) string {
+	return cleanName(fmt.Sprintf("%s_%s", typ, name))
 }
 
 func tsName(tfName string, tfSchema *schema.Schema, schemaInfo *tfbridge.SchemaInfo, isObjectKey bool) string {
@@ -40,12 +47,7 @@ func tsName(tfName string, tfSchema *schema.Schema, schemaInfo *tfbridge.SchemaI
 		if isObjectKey {
 			return fmt.Sprintf("\"%s\"", tfName)
 		}
-		return strings.Map(func(r rune) rune {
-			if r == ' ' || r == '-' || r == '.' {
-				return '_'
-			}
-			return r
-		}, tfName)
+		return cleanName(tfName)
 	}
 	return tfbridge.TerraformToPulumiName(tfName, tfSchema, false)
 }
@@ -98,7 +100,7 @@ func (g *Generator) GenerateVariables(vs []*il.VariableNode) error {
 	// Otherwise, new up a config object and declare the various vars.
 	fmt.Printf("const config = new pulumi.Config(\"%s\")\n", g.ProjectName)
 	for _, v := range vs {
-		name := tfbridge.TerraformToPulumiName(v.Config.Name, nil, false)
+		name := tsName(v.Config.Name, nil, nil, false)
 
 		fmt.Printf("const %s = ", name)
 		if v.DefaultValue == nil {
@@ -118,8 +120,14 @@ func (g *Generator) GenerateVariables(vs []*il.VariableNode) error {
 	return nil
 }
 
-func (*Generator) GenerateLocal(l *il.LocalNode) error {
-	return errors.New("NYI: locals")
+func (g *Generator) GenerateLocal(l *il.LocalNode) error {
+	props, err := g.computeProperty(l.Properties, "", "")
+	if err != nil {
+		return err
+	}
+
+	fmt.Printf("const %s = %s;\n", localName(l.Config.Name), props)
+	return nil
 }
 
 func (g *Generator) GenerateResource(r *il.ResourceNode) error {

@@ -3,7 +3,6 @@ package nodejs
 import (
 	"bytes"
 	"fmt"
-	"strings"
 
 	"github.com/hashicorp/hil/ast"
 	"github.com/hashicorp/terraform/config"
@@ -115,6 +114,10 @@ func (g *hilGenerator) genCall(n *il.BoundCall) {
 		g.gen("new pulumi.asset.FileArchive(", arg, ")")
 	case "__asset":
 		g.gen("new pulumi.asset.FileAsset(", n.Args[0], ")")
+	case "base64decode":
+		g.gen("Buffer.from(", n.Args[0], ", \"base64\").toString()")
+	case "base64encode":
+		g.gen("Buffer.from(", n.Args[0], ").toString(\"base64\")")
 	case "chomp":
 		g.gen(n.Args[0], ".replace(/(\\n|\\r\\n)*$/, \"\")")
 	case "element":
@@ -146,7 +149,12 @@ func (g *hilGenerator) genCall(n *il.BoundCall) {
 			if i > 0 {
 				g.gen(", ")
 			}
-			g.gen(n.Args[i], ": ", n.Args[i+1])
+			if lit, ok := n.Args[i].(*il.BoundLiteral); ok && lit.Type() == il.TypeString {
+				g.gen(lit)
+			} else {
+				g.gen("[", n.Args[i], "]")
+			}
+			g.gen(": ", n.Args[i+1])
 		}
 		g.gen("}")
 	case "split":
@@ -191,6 +199,8 @@ func (g *hilGenerator) genVariableAccess(n *il.BoundVariableAccess) {
 	switch v := n.TFVar.(type) {
 	case *config.CountVariable:
 		g.gen(g.countIndex)
+	case *config.LocalVariable:
+		g.gen(localName(v.Name))
 	case *config.ResourceVariable:
 		r := n.ILNode.(*il.ResourceNode)
 		if r.Provider.Config.Name == "http" {
@@ -200,31 +210,41 @@ func (g *hilGenerator) genVariableAccess(n *il.BoundVariableAccess) {
 
 		isDataSource := r.Config.Mode == config.DataResourceMode
 
-		elements, elemSch := make([]string, len(n.Elements)), n.Schemas
-		for i, e := range n.Elements {
+		accessor, elemSch := "", n.Schemas
+		for _, e := range n.Elements {
+			isListElement := elemSch.Type().IsList()
+			projectListElement := isListElement && tfbridge.IsMaxItemsOne(elemSch.TF, elemSch.Pulumi)
+
 			elemSch = elemSch.PropertySchemas(e)
-			elements[i] = tfbridge.TerraformToPulumiName(e, elemSch.TF, false)
+			if isListElement {
+				// If we're projecting the list element, just skip this path element entirely.
+				if !projectListElement {
+					accessor += fmt.Sprintf("[%s]", e)
+				}
+			} else {
+				accessor += fmt.Sprintf(".%s", tfbridge.TerraformToPulumiName(e, elemSch.TF, false))
+			}
 		}
 
-		receiver, accessor := resName(v.Type, v.Name), strings.Join(elements, ".")
+		receiver := resName(v.Type, v.Name)
 		if v.Multi {
 			if v.Index == -1 {
-				selector := fmt.Sprintf("v => v.%s", accessor)
+				selector := fmt.Sprintf("v => v%s", accessor)
 				if isDataSource {
 					selector = fmt.Sprintf("v => v.apply(%s)", selector)
 				}
-				accessor = fmt.Sprintf("map(%s)", selector)
+				accessor = fmt.Sprintf(".map(%s)", selector)
 			} else {
 				receiver = fmt.Sprintf("%s[%d]", receiver, v.Index)
 			}
 		}
 		if isDataSource {
-			accessor = fmt.Sprintf("apply(v => v.%s)", accessor)
+			accessor = fmt.Sprintf(".apply(v => v%s)", accessor)
 		}
 
-		g.gen(receiver, ".", accessor)
+		g.gen(receiver, accessor)
 	case *config.UserVariable:
-		g.gen(tfbridge.TerraformToPulumiName(v.Name, nil, false))
+		g.gen(tsName(v.Name, nil, nil, false))
 	default:
 		contract.Failf("unexpected TF var type in genVariableAccess: %T", n.TFVar)
 	}

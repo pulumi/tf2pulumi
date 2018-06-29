@@ -25,6 +25,10 @@ func (b *propertyBinder) bindCall(n *ast.Call) (BoundExpr, error) {
 
 	exprType := TypeUnknown
 	switch n.Func {
+	case "base64decode":
+		exprType = TypeString
+	case "base64encode":
+		exprType = TypeString
 	case "chomp":
 		exprType = TypeString
 	case "element":
@@ -153,7 +157,13 @@ func (b *propertyBinder) bindVariableAccess(n *ast.VariableAccess) (BoundExpr, e
 		exprType = TypeNumber
 	case *config.LocalVariable:
 		// "local."
-		return nil, errors.New("NYI: local variables")
+		l, ok := b.builder.locals[v.Name]
+		if !ok {
+			return nil, errors.Errorf("unknown local %v", v.Name)
+		}
+		ilNode = l
+
+		exprType = TypeUnknown
 	case *config.ModuleVariable:
 		// "module."
 		return nil, errors.New("NYI: module variables")
