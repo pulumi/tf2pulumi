@@ -161,6 +161,9 @@ func (g *Generator) GenerateResource(r *il.ResourceNode) error {
 		}
 
 		module, memberName = "."+mod[:slash], typ
+		if module == "index" {
+			module = ""
+		}
 	}
 
 	// Build the list of explicit deps, if any.
