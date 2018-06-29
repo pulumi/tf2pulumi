@@ -25,7 +25,7 @@ func (g *Generator) computeHTTPInputs(r *il.ResourceNode, indent, count string) 
 		return url, nil
 	}
 
-	requestHeaders, err := g.computeProperty(requestHeadersProperty, indent, count)
+	requestHeaders, err := g.computeProperty(requestHeadersProperty, indent + "    ", count)
 	if err != nil {
 		return "", err
 	}
