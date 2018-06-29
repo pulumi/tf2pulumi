@@ -25,16 +25,25 @@ func (b *propertyBinder) bindCall(n *ast.Call) (BoundExpr, error) {
 
 	exprType := TypeUnknown
 	switch n.Func {
+	case "chomp":
+		exprType = TypeString
 	case "element":
 		if args[0].Type().IsList() {
 			exprType = args[0].Type().ElementType()
 		}
-	case "lookup":
-		// nothing to do
 	case "file":
 		exprType = TypeString
+	case "list":
+		exprType = TypeUnknown.ListOf()
+	case "lookup":
+		// nothing to do
+	case "map":
+		if len(args) % 2 != 0 {
+			return nil, errors.Errorf("the numbner of arguments to \"map\" must be even")
+		}
+		exprType = TypeMap
 	case "split":
-		exprType = TypeList
+		exprType = TypeString.ListOf()
 	default:
 		return nil, errors.Errorf("NYI: call to %s", n.Func)
 	}

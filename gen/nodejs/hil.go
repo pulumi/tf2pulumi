@@ -115,10 +115,21 @@ func (g *hilGenerator) genCall(n *il.BoundCall) {
 		g.gen("new pulumi.asset.FileArchive(", arg, ")")
 	case "__asset":
 		g.gen("new pulumi.asset.FileAsset(", n.Args[0], ")")
+	case "chomp":
+		g.gen(n.Args[0], ".replace(/(\\n|\\r\\n)*$/, \"\")")
 	case "element":
 		g.gen(n.Args[0], "[", n.Args[1], "]")
 	case "file":
 		g.gen("fs.readFileSync(", n.Args[0], ", \"utf-8\")")
+	case "list":
+		g.gen("[")
+		for i, e := range n.Args {
+			if i > 0 {
+				g.gen(", ")
+			}
+			g.gen(e)
+		}
+		g.gen("]")
 	case "lookup":
 		hasDefault := len(n.Args) == 3
 		if hasDefault {
@@ -128,6 +139,16 @@ func (g *hilGenerator) genCall(n *il.BoundCall) {
 		if hasDefault {
 			g.gen(" || ", n.Args[2], ")")
 		}
+	case "map":
+		contract.Assert(len(n.Args) % 2 == 0)
+		g.gen("{")
+		for i := 0; i < len(n.Args); i += 2 {
+			if i > 0 {
+				g.gen(", ")
+			}
+			g.gen(n.Args[i], ": ", n.Args[i+1])
+		}
+		g.gen("}")
 	case "split":
 		g.gen(n.Args[1], ".split(", n.Args[0], ")")
 	default:
