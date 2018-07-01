@@ -59,8 +59,24 @@ func (r *applyRewriter) rewriteNode(n BoundNode) (BoundNode, error) {
 }
 
 func (r *applyRewriter) enterNode(n BoundNode) (BoundNode, error) {
-	if o, ok := n.(*BoundOutput); ok {
-		r.output, r.applyArgs = o, nil
+	switch n := n.(type) {
+	case *BoundOutput:
+		r.output, r.applyArgs = n, nil
+	case *BoundVariableAccess:
+		if r.output != nil {
+			break
+		}
+
+		rv, ok := n.TFVar.(*config.ResourceVariable)
+		if !ok {
+			break
+		}
+
+		// If we're accessing a field of a data source or a nested field of a resource, we need to perform an apply.
+		// As such, we'll synthesize an output here.
+		if rv.Mode == config.DataResourceMode && len(n.Elements) > 0 || len(n.Elements) > 1 {
+			return r.enterNode(&BoundOutput{Exprs:[]BoundExpr{n}})
+		}
 	}
 	return n, nil
 }

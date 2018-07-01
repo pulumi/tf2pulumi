@@ -15,6 +15,7 @@ import (
 type hilGenerator struct {
 	w          *bytes.Buffer
 	countIndex string
+	applyArgs  []il.BoundExpr
 }
 
 func (g *hilGenerator) genArithmetic(n *il.BoundArithmetic) {
@@ -59,39 +60,83 @@ func (g *hilGenerator) genArithmetic(n *il.BoundArithmetic) {
 	g.gen(")")
 }
 
-func (g *hilGenerator) genApplyArg(n *il.BoundVariableAccess) {
+func (g *hilGenerator) genApplyOutput(n *il.BoundVariableAccess) {
 	rv := n.TFVar.(*config.ResourceVariable)
 
-	if !rv.Multi {
-		g.gen(n)
-	} else {
+	if rv.Multi && rv.Index == -1 {
 		g.gen("pulumi.all(", n, ")")
+	} else {
+		g.gen(n)
 	}
 }
 
 func (g *hilGenerator) genApply(n *il.BoundCall) {
-	outputs := n.Args[:len(n.Args)-1]
+	g.applyArgs = n.Args[:len(n.Args)-1]
 	then := n.Args[len(n.Args)-1]
 
-	if len(outputs) == 1 {
-		g.genApplyArg(outputs[0].(*il.BoundVariableAccess))
+	if len(g.applyArgs) == 1 {
+		g.genApplyOutput(g.applyArgs[0].(*il.BoundVariableAccess))
 		g.gen(".apply(__arg0 => ", then, ")")
 	} else {
 		g.gen("pulumi.all([")
-		for i, o := range outputs {
+		for i, o := range g.applyArgs {
 			if i > 0 {
 				g.gen(", ")
 			}
-			g.genApplyArg(o.(*il.BoundVariableAccess))
+			g.genApplyOutput(o.(*il.BoundVariableAccess))
 		}
 		g.gen("]).apply(([")
-		for i := range outputs {
+		for i := range g.applyArgs {
 			if i > 0 {
 				g.gen(", ")
 			}
 			g.gen(fmt.Sprintf("__arg%d", i))
 		}
 		g.gen("]) => ", then, ")")
+	}
+
+	g.applyArgs = nil
+}
+
+func (g *hilGenerator) genApplyArg(index int) {
+	contract.Assert(g.applyArgs != nil)
+
+	// Extract the variable reference.
+	v := g.applyArgs[index].(*il.BoundVariableAccess)
+
+	// Generate a reference to the parameter.
+	g.gen(fmt.Sprintf("__arg%d", index))
+
+	// Handle splats
+	rv := v.TFVar.(*config.ResourceVariable)
+	isSplat := rv.Multi && rv.Index == -1
+	if isSplat {
+		g.gen(".map(v => v")
+	}
+
+	// Generate any nested path.
+	r := v.ILNode.(*il.ResourceNode)
+	sch, elements := v.Schemas, v.Elements
+	if r.Config.Mode == config.ManagedResourceMode {
+		sch, elements = sch.PropertySchemas(elements[0]), elements[1:]
+	}
+	for _, e := range elements {
+		isListElement := sch.Type().IsList()
+		projectListElement := isListElement && tfbridge.IsMaxItemsOne(sch.TF, sch.Pulumi)
+
+		sch = sch.PropertySchemas(e)
+		if isListElement {
+			// If we're projecting the list element, just skip this path element entirely.
+			if !projectListElement {
+				g.gen(fmt.Sprintf("[%s]", e))
+			}
+		} else {
+			g.gen(fmt.Sprintf(".%s", tfbridge.TerraformToPulumiName(e, sch.TF, false)))
+		}
+	}
+
+	if isSplat {
+		g.gen(")")
 	}
 }
 
@@ -100,7 +145,7 @@ func (g *hilGenerator) genCall(n *il.BoundCall) {
 	case "__apply":
 		g.genApply(n)
 	case "__applyArg":
-		g.gen(fmt.Sprintf("__arg%d", n.Args[0].(*il.BoundLiteral).Value.(int)))
+		g.genApplyArg(n.Args[0].(*il.BoundLiteral).Value.(int))
 	case "__archive":
 		arg := n.Args[0]
 		if v, ok := arg.(*il.BoundVariableAccess); ok {
@@ -208,41 +253,28 @@ func (g *hilGenerator) genVariableAccess(n *il.BoundVariableAccess) {
 			return
 		}
 
-		isDataSource := r.Config.Mode == config.DataResourceMode
+		// We only generate up to the "output" part of the path here: the apply transform will take care of the rest.
+		g.gen(resName(v.Type, v.Name))
+		if v.Multi && v.Index != -1 {
+			g.gen(fmt.Sprintf("[%d]", v.Index))
+		}
 
-		accessor, elemSch := "", n.Schemas
-		for _, e := range n.Elements {
-			isListElement := elemSch.Type().IsList()
-			projectListElement := isListElement && tfbridge.IsMaxItemsOne(elemSch.TF, elemSch.Pulumi)
+		// A managed resource is not itself an output: instead, it is a bag of outputs. As such, we must generate the
+		// first portion of this access.
+		if r.Config.Mode == config.ManagedResourceMode && len(n.Elements) > 0 {
+			element := n.Elements[0]
+			elementSch := n.Schemas.PropertySchemas(element)
 
-			elemSch = elemSch.PropertySchemas(e)
-			if isListElement {
-				// If we're projecting the list element, just skip this path element entirely.
-				if !projectListElement {
-					accessor += fmt.Sprintf("[%s]", e)
-				}
-			} else {
-				accessor += fmt.Sprintf(".%s", tfbridge.TerraformToPulumiName(e, elemSch.TF, false))
+			// Handle splats
+			isSplat := v.Multi && v.Index == -1
+			if isSplat {
+				g.gen(".map(v => v")
+			}
+			g.gen(fmt.Sprintf(".%s", tfbridge.TerraformToPulumiName(element, elementSch.TF, false)))
+			if isSplat {
+				g.gen(")")
 			}
 		}
-
-		receiver := resName(v.Type, v.Name)
-		if v.Multi {
-			if v.Index == -1 {
-				selector := fmt.Sprintf("v => v%s", accessor)
-				if isDataSource {
-					selector = fmt.Sprintf("v => v.apply(%s)", selector)
-				}
-				accessor = fmt.Sprintf(".map(%s)", selector)
-			} else {
-				receiver = fmt.Sprintf("%s[%d]", receiver, v.Index)
-			}
-		}
-		if isDataSource {
-			accessor = fmt.Sprintf(".apply(v => v%s)", accessor)
-		}
-
-		g.gen(receiver, accessor)
 	case *config.UserVariable:
 		g.gen(tsName(v.Name, nil, nil, false))
 	default:
