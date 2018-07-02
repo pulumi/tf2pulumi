@@ -2,7 +2,6 @@
 
 ## TODO
 - comments/docs
-- locals: apply transform
 - modules
 - variables accesses:
 	- path
