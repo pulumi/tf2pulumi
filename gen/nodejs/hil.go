@@ -119,6 +119,8 @@ func (g *hilGenerator) genApplyArg(index int) {
 	sch, elements := v.Schemas, v.Elements
 	if r.Config.Mode == config.ManagedResourceMode {
 		sch, elements = sch.PropertySchemas(elements[0]), elements[1:]
+	} else if r.Provider.Config.Name == "http" {
+		elements = nil
 	}
 	for _, e := range elements {
 		isListElement := sch.Type().IsList()
@@ -248,10 +250,6 @@ func (g *hilGenerator) genVariableAccess(n *il.BoundVariableAccess) {
 		g.gen(localName(v.Name))
 	case *config.ResourceVariable:
 		r := n.ILNode.(*il.ResourceNode)
-		if r.Provider.Config.Name == "http" {
-			g.gen(resName(v.Type, v.Name))
-			return
-		}
 
 		// We only generate up to the "output" part of the path here: the apply transform will take care of the rest.
 		g.gen(resName(v.Type, v.Name))
