@@ -1,7 +1,6 @@
 package il
 
 import (
-	_ "log"
 	"os/exec"
 	"reflect"
 	"sort"

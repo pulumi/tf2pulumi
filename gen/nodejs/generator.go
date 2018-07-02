@@ -31,7 +31,7 @@ func cleanName(name string) string {
 }
 
 func localName(name string) string {
-	return cleanName(name)
+	return "local_" + cleanName(name)
 }
 
 func resName(typ, name string) string {

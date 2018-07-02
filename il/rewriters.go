@@ -3,18 +3,17 @@ package il
 import (
 	"github.com/hashicorp/hil/ast"
 	"github.com/hashicorp/terraform/config"
+	"github.com/pulumi/pulumi/pkg/util/contract"
 	"github.com/pulumi/pulumi-terraform/pkg/tfbridge"
 )
 
 type applyRewriter struct {
-	output *BoundOutput
+	root BoundExpr
 	applyArgs []BoundExpr
 }
 
 func (r *applyRewriter) rewriteBoundVariableAccess(n *BoundVariableAccess) (BoundNode, error) {
-	if r.output == nil {
-		return n, nil
-	}
+	contract.Assert(r.root != n)
 
 	_, ok := n.TFVar.(*config.ResourceVariable)
 	if !ok {
@@ -31,9 +30,10 @@ func (r *applyRewriter) rewriteBoundVariableAccess(n *BoundVariableAccess) (Boun
 	}, nil
 }
 
-func (r *applyRewriter) rewriteBoundOutput(n *BoundOutput) (BoundNode, error) {
-	r.output = nil
+func (r *applyRewriter) rewriteRoot(n BoundExpr) (BoundNode, error) {
+	contract.Require(n == r.root, "n")
 
+	r.root = nil
 	if len(r.applyArgs) == 0 {
 		return n, nil
 	}
@@ -48,34 +48,33 @@ func (r *applyRewriter) rewriteBoundOutput(n *BoundOutput) (BoundNode, error) {
 }
 
 func (r *applyRewriter) rewriteNode(n BoundNode) (BoundNode, error) {
-	switch n := n.(type) {
-	case *BoundVariableAccess:
-		return r.rewriteBoundVariableAccess(n)
-	case *BoundOutput:
-		return r.rewriteBoundOutput(n)
-	default:
-		return n, nil
+	if e, ok := n.(BoundExpr); ok {
+		if e == r.root {
+			return r.rewriteRoot(e)
+		}
+		if v, ok := e.(*BoundVariableAccess); ok {
+			return r.rewriteBoundVariableAccess(v)
+		}
 	}
+	return n, nil
 }
 
 func (r *applyRewriter) enterNode(n BoundNode) (BoundNode, error) {
-	switch n := n.(type) {
-	case *BoundOutput:
-		r.output, r.applyArgs = n, nil
-	case *BoundVariableAccess:
-		if r.output != nil {
-			break
-		}
+	e, ok := n.(BoundExpr)
+	if !ok || r.root != nil {
+		return n, nil
+	}
 
-		rv, ok := n.TFVar.(*config.ResourceVariable)
-		if !ok {
-			break
-		}
-
-		// If we're accessing a field of a data source or a nested field of a resource, we need to perform an apply.
-		// As such, we'll synthesize an output here.
-		if rv.Mode == config.DataResourceMode && len(n.Elements) > 0 || len(n.Elements) > 1 {
-			return r.enterNode(&BoundOutput{Exprs:[]BoundExpr{n}})
+	r.root, r.applyArgs = e, nil
+	if v, ok := n.(*BoundVariableAccess); ok {
+		rv, ok := v.TFVar.(*config.ResourceVariable)
+		if ok {
+			// If we're accessing a field of a data source or a nested field of a resource, we need to perform an
+			// apply. As such, we'll synthesize an output here.
+			if rv.Mode == config.DataResourceMode && len(v.Elements) > 0 || len(v.Elements) > 1 {
+				r.root = &BoundOutput{Exprs:[]BoundExpr{v}}
+				return r.root, nil
+			}
 		}
 	}
 	return n, nil

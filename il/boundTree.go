@@ -1,6 +1,9 @@
 package il
 
 import (
+	"fmt"
+	"io"
+
 	"github.com/hashicorp/hil/ast"
 	"github.com/hashicorp/terraform/config"
 	"github.com/pkg/errors"
@@ -45,9 +48,35 @@ func (t Type) ElementType() Type {
 	return t & elementTypeMask
 }
 
+type dumper struct {
+	w io.Writer
+	indent string
+}
+
+func (d *dumper) indented(f func()) {
+	indent := d.indent
+	d.indent += "    "
+	defer func() { d.indent = indent }()
+	f()
+}
+
+func (d *dumper) dump(vs ...interface{}) {
+	for _, v := range vs {
+		switch v := v.(type) {
+		case string:
+			fmt.Fprint(d.w, v)
+		case BoundNode:
+			v.dump(d)
+		default:
+			panic("unexpected type in dump")
+		}
+	}
+}
+
 type BoundNode interface {
 	Type() Type
 
+	dump(d *dumper)
 	isNode()
 }
 
@@ -67,6 +96,16 @@ func (n *BoundArithmetic) Type() Type {
 	return TypeNumber
 }
 
+func (n *BoundArithmetic) dump(d *dumper) {
+	d.dump("(", fmt.Sprintf("%v", n.HILNode.Op))
+	d.indented(func() {
+		for _, e := range n.Exprs {
+			d.dump("\n", d.indent, e)
+		}
+	})
+	d.dump("\n", d.indent, ")")
+}
+
 func (n *BoundArithmetic) isNode() {}
 func (n *BoundArithmetic) isExpr() {}
 
@@ -79,6 +118,16 @@ type BoundCall struct {
 
 func (n *BoundCall) Type() Type {
 	return n.ExprType
+}
+
+func (n *BoundCall) dump(d* dumper) {
+	d.dump("(call ", n.HILNode.Func)
+	d.indented(func() {
+		for _, e := range n.Args {
+			d.dump("\n", d.indent, e)
+		}
+	})
+	d.dump("\n", d.indent, ")")
 }
 
 func (n *BoundCall) isNode() {}
@@ -97,6 +146,16 @@ func (n *BoundConditional) Type() Type {
 	return n.ExprType
 }
 
+func (n *BoundConditional) dump(d *dumper) {
+	d.dump("(cond")
+	d.indented(func() {
+		d.dump("\n", d.indent, n.CondExpr)
+		d.dump("\n", d.indent, n.TrueExpr)
+		d.dump("\n", d.indent, n.FalseExpr)
+	})
+	d.dump("\n", d.indent, ")")
+}
+
 func (n *BoundConditional) isNode() {}
 func (n *BoundConditional) isExpr() {}
 
@@ -112,6 +171,15 @@ func (n *BoundIndex) Type() Type {
 	return n.ExprType
 }
 
+func (n *BoundIndex) dump(d *dumper) {
+	d.dump("(index")
+	d.indented(func() {
+		d.dump("\n", d.indent, n.TargetExpr)
+		d.dump("\n", d.indent, n.KeyExpr)
+	})
+	d.dump("\n", d.indent, ")")
+}
+
 func (n *BoundIndex) isNode() {}
 func (n *BoundIndex) isExpr() {}
 
@@ -122,6 +190,15 @@ type BoundLiteral struct {
 
 func (n *BoundLiteral) Type() Type {
 	return n.ExprType
+}
+
+func (n *BoundLiteral) dump(d *dumper) {
+	switch n.ExprType {
+	case TypeString:
+		d.dump(fmt.Sprintf("%q", n.Value))
+	default:
+		d.dump(fmt.Sprintf("%v", n.Value))
+	}
 }
 
 func (n *BoundLiteral) isNode() {}
@@ -135,6 +212,16 @@ type BoundOutput struct {
 
 func (n *BoundOutput) Type() Type {
 	return TypeString
+}
+
+func (n *BoundOutput) dump(d* dumper) {
+	d.dump("(output")
+	d.indented(func() {
+		for _, e := range n.Exprs {
+			d.dump("\n", d.indent, e)
+		}
+	})
+	d.dump("\n", d.indent, ")")
 }
 
 func (n *BoundOutput) isNode() {}
@@ -154,6 +241,10 @@ func (n *BoundVariableAccess) Type() Type {
 	return n.ExprType
 }
 
+func (n *BoundVariableAccess) dump(d* dumper) {
+	d.dump(fmt.Sprintf("(%s %T)", n.HILNode.Name, n.TFVar))
+}
+
 func (n *BoundVariableAccess) isNode() {}
 func (n *BoundVariableAccess) isExpr() {}
 
@@ -166,6 +257,16 @@ func (n *BoundListProperty) Type() Type {
 	return n.Schemas.ElemSchemas().Type().ListOf()
 }
 
+func (n *BoundListProperty) dump(d* dumper) {
+	d.dump("(list")
+	d.indented(func() {
+		for _, e := range n.Elements {
+			d.dump("\n", d.indent, e)
+		}
+	})
+	d.dump("\n", d.indent, ")")
+}
+
 func (n *BoundListProperty) isNode() {}
 
 type BoundMapProperty struct {
@@ -175,6 +276,16 @@ type BoundMapProperty struct {
 
 func (n *BoundMapProperty) Type() Type {
 	return TypeMap
+}
+
+func (n *BoundMapProperty) dump(d* dumper) {
+	d.dump("(map")
+	d.indented(func() {
+		for k, e := range n.Elements {
+			d.dump("\n", d.indent, k, ": ", e)
+		}
+	})
+	d.dump("\n", d.indent, ")")
 }
 
 func (n *BoundMapProperty) isNode() {}
@@ -367,4 +478,9 @@ func VisitBoundExpr(n BoundExpr, pre, post BoundNodeVisitor) (BoundExpr, error) 
 		return nil, err
 	}
 	return nn.(BoundExpr), nil
+}
+
+func DumpBoundNode(w io.Writer, e BoundNode) {
+	e.dump(&dumper{w: w})
+	fmt.Fprint(w, "\n")
 }
