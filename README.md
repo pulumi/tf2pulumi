@@ -2,7 +2,7 @@
 
 ## TODO
 - comments/docs
-- locals: namespacing, apply transform
+- locals: apply transform
 - modules
 - variables accesses:
 	- path

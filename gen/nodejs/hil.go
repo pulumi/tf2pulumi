@@ -61,9 +61,7 @@ func (g *hilGenerator) genArithmetic(n *il.BoundArithmetic) {
 }
 
 func (g *hilGenerator) genApplyOutput(n *il.BoundVariableAccess) {
-	rv := n.TFVar.(*config.ResourceVariable)
-
-	if rv.Multi && rv.Index == -1 {
+	if rv, ok := n.TFVar.(*config.ResourceVariable); ok && rv.Multi && rv.Index == -1 {
 		g.gen("pulumi.all(", n, ")")
 	} else {
 		g.gen(n)
@@ -107,38 +105,39 @@ func (g *hilGenerator) genApplyArg(index int) {
 	// Generate a reference to the parameter.
 	g.gen(fmt.Sprintf("__arg%d", index))
 
-	// Handle splats
-	rv := v.TFVar.(*config.ResourceVariable)
-	isSplat := rv.Multi && rv.Index == -1
-	if isSplat {
-		g.gen(".map(v => v")
-	}
-
 	// Generate any nested path.
-	r := v.ILNode.(*il.ResourceNode)
-	sch, elements := v.Schemas, v.Elements
-	if r.Config.Mode == config.ManagedResourceMode {
-		sch, elements = sch.PropertySchemas(elements[0]), elements[1:]
-	} else if r.Provider.Config.Name == "http" {
-		elements = nil
-	}
-	for _, e := range elements {
-		isListElement := sch.Type().IsList()
-		projectListElement := isListElement && tfbridge.IsMaxItemsOne(sch.TF, sch.Pulumi)
-
-		sch = sch.PropertySchemas(e)
-		if isListElement {
-			// If we're projecting the list element, just skip this path element entirely.
-			if !projectListElement {
-				g.gen(fmt.Sprintf("[%s]", e))
-			}
-		} else {
-			g.gen(fmt.Sprintf(".%s", tfbridge.TerraformToPulumiName(e, sch.TF, false)))
+	if rv, ok := v.TFVar.(*config.ResourceVariable); ok {
+		// Handle splats
+		isSplat := rv.Multi && rv.Index == -1
+		if isSplat {
+			g.gen(".map(v => v")
 		}
-	}
 
-	if isSplat {
-		g.gen(")")
+		r := v.ILNode.(*il.ResourceNode)
+		sch, elements := v.Schemas, v.Elements
+		if r.Config.Mode == config.ManagedResourceMode {
+			sch, elements = sch.PropertySchemas(elements[0]), elements[1:]
+		} else if r.Provider.Config.Name == "http" {
+			elements = nil
+		}
+		for _, e := range elements {
+			isListElement := sch.Type().IsList()
+			projectListElement := isListElement && tfbridge.IsMaxItemsOne(sch.TF, sch.Pulumi)
+
+			sch = sch.PropertySchemas(e)
+			if isListElement {
+				// If we're projecting the list element, just skip this path element entirely.
+				if !projectListElement {
+					g.gen(fmt.Sprintf("[%s]", e))
+				}
+			} else {
+				g.gen(fmt.Sprintf(".%s", tfbridge.TerraformToPulumiName(e, sch.TF, false)))
+			}
+		}
+
+		if isSplat {
+			g.gen(")")
+		}
 	}
 }
 

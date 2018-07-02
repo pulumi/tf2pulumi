@@ -60,7 +60,7 @@ type OutputNode struct {
 type LocalNode struct {
 	Config     *config.Local
 	Deps       []Node
-	Properties *BoundMapProperty
+	Value BoundNode
 }
 type VariableNode struct {
 	Config       *config.Variable
@@ -437,7 +437,16 @@ func (b *builder) buildLocal(l *LocalNode) error {
 	allDeps, _, err := b.buildDeps(deps, nil)
 	contract.Assert(err == nil)
 
-	l.Properties, l.Deps = props, allDeps
+	// In general, a local should have a single property named "value". If this is the case, promote it to the
+	// local's value.
+	value := BoundNode(props)
+	if len(props.Elements) == 1 {
+		if v, ok := props.Elements["value"]; ok {
+			value = v
+		}
+	}
+
+	l.Value, l.Deps = value, allDeps
 	return nil
 }
 

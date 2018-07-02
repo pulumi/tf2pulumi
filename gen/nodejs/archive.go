@@ -16,14 +16,14 @@ func (g *Generator) computeArchiveInputs(r *il.ResourceNode, indent, count strin
 	buf := &bytes.Buffer{}
 	buf.WriteString("{\n")
 	if sourceFile, ok := r.Properties.Elements["source_file"]; ok {
-		path, err := g.computeProperty(sourceFile, "", count)
+		path, _, err := g.computeProperty(sourceFile, "", count)
 		if err != nil {
 			return "", err
 		}
 
 		fmt.Fprintf(buf, "%s    %s: new pulumi.asset.FileAsset(%s),\n", indent, path, path)
 	} else if sourceDir, ok := r.Properties.Elements["source_dir"]; ok {
-		path, err := g.computeProperty(sourceDir, "", count)
+		path, _, err := g.computeProperty(sourceDir, "", count)
 		if err != nil {
 			return "", err
 		}
@@ -35,11 +35,11 @@ func (g *Generator) computeArchiveInputs(r *il.ResourceNode, indent, count strin
 			return "", errors.Errorf("missing source_filename property in archive %s", r.Config.Id())
 		}
 
-		path, err := g.computeProperty(filename, "", count)
+		path, _, err := g.computeProperty(filename, "", count)
 		if err != nil {
 			return "", err
 		}
-		content, err := g.computeProperty(sourceContent, "", count)
+		content, _, err := g.computeProperty(sourceContent, "", count)
 		if err != nil {
 			return "", err
 		}
@@ -66,11 +66,11 @@ func (g *Generator) computeArchiveInputs(r *il.ResourceNode, indent, count strin
 				return "", errors.Errorf("missing property \"filename\" in archive %s", r.Config.Id())
 			}
 
-			content, err := g.computeProperty(sourceContent, "", count)
+			content, _, err := g.computeProperty(sourceContent, "", count)
 			if err != nil {
 				return "", err
 			}
-			path, err := g.computeProperty(sourceFilename, "", count)
+			path, _, err := g.computeProperty(sourceFilename, "", count)
 			if err != nil {
 				return "", err
 			}
@@ -99,7 +99,7 @@ func (g *Generator) generateArchive(r *il.ResourceNode) error {
 		fmt.Printf("const %s = new pulumi.asset.AssetArchive(%s);\n", name, inputs)
 	} else {
 		// Otherwise we need to Generate multiple resources in a loop.
-		count, err := g.computeProperty(r.Count, "", "")
+		count, _, err := g.computeProperty(r.Count, "", "")
 		if err != nil {
 			return err
 		}

@@ -52,21 +52,32 @@ func tsName(tfName string, tfSchema *schema.Schema, schemaInfo *tfbridge.SchemaI
 	return tfbridge.TerraformToPulumiName(tfName, tfSchema, false)
 }
 
-func (g *Generator) computeProperty(prop il.BoundNode, indent, count string) (string, error) {
+func (g *Generator) computeProperty(prop il.BoundNode, indent, count string) (string, bool, error) {
+	containsOutputs := false
+	il.VisitBoundNode(prop, il.IdentityVisitor, func(n il.BoundNode) (il.BoundNode, error) {
+		if v, ok := n.(*il.BoundVariableAccess); ok {
+			switch v.TFVar.(type) {
+			case *config.LocalVariable, *config.ResourceVariable:
+				containsOutputs = true
+			}
+		}
+		return n, nil
+	})
+
 	p, err := il.RewriteAssets(prop)
 	if err != nil {
-		return "", err
+		return "", false, err
 	}
 
 	p, err = il.RewriteApplies(p)
 	if err != nil {
-		return "", err
+		return "", false, err
 	}
 
 	buf := &bytes.Buffer{}
 	generator := &propertyGenerator{w: buf, hil: &hilGenerator{w: buf, countIndex: count}, indent: indent}
 	generator.gen(p)
-	return buf.String(), nil
+	return buf.String(), containsOutputs, nil
 }
 
 func (g *Generator) GeneratePreamble(gr *il.Graph) error {
@@ -106,7 +117,7 @@ func (g *Generator) GenerateVariables(vs []*il.VariableNode) error {
 		if v.DefaultValue == nil {
 			fmt.Printf("config.require(\"%s\")", name)
 		} else {
-			def, err := g.computeProperty(v.DefaultValue, "", "")
+			def, _, err := g.computeProperty(v.DefaultValue, "", "")
 			if err != nil {
 				return err
 			}
@@ -121,12 +132,20 @@ func (g *Generator) GenerateVariables(vs []*il.VariableNode) error {
 }
 
 func (g *Generator) GenerateLocal(l *il.LocalNode) error {
-	props, err := g.computeProperty(l.Properties, "", "")
+	value, hasOutputs, err := g.computeProperty(l.Value, "", "")
 	if err != nil {
 		return err
 	}
 
-	fmt.Printf("const %s = %s;\n", localName(l.Config.Name), props)
+	fmt.Printf("const %s = ", localName(l.Config.Name))
+	if !hasOutputs {
+		fmt.Print("pulumi.output(")
+	}
+	fmt.Printf("%s", value)
+	if !hasOutputs {
+		fmt.Printf(")")
+	}
+	fmt.Printf(";\n")
 	return nil
 }
 
@@ -189,7 +208,7 @@ func (g *Generator) GenerateResource(r *il.ResourceNode) error {
 	qualifiedMemberName := fmt.Sprintf("%s%s.%s", provider, module, memberName)
 	if r.Count == nil {
 		// If count is nil, this is a single-instance resource.
-		inputs, err := g.computeProperty(r.Properties, "", "")
+		inputs, _, err := g.computeProperty(r.Properties, "", "")
 		if err != nil {
 			return err
 		}
@@ -202,11 +221,11 @@ func (g *Generator) GenerateResource(r *il.ResourceNode) error {
 		}
 	} else {
 		// Otherwise we need to Generate multiple resources in a loop.
-		count, err := g.computeProperty(r.Count, "", "")
+		count, _, err := g.computeProperty(r.Count, "", "")
 		if err != nil {
 			return err
 		}
-		inputs, err := g.computeProperty(r.Properties, "    ", "i")
+		inputs, _, err := g.computeProperty(r.Properties, "    ", "i")
 		if err != nil {
 			return err
 		}
@@ -237,7 +256,7 @@ func (g *Generator) GenerateOutputs(os []*il.OutputNode) error {
 
 	fmt.Printf("\n")
 	for _, o := range os {
-		outputs, err := g.computeProperty(o.Value, "", "")
+		outputs, _, err := g.computeProperty(o.Value, "", "")
 		if err != nil {
 			return err
 		}
