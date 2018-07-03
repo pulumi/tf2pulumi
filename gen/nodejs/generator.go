@@ -15,7 +15,7 @@ import (
 
 type Generator struct {
 	ProjectName string
-	graph       *il.Graph
+	module      *il.Graph
 }
 
 func cleanName(name string) string {
@@ -80,25 +80,45 @@ func (g *Generator) computeProperty(prop il.BoundNode, indent, count string) (st
 	return buf.String(), containsOutputs, nil
 }
 
-func (g *Generator) GeneratePreamble(gr *il.Graph) error {
-	// Stash the graph for later.
-	g.graph = gr
-
+func (g *Generator) GeneratePreamble(modules []*il.Graph) error {
 	// Emit imports for the various providers
 	fmt.Printf("import * as pulumi from \"@pulumi/pulumi\";\n")
-	for _, p := range gr.Providers {
-		switch p.Config.Name {
+
+	providers := make(map[string]struct{})
+	for _, m := range modules {
+		for _, p := range m.Providers {
+			providers[p.Config.Name] = struct{}{}
+		}
+	}
+
+	for p := range providers {
+		switch p {
 		case "archive":
 			// Nothing to do
 		case "http":
 			fmt.Printf("import rpn = require(\"request-promise-native\");\n")
 		default:
-			fmt.Printf("import * as %s from \"@pulumi/%s\";\n", p.Config.Name, p.Config.Name)
+			fmt.Printf("import * as %s from \"@pulumi/%s\";\n", p, p)
 		}
 	}
 	fmt.Printf("import * as fs from \"fs\";\n")
 	fmt.Printf("\n")
 
+	return nil
+}
+
+func (g *Generator) BeginModule(m *il.Graph) error {
+	if m.ModuleName != "" {
+		fmt.Printf("const mod_%s = function(mod_name: string, mod_args: any) {\n")
+	}
+	g.module = m
+	return nil
+}
+
+func (g *Generator) EndModule(m *il.Graph) error {
+	if m.ModuleName != "" {
+		fmt.Printf("\n}")
+	}
 	return nil
 }
 
@@ -147,6 +167,10 @@ func (g *Generator) GenerateLocal(l *il.LocalNode) error {
 	}
 	fmt.Printf(";\n")
 	return nil
+}
+
+func (g *Generator) GenerateModule(m *il.ModuleNode) error {
+	return errors.New("NYI: modules")
 }
 
 func (g *Generator) GenerateResource(r *il.ResourceNode) error {
@@ -214,7 +238,14 @@ func (g *Generator) GenerateResource(r *il.ResourceNode) error {
 		}
 
 		if r.Config.Mode == config.ManagedResourceMode {
-			fmt.Printf("const %s = new %s(\"%s\", %s%s);\n", name, qualifiedMemberName, r.Config.Name, inputs, explicitDeps)
+			resName := ""
+			if g.module.ModuleName == "" {
+				resName = fmt.Sprintf("\"%s\"", r.Config.Name)
+			} else {
+				resName = fmt.Sprintf("`${mod_name}_%s`", r.Config.Name)
+			}
+
+			fmt.Printf("const %s = new %s(%s, %s%s);\n", name, qualifiedMemberName, resName, inputs, explicitDeps)
 		} else {
 			// TODO: explicit dependencies
 			fmt.Printf("const %s = pulumi.output(%s(%s));\n", name, qualifiedMemberName, inputs)

@@ -166,7 +166,13 @@ func (b *propertyBinder) bindVariableAccess(n *ast.VariableAccess) (BoundExpr, e
 		exprType = TypeUnknown
 	case *config.ModuleVariable:
 		// "module."
-		return nil, errors.New("NYI: module variables")
+		m, ok := b.builder.modules[v.Name]
+		if !ok {
+			return nil, errors.Errorf("unknown module %v", v.Name)
+		}
+		ilNode = m
+
+		exprType = TypeUnknown
 	case *config.PathVariable:
 		// "path."
 		return nil, errors.New("NYI: path variables")

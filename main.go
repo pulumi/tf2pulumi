@@ -45,7 +45,7 @@ func main() {
 		os.Exit(-1)
 	}
 
-	if err = gen.Generate(g, &nodejs.Generator{ProjectName: "auto"}); err != nil {
+	if err = gen.Generate([]*il.Graph{g}, &nodejs.Generator{ProjectName: "auto"}); err != nil {
 		fmt.Fprintf(os.Stderr, "generation failed: %v\n", err)
 		os.Exit(-1)
 	}

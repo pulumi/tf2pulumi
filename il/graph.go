@@ -27,11 +27,19 @@ type Node interface {
 }
 
 type Graph struct {
+	ModuleName string
+	Modules   map[string]*ModuleNode
 	Providers map[string]*ProviderNode
 	Resources map[string]*ResourceNode
 	Outputs   map[string]*OutputNode
 	Locals    map[string]*LocalNode
 	Variables map[string]*VariableNode
+}
+
+type ModuleNode struct {
+	Config *config.Module
+	Deps []Node
+	Properties *BoundMapProperty
 }
 
 type ProviderNode struct {
@@ -65,6 +73,14 @@ type LocalNode struct {
 type VariableNode struct {
 	Config       *config.Variable
 	DefaultValue BoundNode
+}
+
+func (m *ModuleNode) Dependencies() []Node {
+	return m.Deps
+}
+
+func (m *ModuleNode) sortKey() string {
+	return "m" + m.Config.Name
 }
 
 func (p *ProviderNode) Dependencies() []Node {
@@ -138,6 +154,7 @@ func (v *VariableNode) sortKey() string {
 }
 
 type builder struct {
+	modules   map[string]*ModuleNode
 	providers map[string]*ProviderNode
 	resources map[string]*ResourceNode
 	outputs   map[string]*OutputNode
@@ -147,6 +164,7 @@ type builder struct {
 
 func newBuilder() *builder {
 	return &builder{
+		modules:   make(map[string]*ModuleNode),
 		providers: make(map[string]*ProviderNode),
 		resources: make(map[string]*ResourceNode),
 		outputs:   make(map[string]*OutputNode),
@@ -322,6 +340,18 @@ func getProviderInfo(p *ProviderNode) (*tfbridge.ProviderInfo, error) {
 	return &info, nil
 }
 
+func (b *builder) buildModule(m *ModuleNode) error {
+	props, deps, err := b.buildProperties(m.Config.RawConfig, Schemas{}, false)
+	if err != nil {
+		return err
+	}
+	allDeps, _, err := b.buildDeps(deps, nil)
+	contract.Assert(err == nil)
+
+	m.Properties, m.Deps = props, allDeps
+	return nil
+}
+
 func (b *builder) buildProvider(p *ProviderNode) error {
 	info, err := getProviderInfo(p)
 	if err != nil {
@@ -466,6 +496,9 @@ func BuildGraph(conf *config.Config) (*Graph, error) {
 	b := newBuilder()
 
 	// Next create our nodes.
+	for _, m := range conf.Modules {
+		b.modules[m.Name] = &ModuleNode{Config: m}
+	}
 	for _, p := range conf.ProviderConfigs {
 		b.providers[p.Name] = &ProviderNode{Config: p}
 	}
@@ -483,6 +516,11 @@ func BuildGraph(conf *config.Config) (*Graph, error) {
 	}
 
 	// Now translate each node's properties and connect any dependency edges.
+	for _, m := range b.modules {
+		if err := b.buildModule(m); err != nil {
+			return nil, err
+		}
+	}
 	for _, p := range b.providers {
 		if err := b.buildProvider(p); err != nil {
 			return nil, err
@@ -513,6 +551,7 @@ func BuildGraph(conf *config.Config) (*Graph, error) {
 
 	// put the graph together
 	return &Graph{
+		Modules:   b.modules,
 		Providers: b.providers,
 		Resources: b.resources,
 		Outputs:   b.outputs,

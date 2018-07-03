@@ -7,8 +7,13 @@ import (
 )
 
 type Generator interface {
-	GeneratePreamble(g *il.Graph) error
+	GeneratePreamble(gs []*il.Graph) error
+
+	BeginModule(g *il.Graph) error
+	EndModule(g *il.Graph) error
+
 	GenerateVariables(vs []*il.VariableNode) error
+	GenerateModule(m *il.ModuleNode) error
 	GenerateLocal(l *il.LocalNode) error
 	GenerateResource(r *il.ResourceNode) error
 	GenerateOutputs(os []*il.OutputNode) error
@@ -29,6 +34,8 @@ func generateNode(n il.Node, lang Generator, done map[il.Node]struct{}) error {
 	switch n := n.(type) {
 	case *il.LocalNode:
 		err = lang.GenerateLocal(n)
+	case *il.ModuleNode:
+		err = lang.GenerateModule(n)
 	case *il.ResourceNode:
 		err = lang.GenerateResource(n)
 	default:
@@ -42,7 +49,7 @@ func generateNode(n il.Node, lang Generator, done map[il.Node]struct{}) error {
 	return nil
 }
 
-func Generate(g *il.Graph, lang Generator) error {
+func generateModuleDef(g *il.Graph, lang Generator) error {
 	// We currently do not support multiple provider instantiations, so fail if any providers have dependencies on
 	// nodes that do not represent config vars.
 	for _, p := range g.Providers {
@@ -53,8 +60,7 @@ func Generate(g *il.Graph, lang Generator) error {
 		}
 	}
 
-	// Generate any necessary preamble.
-	if err := lang.GeneratePreamble(g); err != nil {
+	if err := lang.BeginModule(g); err != nil {
 		return err
 	}
 
@@ -74,7 +80,7 @@ func Generate(g *il.Graph, lang Generator) error {
 	}
 	todo := make([]il.Node, 0)
 
-	localKeys, resourceKeys := SortedKeys(g.Locals), SortedKeys(g.Resources)
+	localKeys, moduleKeys, resourceKeys := SortedKeys(g.Locals), SortedKeys(g.Modules), SortedKeys(g.Resources)
 	for _, k := range localKeys {
 		l := g.Locals[k]
 		if len(l.Deps) == 0 {
@@ -83,6 +89,16 @@ func Generate(g *il.Graph, lang Generator) error {
 			}
 		} else {
 			todo = append(todo, l)
+		}
+	}
+	for _, k := range moduleKeys {
+		m := g.Modules[k]
+		if len(m.Deps) == 0 {
+			if err := generateNode(m, lang, done); err != nil {
+				return err
+			}
+		} else {
+			todo = append(todo, m)
 		}
 	}
 	for _, k := range resourceKeys {
@@ -115,6 +131,22 @@ func Generate(g *il.Graph, lang Generator) error {
 	}
 	if err := lang.GenerateOutputs(outputs); err != nil {
 		return err
+	}
+
+	return lang.EndModule(g)
+}
+
+func Generate(modules []*il.Graph, lang Generator) error {
+	// Generate any necessary preamble.
+	if err := lang.GeneratePreamble(modules); err != nil {
+		return err
+	}
+
+	// Generate modules.
+	for _, g := range modules {
+		if err := generateModuleDef(g, lang); err != nil {
+			return err
+		}
 	}
 
 	return nil
