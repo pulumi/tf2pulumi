@@ -52,6 +52,10 @@ func tsName(tfName string, tfSchema *schema.Schema, schemaInfo *tfbridge.SchemaI
 	return tfbridge.TerraformToPulumiName(tfName, tfSchema, false)
 }
 
+func (g *Generator) isRoot() bool {
+	return len(g.module.Tree.Path()) == 0
+}
+
 func (g *Generator) computeProperty(prop il.BoundNode, indent, count string) (string, bool, error) {
 	containsOutputs := false
 	il.VisitBoundNode(prop, il.IdentityVisitor, func(n il.BoundNode) (il.BoundNode, error) {
@@ -108,17 +112,18 @@ func (g *Generator) GeneratePreamble(modules []*il.Graph) error {
 }
 
 func (g *Generator) BeginModule(m *il.Graph) error {
-	if m.ModuleName != "" {
-		fmt.Printf("const mod_%s = function(mod_name: string, mod_args: any) {\n")
-	}
 	g.module = m
+	if !g.isRoot() {
+		fmt.Printf("const new_mod_%s = function(mod_name: string, mod_args: pulumi.Inputs) {\n", cleanName(m.Tree.Name()))
+	}
 	return nil
 }
 
 func (g *Generator) EndModule(m *il.Graph) error {
-	if m.ModuleName != "" {
-		fmt.Printf("\n}")
+	if !g.isRoot() {
+		fmt.Printf("};\n")
 	}
+	g.module = nil
 	return nil
 }
 
@@ -128,21 +133,33 @@ func (g *Generator) GenerateVariables(vs []*il.VariableNode) error {
 		return nil
 	}
 
-	// Otherwise, new up a config object and declare the various vars.
-	fmt.Printf("const config = new pulumi.Config(\"%s\")\n", g.ProjectName)
+	// Otherwise, what we do depends on whether or not we're generating the root module. If we are, then we generate
+	// a config object and appropriate get/require calls; if we are not, we generate references into the module args.
+	isRoot := g.isRoot()
+	if isRoot {
+		fmt.Printf("const config = new pulumi.Config(\"%s\")\n", g.ProjectName)
+	}
 	for _, v := range vs {
 		name := tsName(v.Config.Name, nil, nil, false)
 
 		fmt.Printf("const %s = ", name)
 		if v.DefaultValue == nil {
-			fmt.Printf("config.require(\"%s\")", name)
+			if isRoot {
+				fmt.Printf("config.require(\"%s\")", name)
+			} else {
+				fmt.Printf("mod_args[\"%s\"]", name)
+			}
 		} else {
 			def, _, err := g.computeProperty(v.DefaultValue, "", "")
 			if err != nil {
 				return err
 			}
 
-			fmt.Printf("config.get(\"%s\") || %s", name, def)
+			if isRoot {
+				fmt.Printf("config.get(\"%s\") || %s", name, def)
+			} else {
+				fmt.Printf("mod_args[\"%s\"] || %s", name, def)
+			}
 		}
 		fmt.Printf(";\n")
 	}
@@ -170,7 +187,15 @@ func (g *Generator) GenerateLocal(l *il.LocalNode) error {
 }
 
 func (g *Generator) GenerateModule(m *il.ModuleNode) error {
-	return errors.New("NYI: modules")
+	// generate a call to the module constructor
+	args, _, err := g.computeProperty(m.Properties, "", "")
+	if err != nil {
+		return err
+	}
+
+	modName := cleanName(m.Config.Name)
+	fmt.Printf("const mod_%s = new_mod_%s(\"%s\", %s);\n", modName, modName, modName, args)
+	return nil
 }
 
 func (g *Generator) GenerateResource(r *il.ResourceNode) error {
@@ -239,7 +264,7 @@ func (g *Generator) GenerateResource(r *il.ResourceNode) error {
 
 		if r.Config.Mode == config.ManagedResourceMode {
 			resName := ""
-			if g.module.ModuleName == "" {
+			if len(g.module.Tree.Path()) == 0 {
 				resName = fmt.Sprintf("\"%s\"", r.Config.Name)
 			} else {
 				resName = fmt.Sprintf("`${mod_name}_%s`", r.Config.Name)
@@ -285,14 +310,26 @@ func (g *Generator) GenerateOutputs(os []*il.OutputNode) error {
 		return nil
 	}
 
+	isRoot := g.isRoot()
+
 	fmt.Printf("\n")
+	if !isRoot {
+		fmt.Printf("return {\n")
+	}
 	for _, o := range os {
 		outputs, _, err := g.computeProperty(o.Value, "", "")
 		if err != nil {
 			return err
 		}
 
-		fmt.Printf("export const %s = %s;\n", tsName(o.Config.Name, nil, nil, false), outputs)
+		if !isRoot {
+			fmt.Printf("%s: %s,\n", tsName(o.Config.Name, nil, nil, true), outputs)
+		} else {
+			fmt.Printf("export const %s = %s;\n", tsName(o.Config.Name, nil, nil, false), outputs)
+		}
+	}
+	if !isRoot {
+		fmt.Printf("};\n")
 	}
 	return nil
 }

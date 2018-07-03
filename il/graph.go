@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/hashicorp/terraform/config"
+	"github.com/hashicorp/terraform/config/module"
 	"github.com/hashicorp/terraform/helper/schema"
 	"github.com/mitchellh/mapstructure"
 	"github.com/pkg/errors"
@@ -27,7 +28,7 @@ type Node interface {
 }
 
 type Graph struct {
-	ModuleName string
+	Tree      *module.Tree
 	Modules   map[string]*ModuleNode
 	Providers map[string]*ProviderNode
 	Resources map[string]*ResourceNode
@@ -492,8 +493,10 @@ func (b *builder) buildVariable(v *VariableNode) error {
 	return nil
 }
 
-func BuildGraph(conf *config.Config) (*Graph, error) {
+func BuildGraph(tree *module.Tree) (*Graph, error) {
 	b := newBuilder()
+
+	conf := tree.Config()
 
 	// Next create our nodes.
 	for _, m := range conf.Modules {
@@ -551,6 +554,7 @@ func BuildGraph(conf *config.Config) (*Graph, error) {
 
 	// put the graph together
 	return &Graph{
+		Tree:      tree,
 		Modules:   b.modules,
 		Providers: b.providers,
 		Resources: b.resources,

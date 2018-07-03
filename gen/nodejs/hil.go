@@ -3,6 +3,7 @@ package nodejs
 import (
 	"bytes"
 	"fmt"
+	"strings"
 
 	"github.com/hashicorp/hil/ast"
 	"github.com/hashicorp/terraform/config"
@@ -247,6 +248,11 @@ func (g *hilGenerator) genVariableAccess(n *il.BoundVariableAccess) {
 		g.gen(g.countIndex)
 	case *config.LocalVariable:
 		g.gen(localName(v.Name))
+	case *config.ModuleVariable:
+		g.gen("mod_", cleanName(v.Name))
+		for _, e := range strings.Split(v.Field, ".") {
+			g.gen(".", tfbridge.TerraformToPulumiName(e, nil, false))
+		}
 	case *config.ResourceVariable:
 		r := n.ILNode.(*il.ResourceNode)
 
