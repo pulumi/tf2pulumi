@@ -23,37 +23,45 @@ func (g *propertyGenerator) indented(f func()) {
 func (g *propertyGenerator) genListProperty(n *il.BoundListProperty) {
 	elemType := n.Schemas.ElemSchemas().Type()
 
-	g.gen("[")
-	g.indented(func() {
-		for _, v := range n.Elements {
-			// TF flattens list elements that are themselves lists into the parent list.
-			//
-			// TODO: if there is a list element that is dynamically a list, that also needs to be flattened. This is
-			// only knowable at runtime and will require a helper.
-			if v.Type().IsList() {
-				g.gen("...")
+	if len(n.Elements) == 0 {
+		g.gen("[]")
+	} else {
+		g.gen("[")
+		g.indented(func() {
+			for _, v := range n.Elements {
+				// TF flattens list elements that are themselves lists into the parent list.
+				//
+				// TODO: if there is a list element that is dynamically a list, that also needs to be flattened. This is
+				// only knowable at runtime and will require a helper.
+				if v.Type().IsList() {
+					g.gen("...")
+				}
+				g.gen("\n", g.indent)
+				g.genCoercion(v, elemType)
+				g.gen(",")
 			}
-			g.gen("\n", g.indent)
-			g.genCoercion(v, elemType)
-			g.gen(",")
-		}
-	})
-	g.gen("\n", g.indent, "]")
+		})
+		g.gen("\n", g.indent, "]")
+	}
 }
 
 func (g *propertyGenerator) genMapProperty(n *il.BoundMapProperty) {
-	g.gen("{")
-	g.indented(func() {
-		for _, k := range gen.SortedKeys(n.Elements) {
-			v := n.Elements[k]
+	if len(n.Elements) == 0 {
+		g.gen("{}")
+	} else {
+		g.gen("{")
+		g.indented(func() {
+			for _, k := range gen.SortedKeys(n.Elements) {
+				v := n.Elements[k]
 
-			propSch := n.Schemas.PropertySchemas(k)
-			g.gen("\n", g.indent, tsName(k, propSch.TF, propSch.Pulumi, true), ": ")
-			g.genCoercion(v, propSch.Type())
-			g.gen(",")
-		}
-	})
-	g.gen("\n", g.indent, "}")
+				propSch := n.Schemas.PropertySchemas(k)
+				g.gen("\n", g.indent, tsName(k, propSch.TF, propSch.Pulumi, true), ": ")
+				g.genCoercion(v, propSch.Type())
+				g.gen(",")
+			}
+		})
+		g.gen("\n", g.indent, "}")
+	}
 }
 
 func (g *propertyGenerator) genCoercion(n il.BoundNode, toType il.Type) {

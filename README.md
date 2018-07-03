@@ -2,6 +2,8 @@
 
 ## TODO
 - comments/docs
+- data sources:
+	- explicit dependencies
 - modules
 - variables accesses:
 	- path
