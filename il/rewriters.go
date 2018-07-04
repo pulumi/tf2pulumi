@@ -12,9 +12,7 @@ type applyRewriter struct {
 	applyArgs []BoundExpr
 }
 
-func (r *applyRewriter) rewriteBoundVariableAccess(n *BoundVariableAccess) (BoundNode, error) {
-	contract.Assert(r.root != n)
-
+func (r *applyRewriter) rewriteBoundVariableAccess(n *BoundVariableAccess) (BoundExpr, error) {
 	if !n.Type().IsOutput() {
 		return n, nil
 	}
@@ -48,10 +46,25 @@ func (r *applyRewriter) rewriteRoot(n BoundExpr) (BoundNode, error) {
 
 func (r *applyRewriter) rewriteNode(n BoundNode) (BoundNode, error) {
 	if e, ok := n.(BoundExpr); ok {
+		v, isVar := e.(*BoundVariableAccess)
 		if e == r.root {
+			if isVar {
+				rv, ok := v.TFVar.(*config.ResourceVariable)
+				if ok {
+					// If we're accessing a field of a data source or a nested field of a resource, we need to perform an
+					// apply. As such, we'll synthesize an output here.
+					if rv.Mode == config.DataResourceMode && len(v.Elements) > 0 || len(v.Elements) > 1 {
+						ee, err := r.rewriteBoundVariableAccess(v)
+						if err != nil {
+							return nil, err
+						}
+						e, r.root = ee, ee
+					}
+				}
+			}
 			return r.rewriteRoot(e)
 		}
-		if v, ok := e.(*BoundVariableAccess); ok {
+		if isVar {
 			return r.rewriteBoundVariableAccess(v)
 		}
 	}
@@ -60,21 +73,8 @@ func (r *applyRewriter) rewriteNode(n BoundNode) (BoundNode, error) {
 
 func (r *applyRewriter) enterNode(n BoundNode) (BoundNode, error) {
 	e, ok := n.(BoundExpr)
-	if !ok || r.root != nil {
-		return n, nil
-	}
-
-	r.root, r.applyArgs = e, nil
-	if v, ok := n.(*BoundVariableAccess); ok {
-		rv, ok := v.TFVar.(*config.ResourceVariable)
-		if ok {
-			// If we're accessing a field of a data source or a nested field of a resource, we need to perform an
-			// apply. As such, we'll synthesize an output here.
-			if rv.Mode == config.DataResourceMode && len(v.Elements) > 0 || len(v.Elements) > 1 {
-				r.root = &BoundOutput{Exprs:[]BoundExpr{v}}
-				return r.root, nil
-			}
-		}
+	if ok && r.root == nil {
+		r.root, r.applyArgs = e, nil
 	}
 	return n, nil
 }

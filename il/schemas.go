@@ -66,8 +66,6 @@ func (s Schemas) Type() Type {
 		default:
 			return TypeUnknown
 		}
-	} else if s.TFRes != nil {
-		return TypeMap
 	}
 
 	return TypeUnknown

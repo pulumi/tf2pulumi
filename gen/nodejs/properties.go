@@ -8,8 +8,6 @@ import (
 )
 
 func (g *Generator) genListProperty(w io.Writer, n *il.BoundListProperty) {
-	elemType := n.Schemas.ElemSchemas().Type()
-
 	if len(n.Elements) == 0 {
 		g.gen(w, "[]")
 	} else {
@@ -23,9 +21,7 @@ func (g *Generator) genListProperty(w io.Writer, n *il.BoundListProperty) {
 				if v.Type().IsList() {
 					g.gen(w, "...")
 				}
-				g.gen(w, "\n", g.indent)
-				g.genCoercion(w, v, elemType)
-				g.gen(w, ",")
+				g.genf(w, "\n%s%v,", g.indent, v)
 			}
 		})
 		g.gen(w, "\n", g.indent, "]")
@@ -39,60 +35,10 @@ func (g *Generator) genMapProperty(w io.Writer, n *il.BoundMapProperty) {
 		g.gen(w, "{")
 		g.indented(func() {
 			for _, k := range gen.SortedKeys(n.Elements) {
-				v := n.Elements[k]
-
 				propSch := n.Schemas.PropertySchemas(k)
-				g.gen(w, "\n", g.indent, tsName(k, propSch.TF, propSch.Pulumi, true), ": ")
-				g.genCoercion(w, v, propSch.Type())
-				g.gen(w, ",")
+				g.genf(w, "\n%s%s: %v,", g.indent, tsName(k, propSch.TF, propSch.Pulumi, true), n.Elements[k])
 			}
 		})
 		g.gen(w, "\n", g.indent, "}")
 	}
-}
-
-func (g *Generator) genCoercion(w io.Writer, n il.BoundNode, toType il.Type) {
-	// TODO: we really need dynamic coercions here.
-	if n.Type() == toType {
-		g.gen(w, n)
-		return
-	}
-
-	switch n.Type() {
-	case il.TypeBool:
-		if toType == il.TypeString {
-			if lit, ok := n.(*il.BoundLiteral); ok {
-				g.genf(w, "\"%v\"", lit.Value)
-			} else {
-				g.genf(w, "`${%v}`", n)
-			}
-			return
-		}
-	case il.TypeNumber:
-		if toType == il.TypeString {
-			if lit, ok := n.(*il.BoundLiteral); ok {
-				g.genf(w, "\"%f\"", lit.Value)
-			} else {
-				g.genf(w, "`${%v}`", n)
-			}
-			return
-		}
-	case il.TypeString:
-		switch toType {
-		case il.TypeBool:
-			if lit, ok := n.(*il.BoundLiteral); ok {
-				g.genf(w, "%v", lit.Value.(string) == "true")
-			} else {
-				g.genf(w, "(%v === \"true\")", n)
-			}
-			return
-		case il.TypeNumber:
-			g.genf(w, "Number.parseFloat(%v)", n)
-			return
-		}
-	}
-
-	// If we get here, we weren't able to genereate a coercion. Just generate the node. This is questionable behavior
-	// at best.
-	g.gen(w, n)
 }

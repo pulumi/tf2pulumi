@@ -136,6 +136,46 @@ func (g *Generator) genApplyArg(w io.Writer, index int) {
 	}
 }
 
+func (g *Generator) genCoercion(w io.Writer, n il.BoundExpr, toType il.Type) {
+	switch n.Type() {
+	case il.TypeBool:
+		if toType == il.TypeString {
+			if lit, ok := n.(*il.BoundLiteral); ok {
+				g.genf(w, "\"%v\"", lit.Value)
+			} else {
+				g.genf(w, "`${%v}`", n)
+			}
+			return
+		}
+	case il.TypeNumber:
+		if toType == il.TypeString {
+			if lit, ok := n.(*il.BoundLiteral); ok {
+				g.genf(w, "\"%f\"", lit.Value)
+			} else {
+				g.genf(w, "`${%v}`", n)
+			}
+			return
+		}
+	case il.TypeString:
+		switch toType {
+		case il.TypeBool:
+			if lit, ok := n.(*il.BoundLiteral); ok {
+				g.genf(w, "%v", lit.Value.(string) == "true")
+			} else {
+				g.genf(w, "(%v === \"true\")", n)
+			}
+			return
+		case il.TypeNumber:
+			g.genf(w, "Number.parseFloat(%v)", n)
+			return
+		}
+	}
+
+	// If we get here, we weren't able to genereate a coercion. Just generate the node. This is questionable behavior
+	// at best.
+	g.gen(w, n)
+}
+
 func (g *Generator) genCall(w io.Writer, n *il.BoundCall) {
 	switch n.HILNode.Func {
 	case "__apply":
@@ -155,6 +195,8 @@ func (g *Generator) genCall(w io.Writer, n *il.BoundCall) {
 		g.genf(w, "new pulumi.asset.FileArchive(%v)", arg)
 	case "__asset":
 		g.genf(w, "new pulumi.asset.FileAsset(%v)", n.Args[0])
+	case "__coerce":
+		g.genCoercion(w, n.Args[0], n.Type())
 	case "base64decode":
 		g.genf(w, "Buffer.from(%v, \"base64\").toString()", n.Args[0])
 	case "base64encode":

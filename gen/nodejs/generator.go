@@ -88,6 +88,11 @@ func (g *Generator) computeProperty(prop il.BoundNode, indent, count string) (st
 		return "", false, err
 	}
 
+	p, err = addCoercions(p)
+	if err != nil {
+		return "", false, err
+	}
+
 	p, err = il.RewriteApplies(p)
 	if err != nil {
 		return "", false, err
@@ -385,8 +390,8 @@ func (g *Generator) gen(w io.Writer, vs ...interface{}) {
 
 func (g *Generator) genf(w io.Writer, format string, args ...interface{}) {
 	for i := range args {
-		if expr, ok := args[i].(il.BoundExpr); ok {
-			args[i] = gen.FormatFunc(func(f fmt.State, c rune) { g.gen(f, expr) })
+		if node, ok := args[i].(il.BoundNode); ok {
+			args[i] = gen.FormatFunc(func(f fmt.State, c rune) { g.gen(f, node) })
 		}
 	}
 	fmt.Fprintf(w, format, args...)

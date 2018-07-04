@@ -48,6 +48,32 @@ func (t Type) ElementType() Type {
 	return t & elementTypeMask
 }
 
+func (t Type) String() string {
+	s := "invalid"
+	switch t.ElementType() {
+	case TypeBool:
+		s = "bool"
+	case TypeString:
+		s = "string"
+	case TypeNumber:
+		s = "number"
+	case TypeMap:
+		s = "map"
+	case TypeUnknown:
+		s = "unknown"
+	default:
+		contract.Failf("unknown element type")
+	}
+	if t.IsList() {
+		s = fmt.Sprintf("list<%s>", s)
+	}
+	if t.IsOutput() {
+		s = fmt.Sprintf("output<%s>", s)
+	}
+	return s
+
+}
+
 type dumper struct {
 	w io.Writer
 	indent string
@@ -97,7 +123,7 @@ func (n *BoundArithmetic) Type() Type {
 }
 
 func (n *BoundArithmetic) dump(d *dumper) {
-	d.dump("(", fmt.Sprintf("%v", n.HILNode.Op))
+	d.dump("(", fmt.Sprintf("%v %v", n.Type(), n.HILNode.Op))
 	d.indented(func() {
 		for _, e := range n.Exprs {
 			d.dump("\n", d.indent, e)
@@ -121,7 +147,7 @@ func (n *BoundCall) Type() Type {
 }
 
 func (n *BoundCall) dump(d* dumper) {
-	d.dump("(call ", n.HILNode.Func)
+	d.dump("(call ", fmt.Sprintf("%v %s", n.Type(), n.HILNode.Func))
 	d.indented(func() {
 		for _, e := range n.Args {
 			d.dump("\n", d.indent, e)
@@ -147,7 +173,7 @@ func (n *BoundConditional) Type() Type {
 }
 
 func (n *BoundConditional) dump(d *dumper) {
-	d.dump("(cond")
+	d.dump("(cond ", fmt.Sprintf("%v", n.Type()))
 	d.indented(func() {
 		d.dump("\n", d.indent, n.CondExpr)
 		d.dump("\n", d.indent, n.TrueExpr)
@@ -172,7 +198,7 @@ func (n *BoundIndex) Type() Type {
 }
 
 func (n *BoundIndex) dump(d *dumper) {
-	d.dump("(index")
+	d.dump("(index ", fmt.Sprintf("%v", n.Type()))
 	d.indented(func() {
 		d.dump("\n", d.indent, n.TargetExpr)
 		d.dump("\n", d.indent, n.KeyExpr)
@@ -215,7 +241,7 @@ func (n *BoundOutput) Type() Type {
 }
 
 func (n *BoundOutput) dump(d* dumper) {
-	d.dump("(output")
+	d.dump("(output ", fmt.Sprintf("%v", n.Type()))
 	d.indented(func() {
 		for _, e := range n.Exprs {
 			d.dump("\n", d.indent, e)
@@ -242,7 +268,7 @@ func (n *BoundVariableAccess) Type() Type {
 }
 
 func (n *BoundVariableAccess) dump(d* dumper) {
-	d.dump(fmt.Sprintf("(%s %T)", n.HILNode.Name, n.TFVar))
+	d.dump(fmt.Sprintf("(%s %s %T)", n.HILNode.Name, n.Type(), n.TFVar))
 }
 
 func (n *BoundVariableAccess) isNode() {}
@@ -258,7 +284,7 @@ func (n *BoundListProperty) Type() Type {
 }
 
 func (n *BoundListProperty) dump(d* dumper) {
-	d.dump("(list")
+	d.dump("(list ", fmt.Sprintf("%v", n.Type()))
 	d.indented(func() {
 		for _, e := range n.Elements {
 			d.dump("\n", d.indent, e)
@@ -279,7 +305,7 @@ func (n *BoundMapProperty) Type() Type {
 }
 
 func (n *BoundMapProperty) dump(d* dumper) {
-	d.dump("(map")
+	d.dump("(map ", fmt.Sprintf("%v", n.Type()))
 	d.indented(func() {
 		for k, e := range n.Elements {
 			d.dump("\n", d.indent, k, ": ", e)
