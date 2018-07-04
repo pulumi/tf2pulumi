@@ -1,25 +1,19 @@
 package nodejs
 
 import (
-	"bytes"
 	"fmt"
+	"io"
 	"strings"
 
 	"github.com/hashicorp/hil/ast"
 	"github.com/hashicorp/terraform/config"
-	"github.com/pulumi/pulumi-terraform/pkg/tfbridge"
 	"github.com/pulumi/pulumi/pkg/util/contract"
+	"github.com/pulumi/pulumi-terraform/pkg/tfbridge"
 
 	"github.com/pgavlin/firewalker/il"
 )
 
-type hilGenerator struct {
-	w          *bytes.Buffer
-	countIndex string
-	applyArgs  []il.BoundExpr
-}
-
-func (g *hilGenerator) genArithmetic(n *il.BoundArithmetic) {
+func (g *Generator) genArithmetic(w io.Writer, n *il.BoundArithmetic) {
 	op := ""
 	switch n.HILNode.Op {
 	case ast.ArithmeticOpAdd:
@@ -51,67 +45,67 @@ func (g *hilGenerator) genArithmetic(n *il.BoundArithmetic) {
 	}
 	op = fmt.Sprintf(" %s ", op)
 
-	g.gen("(")
+	g.gen(w, "(")
 	for i, n := range n.Exprs {
 		if i != 0 {
-			g.gen(op)
+			g.gen(w, op)
 		}
-		g.gen(n)
+		g.gen(w, n)
 	}
-	g.gen(")")
+	g.gen(w, ")")
 }
 
-func (g *hilGenerator) genApplyOutput(n *il.BoundVariableAccess) {
+func (g *Generator) genApplyOutput(w io.Writer, n *il.BoundVariableAccess) {
 	if rv, ok := n.TFVar.(*config.ResourceVariable); ok && rv.Multi && rv.Index == -1 {
-		g.gen("pulumi.all(", n, ")")
+		g.genf(w, "pulumi.all(%v)", n)
 	} else {
-		g.gen(n)
+		g.gen(w, n)
 	}
 }
 
-func (g *hilGenerator) genApply(n *il.BoundCall) {
+func (g *Generator) genApply(w io.Writer, n *il.BoundCall) {
 	g.applyArgs = n.Args[:len(n.Args)-1]
 	then := n.Args[len(n.Args)-1]
 
 	if len(g.applyArgs) == 1 {
-		g.genApplyOutput(g.applyArgs[0].(*il.BoundVariableAccess))
-		g.gen(".apply(__arg0 => ", then, ")")
+		g.genApplyOutput(w, g.applyArgs[0].(*il.BoundVariableAccess))
+		g.genf(w, ".apply(__arg0 => %v)", then)
 	} else {
-		g.gen("pulumi.all([")
+		g.gen(w, "pulumi.all([")
 		for i, o := range g.applyArgs {
 			if i > 0 {
-				g.gen(", ")
+				g.gen(w, ", ")
 			}
-			g.genApplyOutput(o.(*il.BoundVariableAccess))
+			g.genApplyOutput(w, o.(*il.BoundVariableAccess))
 		}
-		g.gen("]).apply(([")
+		g.gen(w, "]).apply(([")
 		for i := range g.applyArgs {
 			if i > 0 {
-				g.gen(", ")
+				g.gen(w, ", ")
 			}
-			g.gen(fmt.Sprintf("__arg%d", i))
+			g.genf(w, "__arg%d", i)
 		}
-		g.gen("]) => ", then, ")")
+		g.gen(w, "]) => ", then, ")")
 	}
 
 	g.applyArgs = nil
 }
 
-func (g *hilGenerator) genApplyArg(index int) {
+func (g *Generator) genApplyArg(w io.Writer, index int) {
 	contract.Assert(g.applyArgs != nil)
 
 	// Extract the variable reference.
 	v := g.applyArgs[index].(*il.BoundVariableAccess)
 
 	// Generate a reference to the parameter.
-	g.gen(fmt.Sprintf("__arg%d", index))
+	g.genf(w, "__arg%d", index)
 
 	// Generate any nested path.
 	if rv, ok := v.TFVar.(*config.ResourceVariable); ok {
 		// Handle splats
 		isSplat := rv.Multi && rv.Index == -1
 		if isSplat {
-			g.gen(".map(v => v")
+			g.gen(w, ".map(v => v")
 		}
 
 		r := v.ILNode.(*il.ResourceNode)
@@ -129,137 +123,137 @@ func (g *hilGenerator) genApplyArg(index int) {
 			if isListElement {
 				// If we're projecting the list element, just skip this path element entirely.
 				if !projectListElement {
-					g.gen(fmt.Sprintf("[%s]", e))
+					g.genf(w, "[%s]", e)
 				}
 			} else {
-				g.gen(fmt.Sprintf(".%s", tfbridge.TerraformToPulumiName(e, sch.TF, false)))
+				g.genf(w, ".%s", tfbridge.TerraformToPulumiName(e, sch.TF, false))
 			}
 		}
 
 		if isSplat {
-			g.gen(")")
+			g.gen(w, ")")
 		}
 	}
 }
 
-func (g *hilGenerator) genCall(n *il.BoundCall) {
+func (g *Generator) genCall(w io.Writer, n *il.BoundCall) {
 	switch n.HILNode.Func {
 	case "__apply":
-		g.genApply(n)
+		g.genApply(w, n)
 	case "__applyArg":
-		g.genApplyArg(n.Args[0].(*il.BoundLiteral).Value.(int))
+		g.genApplyArg(w, n.Args[0].(*il.BoundLiteral).Value.(int))
 	case "__archive":
 		arg := n.Args[0]
 		if v, ok := arg.(*il.BoundVariableAccess); ok {
 			if r, ok := v.ILNode.(*il.ResourceNode); ok && r.Provider.Config.Name == "archive" {
 				// Just generate a reference to the asset itself.
-				g.gen(resName(r.Config.Type, r.Config.Name))
+				g.gen(w, resName(r.Config.Type, r.Config.Name))
 				return
 			}
 		}
 
-		g.gen("new pulumi.asset.FileArchive(", arg, ")")
+		g.genf(w, "new pulumi.asset.FileArchive(%v)", arg)
 	case "__asset":
-		g.gen("new pulumi.asset.FileAsset(", n.Args[0], ")")
+		g.genf(w, "new pulumi.asset.FileAsset(%v)", n.Args[0])
 	case "base64decode":
-		g.gen("Buffer.from(", n.Args[0], ", \"base64\").toString()")
+		g.genf(w, "Buffer.from(%v, \"base64\").toString()", n.Args[0])
 	case "base64encode":
-		g.gen("Buffer.from(", n.Args[0], ").toString(\"base64\")")
+		g.genf(w, "Buffer.from(%v).toString(\"base64\")", n.Args[0])
 	case "chomp":
-		g.gen(n.Args[0], ".replace(/(\\n|\\r\\n)*$/, \"\")")
+		g.genf(w, "%v.replace(/(\\n|\\r\\n)*$/, \"\")", n.Args[0])
 	case "element":
-		g.gen(n.Args[0], "[", n.Args[1], "]")
+		g.genf(w, "%v[%v]", n.Args[0], n.Args[1])
 	case "file":
-		g.gen("fs.readFileSync(", n.Args[0], ", \"utf-8\")")
+		g.genf(w, "fs.readFileSync(%v, \"utf-8\")", n.Args[0])
 	case "list":
-		g.gen("[")
+		g.gen(w, "[")
 		for i, e := range n.Args {
 			if i > 0 {
-				g.gen(", ")
+				g.gen(w, ", ")
 			}
-			g.gen(e)
+			g.gen(w, e)
 		}
-		g.gen("]")
+		g.gen(w, "]")
 	case "lookup":
 		hasDefault := len(n.Args) == 3
 		if hasDefault {
-			g.gen("(")
+			g.gen(w, "(")
 		}
-		g.gen("(<any>", n.Args[0], ")[", n.Args[1], "]")
+		g.genf(w, "(<any>%v)[%v]", n.Args[0], n.Args[1])
 		if hasDefault {
-			g.gen(" || ", n.Args[2], ")")
+			g.genf(w, " || %v)", n.Args[2])
 		}
 	case "map":
 		contract.Assert(len(n.Args) % 2 == 0)
-		g.gen("{")
+		g.gen(w, "{")
 		for i := 0; i < len(n.Args); i += 2 {
 			if i > 0 {
-				g.gen(", ")
+				g.gen(w, ", ")
 			}
 			if lit, ok := n.Args[i].(*il.BoundLiteral); ok && lit.Type() == il.TypeString {
-				g.gen(lit)
+				g.gen(w, lit)
 			} else {
-				g.gen("[", n.Args[i], "]")
+				g.genf(w, "[%v]", n.Args[i])
 			}
-			g.gen(": ", n.Args[i+1])
+			g.genf(w, ": %v", n.Args[i+1])
 		}
-		g.gen("}")
+		g.gen(w, "}")
 	case "split":
-		g.gen(n.Args[1], ".split(", n.Args[0], ")")
+		g.genf(w, "%v.split(%v)", n.Args[1], n.Args[0])
 	default:
 		contract.Failf("unexpected function in genCall: %v", n.HILNode.Func)
 	}
 }
 
-func (g *hilGenerator) genConditional(n *il.BoundConditional) {
-	g.gen("(", n.CondExpr, " ? ", n.TrueExpr, " : ", n.FalseExpr, ")")
+func (g *Generator) genConditional(w io.Writer, n *il.BoundConditional) {
+	g.genf(w, "(%v ? %v : %v)", n.CondExpr, n.TrueExpr, n.FalseExpr)
 }
 
-func (g *hilGenerator) genIndex(n *il.BoundIndex) {
-	g.gen(n.TargetExpr, "[", n.KeyExpr, "]")
+func (g *Generator) genIndex(w io.Writer, n *il.BoundIndex) {
+	g.genf(w, "%v[%v]", n.TargetExpr, n.KeyExpr)
 }
 
-func (g *hilGenerator) genLiteral(n *il.BoundLiteral) {
+func (g *Generator) genLiteral(w io.Writer, n *il.BoundLiteral) {
 	switch n.ExprType {
 	case il.TypeBool, il.TypeNumber:
-		fmt.Fprintf(g.w, "%v", n.Value)
+		g.genf(w, "%v", n.Value)
 	case il.TypeString:
-		fmt.Fprintf(g.w, "%q", n.Value)
+		g.genf(w, "%q", n.Value)
 	default:
 		contract.Failf("unexpected literal type in genLiteral: %v", n.ExprType)
 	}
 }
 
-func (g *hilGenerator) genOutput(n *il.BoundOutput) {
-	g.gen("`")
+func (g *Generator) genOutput(w io.Writer, n *il.BoundOutput) {
+	g.gen(w, "`")
 	for _, s := range n.Exprs {
 		if lit, ok := s.(*il.BoundLiteral); ok && lit.ExprType == il.TypeString {
-			g.gen(lit.Value.(string))
+			g.gen(w, lit.Value.(string))
 		} else {
-			g.gen("${", s, "}")
+			g.genf(w, "${%v}", s)
 		}
 	}
-	g.gen("`")
+	g.gen(w, "`")
 }
 
-func (g *hilGenerator) genVariableAccess(n *il.BoundVariableAccess) {
+func (g *Generator) genVariableAccess(w io.Writer, n *il.BoundVariableAccess) {
 	switch v := n.TFVar.(type) {
 	case *config.CountVariable:
-		g.gen(g.countIndex)
+		g.gen(w, g.countIndex)
 	case *config.LocalVariable:
-		g.gen(localName(v.Name))
+		g.gen(w, localName(v.Name))
 	case *config.ModuleVariable:
-		g.gen("mod_", cleanName(v.Name))
+		g.genf(w, "mod_%s", cleanName(v.Name))
 		for _, e := range strings.Split(v.Field, ".") {
-			g.gen(".", tfbridge.TerraformToPulumiName(e, nil, false))
+			g.genf(w, ".%s", tfbridge.TerraformToPulumiName(e, nil, false))
 		}
 	case *config.ResourceVariable:
 		r := n.ILNode.(*il.ResourceNode)
 
 		// We only generate up to the "output" part of the path here: the apply transform will take care of the rest.
-		g.gen(resName(v.Type, v.Name))
+		g.gen(w, resName(v.Type, v.Name))
 		if v.Multi && v.Index != -1 {
-			g.gen(fmt.Sprintf("[%d]", v.Index))
+			g.genf(w, "[%d]", v.Index)
 		}
 
 		// A managed resource is not itself an output: instead, it is a bag of outputs. As such, we must generate the
@@ -271,41 +265,16 @@ func (g *hilGenerator) genVariableAccess(n *il.BoundVariableAccess) {
 			// Handle splats
 			isSplat := v.Multi && v.Index == -1
 			if isSplat {
-				g.gen(".map(v => v")
+				g.gen(w, ".map(v => v")
 			}
-			g.gen(fmt.Sprintf(".%s", tfbridge.TerraformToPulumiName(element, elementSch.TF, false)))
+			g.genf(w, ".%s", tfbridge.TerraformToPulumiName(element, elementSch.TF, false))
 			if isSplat {
-				g.gen(")")
+				g.gen(w, ")")
 			}
 		}
 	case *config.UserVariable:
-		g.gen(tsName(v.Name, nil, nil, false))
+		g.gen(w, tsName(v.Name, nil, nil, false))
 	default:
 		contract.Failf("unexpected TF var type in genVariableAccess: %T", n.TFVar)
-	}
-}
-
-func (g *hilGenerator) gen(vs ...interface{}) {
-	for _, v := range vs {
-		switch v := v.(type) {
-		case string:
-			g.w.WriteString(v)
-		case *il.BoundArithmetic:
-			g.genArithmetic(v)
-		case *il.BoundCall:
-			g.genCall(v)
-		case *il.BoundConditional:
-			g.genConditional(v)
-		case *il.BoundIndex:
-			g.genIndex(v)
-		case *il.BoundLiteral:
-			g.genLiteral(v)
-		case *il.BoundOutput:
-			g.genOutput(v)
-		case *il.BoundVariableAccess:
-			g.genVariableAccess(v)
-		default:
-			contract.Failf("unexpected type in gen: %T", v)
-		}
 	}
 }

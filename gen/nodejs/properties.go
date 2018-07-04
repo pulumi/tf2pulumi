@@ -1,32 +1,19 @@
 package nodejs
 
 import (
-	"bytes"
-	"strconv"
+	"io"
 
 	"github.com/pgavlin/firewalker/gen"
 	"github.com/pgavlin/firewalker/il"
 )
 
-type propertyGenerator struct {
-	w      *bytes.Buffer
-	hil    *hilGenerator
-	indent string
-}
-
-func (g *propertyGenerator) indented(f func()) {
-	g.indent += "    "
-	f()
-	g.indent = g.indent[:len(g.indent)-4]
-}
-
-func (g *propertyGenerator) genListProperty(n *il.BoundListProperty) {
+func (g *Generator) genListProperty(w io.Writer, n *il.BoundListProperty) {
 	elemType := n.Schemas.ElemSchemas().Type()
 
 	if len(n.Elements) == 0 {
-		g.gen("[]")
+		g.gen(w, "[]")
 	} else {
-		g.gen("[")
+		g.gen(w, "[")
 		g.indented(func() {
 			for _, v := range n.Elements {
 				// TF flattens list elements that are themselves lists into the parent list.
@@ -34,40 +21,40 @@ func (g *propertyGenerator) genListProperty(n *il.BoundListProperty) {
 				// TODO: if there is a list element that is dynamically a list, that also needs to be flattened. This is
 				// only knowable at runtime and will require a helper.
 				if v.Type().IsList() {
-					g.gen("...")
+					g.gen(w, "...")
 				}
-				g.gen("\n", g.indent)
-				g.genCoercion(v, elemType)
-				g.gen(",")
+				g.gen(w, "\n", g.indent)
+				g.genCoercion(w, v, elemType)
+				g.gen(w, ",")
 			}
 		})
-		g.gen("\n", g.indent, "]")
+		g.gen(w, "\n", g.indent, "]")
 	}
 }
 
-func (g *propertyGenerator) genMapProperty(n *il.BoundMapProperty) {
+func (g *Generator) genMapProperty(w io.Writer, n *il.BoundMapProperty) {
 	if len(n.Elements) == 0 {
-		g.gen("{}")
+		g.gen(w, "{}")
 	} else {
-		g.gen("{")
+		g.gen(w, "{")
 		g.indented(func() {
 			for _, k := range gen.SortedKeys(n.Elements) {
 				v := n.Elements[k]
 
 				propSch := n.Schemas.PropertySchemas(k)
-				g.gen("\n", g.indent, tsName(k, propSch.TF, propSch.Pulumi, true), ": ")
-				g.genCoercion(v, propSch.Type())
-				g.gen(",")
+				g.gen(w, "\n", g.indent, tsName(k, propSch.TF, propSch.Pulumi, true), ": ")
+				g.genCoercion(w, v, propSch.Type())
+				g.gen(w, ",")
 			}
 		})
-		g.gen("\n", g.indent, "}")
+		g.gen(w, "\n", g.indent, "}")
 	}
 }
 
-func (g *propertyGenerator) genCoercion(n il.BoundNode, toType il.Type) {
+func (g *Generator) genCoercion(w io.Writer, n il.BoundNode, toType il.Type) {
 	// TODO: we really need dynamic coercions here.
 	if n.Type() == toType {
-		g.gen(n)
+		g.gen(w, n)
 		return
 	}
 
@@ -75,18 +62,18 @@ func (g *propertyGenerator) genCoercion(n il.BoundNode, toType il.Type) {
 	case il.TypeBool:
 		if toType == il.TypeString {
 			if lit, ok := n.(*il.BoundLiteral); ok {
-				g.gen("\"", strconv.FormatBool(lit.Value.(bool)), "\"")
+				g.genf(w, "\"%v\"", lit.Value)
 			} else {
-				g.gen("`${", n, "}`")
+				g.genf(w, "`${%v}`", n)
 			}
 			return
 		}
 	case il.TypeNumber:
 		if toType == il.TypeString {
 			if lit, ok := n.(*il.BoundLiteral); ok {
-				g.gen("\"", strconv.FormatFloat(lit.Value.(float64), 'f', -1, 64), "\"")
+				g.genf(w, "\"%f\"", lit.Value)
 			} else {
-				g.gen("`${", n, "}`")
+				g.genf(w, "`${%v}`", n)
 			}
 			return
 		}
@@ -94,33 +81,18 @@ func (g *propertyGenerator) genCoercion(n il.BoundNode, toType il.Type) {
 		switch toType {
 		case il.TypeBool:
 			if lit, ok := n.(*il.BoundLiteral); ok {
-				g.gen(strconv.FormatBool(lit.Value.(string) == "true"))
+				g.genf(w, "%v", lit.Value.(string) == "true")
 			} else {
-				g.gen("(", n, " === \"true\")")
+				g.genf(w, "(%v === \"true\")", n)
 			}
 			return
 		case il.TypeNumber:
-			g.gen("Number.parseFloat(", n, ")")
+			g.genf(w, "Number.parseFloat(%v)", n)
 			return
 		}
 	}
 
 	// If we get here, we weren't able to genereate a coercion. Just generate the node. This is questionable behavior
 	// at best.
-	g.gen(n)
-}
-
-func (g *propertyGenerator) gen(vs ...interface{}) {
-	for _, v := range vs {
-		switch v := v.(type) {
-		case string:
-			g.w.WriteString(v)
-		case *il.BoundListProperty:
-			g.genListProperty(v)
-		case *il.BoundMapProperty:
-			g.genMapProperty(v)
-		default:
-			g.hil.gen(v)
-		}
-	}
+	g.gen(w, n)
 }

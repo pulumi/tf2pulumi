@@ -3,19 +3,26 @@ package nodejs
 import (
 	"bytes"
 	"fmt"
+	"io"
 	"strings"
 
 	"github.com/hashicorp/terraform/config"
 	"github.com/hashicorp/terraform/helper/schema"
 	"github.com/pkg/errors"
+	"github.com/pulumi/pulumi/pkg/util/contract"
 	"github.com/pulumi/pulumi-terraform/pkg/tfbridge"
 
+	"github.com/pgavlin/firewalker/gen"
 	"github.com/pgavlin/firewalker/il"
 )
 
 type Generator struct {
 	ProjectName string
 	module      *il.Graph
+
+	indent string
+	countIndex string
+	applyArgs []il.BoundExpr
 }
 
 func cleanName(name string) string {
@@ -56,6 +63,12 @@ func (g *Generator) isRoot() bool {
 	return len(g.module.Tree.Path()) == 0
 }
 
+func (g *Generator) indented(f func()) {
+	g.indent += "    "
+	f()
+	g.indent = g.indent[:len(g.indent)-4]
+}
+
 func (g *Generator) computeProperty(prop il.BoundNode, indent, count string) (string, bool, error) {
 	containsOutputs := false
 	il.VisitBoundNode(prop, il.IdentityVisitor, func(n il.BoundNode) (il.BoundNode, error) {
@@ -79,8 +92,7 @@ func (g *Generator) computeProperty(prop il.BoundNode, indent, count string) (st
 	}
 
 	buf := &bytes.Buffer{}
-	generator := &propertyGenerator{w: buf, hil: &hilGenerator{w: buf, countIndex: count}, indent: indent}
-	generator.gen(p)
+	g.gen(buf, p)
 	return buf.String(), containsOutputs, nil
 }
 
@@ -115,12 +127,14 @@ func (g *Generator) BeginModule(m *il.Graph) error {
 	g.module = m
 	if !g.isRoot() {
 		fmt.Printf("const new_mod_%s = function(mod_name: string, mod_args: pulumi.Inputs) {\n", cleanName(m.Tree.Name()))
+		g.indent += "    "
 	}
 	return nil
 }
 
 func (g *Generator) EndModule(m *il.Graph) error {
 	if !g.isRoot() {
+		g.indent = g.indent[:len(g.indent)-4]
 		fmt.Printf("};\n")
 	}
 	g.module = nil
@@ -142,7 +156,7 @@ func (g *Generator) GenerateVariables(vs []*il.VariableNode) error {
 	for _, v := range vs {
 		name := tsName(v.Config.Name, nil, nil, false)
 
-		fmt.Printf("const %s = ", name)
+		fmt.Printf("%sconst %s = ", g.indent, name)
 		if v.DefaultValue == nil {
 			if isRoot {
 				fmt.Printf("config.require(\"%s\")", name)
@@ -150,7 +164,7 @@ func (g *Generator) GenerateVariables(vs []*il.VariableNode) error {
 				fmt.Printf("mod_args[\"%s\"]", name)
 			}
 		} else {
-			def, _, err := g.computeProperty(v.DefaultValue, "", "")
+			def, _, err := g.computeProperty(v.DefaultValue, g.indent, "")
 			if err != nil {
 				return err
 			}
@@ -169,12 +183,12 @@ func (g *Generator) GenerateVariables(vs []*il.VariableNode) error {
 }
 
 func (g *Generator) GenerateLocal(l *il.LocalNode) error {
-	value, hasOutputs, err := g.computeProperty(l.Value, "", "")
+	value, hasOutputs, err := g.computeProperty(l.Value, g.indent, "")
 	if err != nil {
 		return err
 	}
 
-	fmt.Printf("const %s = ", localName(l.Config.Name))
+	fmt.Printf("%sconst %s = ", g.indent, localName(l.Config.Name))
 	if !hasOutputs {
 		fmt.Print("pulumi.output(")
 	}
@@ -188,13 +202,13 @@ func (g *Generator) GenerateLocal(l *il.LocalNode) error {
 
 func (g *Generator) GenerateModule(m *il.ModuleNode) error {
 	// generate a call to the module constructor
-	args, _, err := g.computeProperty(m.Properties, "", "")
+	args, _, err := g.computeProperty(m.Properties, g.indent, "")
 	if err != nil {
 		return err
 	}
 
 	modName := cleanName(m.Config.Name)
-	fmt.Printf("const mod_%s = new_mod_%s(\"%s\", %s);\n", modName, modName, modName, args)
+	fmt.Printf("%sconst mod_%s = new_mod_%s(\"%s\", %s);\n", g.indent, modName, modName, modName, args)
 	return nil
 }
 
@@ -257,7 +271,7 @@ func (g *Generator) GenerateResource(r *il.ResourceNode) error {
 	qualifiedMemberName := fmt.Sprintf("%s%s.%s", provider, module, memberName)
 	if r.Count == nil {
 		// If count is nil, this is a single-instance resource.
-		inputs, _, err := g.computeProperty(r.Properties, "", "")
+		inputs, _, err := g.computeProperty(r.Properties, g.indent, "")
 		if err != nil {
 			return err
 		}
@@ -270,18 +284,18 @@ func (g *Generator) GenerateResource(r *il.ResourceNode) error {
 				resName = fmt.Sprintf("`${mod_name}_%s`", r.Config.Name)
 			}
 
-			fmt.Printf("const %s = new %s(%s, %s%s);\n", name, qualifiedMemberName, resName, inputs, explicitDeps)
+			fmt.Printf("%sconst %s = new %s(%s, %s%s);\n", g.indent, name, qualifiedMemberName, resName, inputs, explicitDeps)
 		} else {
 			// TODO: explicit dependencies
-			fmt.Printf("const %s = pulumi.output(%s(%s));\n", name, qualifiedMemberName, inputs)
+			fmt.Printf("%sconst %s = pulumi.output(%s(%s));\n", g.indent, name, qualifiedMemberName, inputs)
 		}
 	} else {
 		// Otherwise we need to Generate multiple resources in a loop.
-		count, _, err := g.computeProperty(r.Count, "", "")
+		count, _, err := g.computeProperty(r.Count, g.indent, "")
 		if err != nil {
 			return err
 		}
-		inputs, _, err := g.computeProperty(r.Properties, "    ", "i")
+		inputs, _, err := g.computeProperty(r.Properties, g.indent + "    ", "i")
 		if err != nil {
 			return err
 		}
@@ -293,12 +307,14 @@ func (g *Generator) GenerateResource(r *il.ResourceNode) error {
 
 		fmt.Printf("const %s: %s[] = [];\n", name, arrElementType)
 		fmt.Printf("for (let i = 0; i < %s; i++) {\n", count)
-		if r.Config.Mode == config.ManagedResourceMode {
-			fmt.Printf("    %s.push(new %s(`%s-${i}`, %s%s));\n", name, qualifiedMemberName, r.Config.Name, inputs, explicitDeps)
-		} else {
-			// TODO: explicit dependencies
-			fmt.Printf("    %s.push(pulumi.output(%s(%s)));\n", name, qualifiedMemberName, inputs)
-		}
+		g.indented(func() {
+			if r.Config.Mode == config.ManagedResourceMode {
+				fmt.Printf("%s%s.push(new %s(`%s-${i}`, %s%s));\n", g.indent, name, qualifiedMemberName, r.Config.Name, inputs, explicitDeps)
+			} else {
+				// TODO: explicit dependencies
+				fmt.Printf("%s%s.push(pulumi.output(%s(%s)));\n", g.indent, name, qualifiedMemberName, inputs)
+			}
+		})
 		fmt.Printf("}\n")
 	}
 
@@ -314,22 +330,62 @@ func (g *Generator) GenerateOutputs(os []*il.OutputNode) error {
 
 	fmt.Printf("\n")
 	if !isRoot {
-		fmt.Printf("return {\n")
+		fmt.Printf("%sreturn {\n", g.indent)
+		g.indent += "    "
 	}
 	for _, o := range os {
-		outputs, _, err := g.computeProperty(o.Value, "", "")
+		outputs, _, err := g.computeProperty(o.Value, g.indent, "")
 		if err != nil {
 			return err
 		}
 
 		if !isRoot {
-			fmt.Printf("%s: %s,\n", tsName(o.Config.Name, nil, nil, true), outputs)
+			fmt.Printf("%s%s: %s,\n", g.indent, tsName(o.Config.Name, nil, nil, true), outputs)
 		} else {
 			fmt.Printf("export const %s = %s;\n", tsName(o.Config.Name, nil, nil, false), outputs)
 		}
 	}
 	if !isRoot {
-		fmt.Printf("};\n")
+		g.indent = g.indent[:len(g.indent)-4]
+		fmt.Printf("%s};\n", g.indent)
 	}
 	return nil
+}
+
+func (g *Generator) gen(w io.Writer, vs ...interface{}) {
+	for _, v := range vs {
+		switch v := v.(type) {
+		case string:
+			fmt.Fprint(w, v)
+		case *il.BoundArithmetic:
+			g.genArithmetic(w, v)
+		case *il.BoundCall:
+			g.genCall(w, v)
+		case *il.BoundConditional:
+			g.genConditional(w, v)
+		case *il.BoundIndex:
+			g.genIndex(w, v)
+		case *il.BoundLiteral:
+			g.genLiteral(w, v)
+		case *il.BoundOutput:
+			g.genOutput(w, v)
+		case *il.BoundVariableAccess:
+			g.genVariableAccess(w, v)
+		case *il.BoundListProperty:
+			g.genListProperty(w, v)
+		case *il.BoundMapProperty:
+			g.genMapProperty(w, v)
+		default:
+			contract.Failf("unexpected type in gen: %T", v)
+		}
+	}
+}
+
+func (g *Generator) genf(w io.Writer, format string, args ...interface{}) {
+	for i := range args {
+		if expr, ok := args[i].(il.BoundExpr); ok {
+			args[i] = gen.FormatFunc(func(f fmt.State, c rune) { g.gen(f, expr) })
+		}
+	}
+	fmt.Fprintf(w, format, args...)
 }
