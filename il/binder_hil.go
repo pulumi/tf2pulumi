@@ -163,7 +163,7 @@ func (b *propertyBinder) bindVariableAccess(n *ast.VariableAccess) (BoundExpr, e
 		}
 		ilNode = l
 
-		exprType = TypeUnknown
+		exprType = TypeUnknown.OutputOf()
 	case *config.ModuleVariable:
 		// "module."
 		m, ok := b.builder.modules[v.Name]
@@ -172,7 +172,7 @@ func (b *propertyBinder) bindVariableAccess(n *ast.VariableAccess) (BoundExpr, e
 		}
 		ilNode = m
 
-		exprType = TypeUnknown
+		exprType = TypeUnknown.OutputOf()
 	case *config.PathVariable:
 		// "path."
 		return nil, errors.New("NYI: path variables")
@@ -202,7 +202,7 @@ func (b *propertyBinder) bindVariableAccess(n *ast.VariableAccess) (BoundExpr, e
 		}
 
 		// Handle multi-references (splats and indexes)
-		exprType = elemSch.Type()
+		exprType = elemSch.Type().OutputOf()
 		if v.Multi && v.Index == -1 {
 			exprType = exprType.ListOf()
 		}

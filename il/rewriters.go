@@ -15,10 +15,7 @@ type applyRewriter struct {
 func (r *applyRewriter) rewriteBoundVariableAccess(n *BoundVariableAccess) (BoundNode, error) {
 	contract.Assert(r.root != n)
 
-	switch n.TFVar.(type) {
-	case *config.LocalVariable, *config.ResourceVariable:
-		// These need transformation
-	default:
+	if !n.Type().IsOutput() {
 		return n, nil
 	}
 

@@ -73,10 +73,12 @@ func (g *Generator) computeProperty(prop il.BoundNode, indent, count string) (st
 	containsOutputs := false
 	il.VisitBoundNode(prop, il.IdentityVisitor, func(n il.BoundNode) (il.BoundNode, error) {
 		if v, ok := n.(*il.BoundVariableAccess); ok {
-			switch v.TFVar.(type) {
-			case *config.LocalVariable, *config.ResourceVariable:
-				containsOutputs = true
+			if !g.isRoot() {
+				if _, ok := v.TFVar.(*config.UserVariable); ok {
+					v.ExprType = v.ExprType.OutputOf()
+				}
 			}
+			containsOutputs = containsOutputs || v.Type().IsOutput()
 		}
 		return n, nil
 	})
@@ -161,7 +163,7 @@ func (g *Generator) GenerateVariables(vs []*il.VariableNode) error {
 			if isRoot {
 				fmt.Printf("config.require(\"%s\")", name)
 			} else {
-				fmt.Printf("mod_args[\"%s\"]", name)
+				fmt.Printf("pulumi.output(mod_args[\"%s\"])", name)
 			}
 		} else {
 			def, _, err := g.computeProperty(v.DefaultValue, g.indent, "")
@@ -172,7 +174,7 @@ func (g *Generator) GenerateVariables(vs []*il.VariableNode) error {
 			if isRoot {
 				fmt.Printf("config.get(\"%s\") || %s", name, def)
 			} else {
-				fmt.Printf("mod_args[\"%s\"] || %s", name, def)
+				fmt.Printf("pulumi.output(mod_args[\"%s\"] || %s)", name, def)
 			}
 		}
 		fmt.Printf(";\n")
