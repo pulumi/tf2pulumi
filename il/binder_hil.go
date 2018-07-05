@@ -37,6 +37,8 @@ func (b *propertyBinder) bindCall(n *ast.Call) (BoundExpr, error) {
 		}
 	case "file":
 		exprType = TypeString
+	case "format":
+		exprType = TypeString
 	case "list":
 		exprType = TypeUnknown.ListOf()
 	case "lookup":

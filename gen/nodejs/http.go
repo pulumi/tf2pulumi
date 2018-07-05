@@ -10,7 +10,7 @@ import (
 	"github.com/pgavlin/firewalker/il"
 )
 
-func (g *Generator) computeHTTPInputs(r *il.ResourceNode, indent, count string) (string, error) {
+func (g *Generator) computeHTTPInputs(r *il.ResourceNode, indent bool, count string) (string, error) {
 	urlProperty, ok := r.Properties.Elements["url"]
 	if !ok {
 		return "", errors.Errorf("missing required property \"url\" in resource %s", r.Config.Name)
@@ -25,7 +25,7 @@ func (g *Generator) computeHTTPInputs(r *il.ResourceNode, indent, count string) 
 		return url, nil
 	}
 
-	requestHeaders, _, err := g.computeProperty(requestHeadersProperty, indent + "    ", count)
+	requestHeaders, _, err := g.computeProperty(requestHeadersProperty, true, count)
 	if err != nil {
 		return "", err
 	}
@@ -44,18 +44,18 @@ func (g *Generator) generateHTTP(r *il.ResourceNode) error {
 	name := resName(r.Config.Type, r.Config.Name)
 
 	if r.Count == nil {
-		inputs, err := g.computeHTTPInputs(r, "", "")
+		inputs, err := g.computeHTTPInputs(r, false, "")
 		if err != nil {
 			return err
 		}
 
 		fmt.Printf("const %s = pulumi.output(rpn(%s).promise());\n", name, inputs);
 	} else {
-		count, _, err := g.computeProperty(r.Count, "", "")
+		count, _, err := g.computeProperty(r.Count, false, "")
 		if err != nil {
 			return err
 		}
-		inputs, err := g.computeHTTPInputs(r, "    ", "i")
+		inputs, err := g.computeHTTPInputs(r, true, "i")
 		if err != nil {
 			return err
 		}

@@ -207,6 +207,15 @@ func (g *Generator) genCall(w io.Writer, n *il.BoundCall) {
 		g.genf(w, "%v[%v]", n.Args[0], n.Args[1])
 	case "file":
 		g.genf(w, "fs.readFileSync(%v, \"utf-8\")", n.Args[0])
+	case "format":
+		g.gen(w, "sprintf.sprintf(")
+		for i, a := range n.Args {
+			if i > 0 {
+				g.gen(w, ", ")
+			}
+			g.gen(w, a)
+		}
+		g.gen(w, ")")
 	case "list":
 		g.gen(w, "[")
 		for i, e := range n.Args {

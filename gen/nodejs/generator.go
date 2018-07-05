@@ -69,7 +69,7 @@ func (g *Generator) indented(f func()) {
 	g.indent = g.indent[:len(g.indent)-4]
 }
 
-func (g *Generator) computeProperty(prop il.BoundNode, indent, count string) (string, bool, error) {
+func (g *Generator) computeProperty(prop il.BoundNode, indent bool, count string) (string, bool, error) {
 	containsOutputs := false
 	il.VisitBoundNode(prop, il.IdentityVisitor, func(n il.BoundNode) (il.BoundNode, error) {
 		if v, ok := n.(*il.BoundVariableAccess); ok {
@@ -98,6 +98,10 @@ func (g *Generator) computeProperty(prop il.BoundNode, indent, count string) (st
 		return "", false, err
 	}
 
+	if indent {
+		g.indent += "    "
+		defer func() { g.indent = g.indent[:len(g.indent)-4] }()
+	}
 	buf := &bytes.Buffer{}
 	g.gen(buf, p)
 	return buf.String(), containsOutputs, nil
@@ -125,6 +129,7 @@ func (g *Generator) GeneratePreamble(modules []*il.Graph) error {
 		}
 	}
 	fmt.Printf("import * as fs from \"fs\";\n")
+	fmt.Printf("import sprintf = require(\"sprintf-js\");\n")
 	fmt.Printf("\n")
 
 	return nil
@@ -171,7 +176,7 @@ func (g *Generator) GenerateVariables(vs []*il.VariableNode) error {
 				fmt.Printf("pulumi.output(mod_args[\"%s\"])", name)
 			}
 		} else {
-			def, _, err := g.computeProperty(v.DefaultValue, g.indent, "")
+			def, _, err := g.computeProperty(v.DefaultValue, false, "")
 			if err != nil {
 				return err
 			}
@@ -190,7 +195,7 @@ func (g *Generator) GenerateVariables(vs []*il.VariableNode) error {
 }
 
 func (g *Generator) GenerateLocal(l *il.LocalNode) error {
-	value, hasOutputs, err := g.computeProperty(l.Value, g.indent, "")
+	value, hasOutputs, err := g.computeProperty(l.Value, false, "")
 	if err != nil {
 		return err
 	}
@@ -209,7 +214,7 @@ func (g *Generator) GenerateLocal(l *il.LocalNode) error {
 
 func (g *Generator) GenerateModule(m *il.ModuleNode) error {
 	// generate a call to the module constructor
-	args, _, err := g.computeProperty(m.Properties, g.indent, "")
+	args, _, err := g.computeProperty(m.Properties, false, "")
 	if err != nil {
 		return err
 	}
@@ -278,7 +283,7 @@ func (g *Generator) GenerateResource(r *il.ResourceNode) error {
 	qualifiedMemberName := fmt.Sprintf("%s%s.%s", provider, module, memberName)
 	if r.Count == nil {
 		// If count is nil, this is a single-instance resource.
-		inputs, _, err := g.computeProperty(r.Properties, g.indent, "")
+		inputs, _, err := g.computeProperty(r.Properties, false, "")
 		if err != nil {
 			return err
 		}
@@ -298,11 +303,11 @@ func (g *Generator) GenerateResource(r *il.ResourceNode) error {
 		}
 	} else {
 		// Otherwise we need to Generate multiple resources in a loop.
-		count, _, err := g.computeProperty(r.Count, g.indent, "")
+		count, _, err := g.computeProperty(r.Count, false, "")
 		if err != nil {
 			return err
 		}
-		inputs, _, err := g.computeProperty(r.Properties, g.indent + "    ", "i")
+		inputs, _, err := g.computeProperty(r.Properties, true, "i")
 		if err != nil {
 			return err
 		}
@@ -341,7 +346,7 @@ func (g *Generator) GenerateOutputs(os []*il.OutputNode) error {
 		g.indent += "    "
 	}
 	for _, o := range os {
-		outputs, _, err := g.computeProperty(o.Value, g.indent, "")
+		outputs, _, err := g.computeProperty(o.Value, false, "")
 		if err != nil {
 			return err
 		}
