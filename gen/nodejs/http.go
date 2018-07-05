@@ -49,7 +49,7 @@ func (g *Generator) generateHTTP(r *il.ResourceNode) error {
 			return err
 		}
 
-		fmt.Printf("const %s = pulumi.output(rpn(%s).promise());\n", name, inputs);
+		fmt.Printf("const %s = pulumi.output(rpn(%s).promise());\n", name, inputs)
 	} else {
 		count, _, err := g.computeProperty(r.Count, false, "")
 		if err != nil {
@@ -68,4 +68,3 @@ func (g *Generator) generateHTTP(r *il.ResourceNode) error {
 
 	return nil
 }
-

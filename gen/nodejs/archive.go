@@ -116,4 +116,3 @@ func (g *Generator) generateArchive(r *il.ResourceNode) error {
 
 	return nil
 }
-

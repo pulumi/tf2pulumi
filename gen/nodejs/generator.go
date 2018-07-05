@@ -9,8 +9,8 @@ import (
 	"github.com/hashicorp/terraform/config"
 	"github.com/hashicorp/terraform/helper/schema"
 	"github.com/pkg/errors"
-	"github.com/pulumi/pulumi/pkg/util/contract"
 	"github.com/pulumi/pulumi-terraform/pkg/tfbridge"
+	"github.com/pulumi/pulumi/pkg/util/contract"
 
 	"github.com/pgavlin/firewalker/gen"
 	"github.com/pgavlin/firewalker/il"
@@ -20,9 +20,9 @@ type Generator struct {
 	ProjectName string
 	module      *il.Graph
 
-	indent string
+	indent     string
 	countIndex string
-	applyArgs []il.BoundExpr
+	applyArgs  []il.BoundExpr
 }
 
 func cleanName(name string) string {

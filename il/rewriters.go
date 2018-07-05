@@ -3,12 +3,12 @@ package il
 import (
 	"github.com/hashicorp/hil/ast"
 	"github.com/hashicorp/terraform/config"
-	"github.com/pulumi/pulumi/pkg/util/contract"
 	"github.com/pulumi/pulumi-terraform/pkg/tfbridge"
+	"github.com/pulumi/pulumi/pkg/util/contract"
 )
 
 type applyRewriter struct {
-	root BoundExpr
+	root      BoundExpr
 	applyArgs []BoundExpr
 }
 
@@ -21,9 +21,9 @@ func (r *applyRewriter) rewriteBoundVariableAccess(n *BoundVariableAccess) (Boun
 	r.applyArgs = append(r.applyArgs, n)
 
 	return &BoundCall{
-		HILNode: &ast.Call{Func: "__applyArg"},
+		HILNode:  &ast.Call{Func: "__applyArg"},
 		ExprType: n.Type().ElementType(),
-		Args: []BoundExpr{&BoundLiteral{ExprType: TypeNumber, Value: idx}},
+		Args:     []BoundExpr{&BoundLiteral{ExprType: TypeNumber, Value: idx}},
 	}, nil
 }
 
@@ -38,9 +38,9 @@ func (r *applyRewriter) rewriteRoot(n BoundExpr) (BoundNode, error) {
 	r.applyArgs = append(r.applyArgs, n)
 
 	return &BoundCall{
-		HILNode: &ast.Call{Func: "__apply"},
+		HILNode:  &ast.Call{Func: "__apply"},
 		ExprType: TypeUnknown.OutputOf(),
-		Args: r.applyArgs,
+		Args:     r.applyArgs,
 	}, nil
 }
 
@@ -110,9 +110,9 @@ func RewriteAssets(n BoundNode) (BoundNode, error) {
 			}
 
 			m.Elements[k] = &BoundCall{
-				HILNode: &ast.Call{Func: builtin},
+				HILNode:  &ast.Call{Func: builtin},
 				ExprType: TypeUnknown,
-				Args: []BoundExpr{e},
+				Args:     []BoundExpr{e},
 			}
 
 			if asset.HashField != "" {
@@ -125,4 +125,3 @@ func RewriteAssets(n BoundNode) (BoundNode, error) {
 
 	return VisitBoundNode(n, IdentityVisitor, rewriter)
 }
-

@@ -44,7 +44,7 @@ func (b *propertyBinder) bindCall(n *ast.Call) (BoundExpr, error) {
 	case "lookup":
 		// nothing to do
 	case "map":
-		if len(args) % 2 != 0 {
+		if len(args)%2 != 0 {
 			return nil, errors.Errorf("the numbner of arguments to \"map\" must be even")
 		}
 		exprType = TypeMap

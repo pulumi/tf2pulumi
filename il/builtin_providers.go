@@ -8,9 +8,9 @@ import (
 	"github.com/pulumi/pulumi-terraform/pkg/tfbridge"
 )
 
-var builtinProviderInfo = map[string]*tfbridge.ProviderInfo {
+var builtinProviderInfo = map[string]*tfbridge.ProviderInfo{
 	"archive": {
-		P: archive.Provider().(*schema.Provider),
+		P:      archive.Provider().(*schema.Provider),
 		Config: map[string]*tfbridge.SchemaInfo{},
 		DataSources: map[string]*tfbridge.DataSourceInfo{
 			"archive_file": {Tok: "archive:archive:archiveFile"},
@@ -20,7 +20,7 @@ var builtinProviderInfo = map[string]*tfbridge.ProviderInfo {
 		},
 	},
 	"http": {
-		P: http.Provider().(*schema.Provider),
+		P:      http.Provider().(*schema.Provider),
 		Config: map[string]*tfbridge.SchemaInfo{},
 		DataSources: map[string]*tfbridge.DataSourceInfo{
 			"http": {Tok: "http:http:http"},

@@ -75,7 +75,7 @@ func (t Type) String() string {
 }
 
 type dumper struct {
-	w io.Writer
+	w      io.Writer
 	indent string
 }
 
@@ -146,7 +146,7 @@ func (n *BoundCall) Type() Type {
 	return n.ExprType
 }
 
-func (n *BoundCall) dump(d* dumper) {
+func (n *BoundCall) dump(d *dumper) {
 	d.dump("(call ", fmt.Sprintf("%v %s", n.Type(), n.HILNode.Func))
 	d.indented(func() {
 		for _, e := range n.Args {
@@ -240,7 +240,7 @@ func (n *BoundOutput) Type() Type {
 	return TypeString
 }
 
-func (n *BoundOutput) dump(d* dumper) {
+func (n *BoundOutput) dump(d *dumper) {
 	d.dump("(output ", fmt.Sprintf("%v", n.Type()))
 	d.indented(func() {
 		for _, e := range n.Exprs {
@@ -267,7 +267,7 @@ func (n *BoundVariableAccess) Type() Type {
 	return n.ExprType
 }
 
-func (n *BoundVariableAccess) dump(d* dumper) {
+func (n *BoundVariableAccess) dump(d *dumper) {
 	d.dump(fmt.Sprintf("(%s %s %T)", n.HILNode.Name, n.Type(), n.TFVar))
 }
 
@@ -283,7 +283,7 @@ func (n *BoundListProperty) Type() Type {
 	return n.Schemas.ElemSchemas().Type().ListOf()
 }
 
-func (n *BoundListProperty) dump(d* dumper) {
+func (n *BoundListProperty) dump(d *dumper) {
 	d.dump("(list ", fmt.Sprintf("%v", n.Type()))
 	d.indented(func() {
 		for _, e := range n.Elements {
@@ -304,7 +304,7 @@ func (n *BoundMapProperty) Type() Type {
 	return TypeMap
 }
 
-func (n *BoundMapProperty) dump(d* dumper) {
+func (n *BoundMapProperty) dump(d *dumper) {
 	d.dump("(map ", fmt.Sprintf("%v", n.Type()))
 	d.indented(func() {
 		for k, e := range n.Elements {

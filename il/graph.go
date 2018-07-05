@@ -38,8 +38,8 @@ type Graph struct {
 }
 
 type ModuleNode struct {
-	Config *config.Module
-	Deps []Node
+	Config     *config.Module
+	Deps       []Node
 	Properties *BoundMapProperty
 }
 
@@ -67,9 +67,9 @@ type OutputNode struct {
 }
 
 type LocalNode struct {
-	Config     *config.Local
-	Deps       []Node
-	Value BoundNode
+	Config *config.Local
+	Deps   []Node
+	Value  BoundNode
 }
 type VariableNode struct {
 	Config       *config.Variable
@@ -103,13 +103,13 @@ func (r *ResourceNode) Schemas() Schemas {
 	case r.Config.Mode == config.ManagedResourceMode:
 		resInfo := r.Provider.Info.Resources[r.Config.Type]
 		return Schemas{
-			TFRes: r.Provider.Info.P.ResourcesMap[r.Config.Type],
+			TFRes:  r.Provider.Info.P.ResourcesMap[r.Config.Type],
 			Pulumi: &tfbridge.SchemaInfo{Fields: resInfo.Fields},
 		}
 	default:
 		dsInfo := r.Provider.Info.DataSources[r.Config.Type]
 		return Schemas{
-			TFRes: r.Provider.Info.P.DataSourcesMap[r.Config.Type],
+			TFRes:  r.Provider.Info.P.DataSourcesMap[r.Config.Type],
 			Pulumi: &tfbridge.SchemaInfo{Fields: dsInfo.Fields},
 		}
 	}
@@ -200,7 +200,7 @@ func (b *builder) buildValue(v interface{}, sch Schemas, hasCountIndex bool) (Bo
 
 	// Bind the value.
 	binder := &propertyBinder{
-		builder: b,
+		builder:       b,
 		hasCountIndex: hasCountIndex,
 	}
 	prop, err := binder.bindProperty(reflect.ValueOf(v), sch)

@@ -29,9 +29,9 @@ func makeCoercion(n il.BoundNode, toType il.Type) il.BoundNode {
 	}
 
 	return &il.BoundCall{
-		HILNode: &ast.Call{Func: "__coerce"},
+		HILNode:  &ast.Call{Func: "__coerce"},
 		ExprType: toType,
-		Args: []il.BoundExpr{e},
+		Args:     []il.BoundExpr{e},
 	}
 }
 

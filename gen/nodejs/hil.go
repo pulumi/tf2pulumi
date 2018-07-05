@@ -7,8 +7,8 @@ import (
 
 	"github.com/hashicorp/hil/ast"
 	"github.com/hashicorp/terraform/config"
-	"github.com/pulumi/pulumi/pkg/util/contract"
 	"github.com/pulumi/pulumi-terraform/pkg/tfbridge"
+	"github.com/pulumi/pulumi/pkg/util/contract"
 
 	"github.com/pgavlin/firewalker/il"
 )
@@ -235,7 +235,7 @@ func (g *Generator) genCall(w io.Writer, n *il.BoundCall) {
 			g.genf(w, " || %v)", n.Args[2])
 		}
 	case "map":
-		contract.Assert(len(n.Args) % 2 == 0)
+		contract.Assert(len(n.Args)%2 == 0)
 		g.gen(w, "{")
 		for i := 0; i < len(n.Args); i += 2 {
 			if i > 0 {
