@@ -19,63 +19,121 @@ import (
 )
 
 // TODO
-// - modules
 // - provisioners
 
-type Node interface {
-	Dependencies() []Node
-	sortKey() string
-}
-
+// A Graph is the analyzed form of the configuration for a single Terraform module.
 type Graph struct {
+	// Tree is the module's entry in the module tree. The tree is used e.g. to determine the module's name.
 	Tree      *module.Tree
+	// Modules maps from module name to module node for this module's module instantiations. This map is used to
+	// bind a module variable access in an interpolation to the corresponding module node.
 	Modules   map[string]*ModuleNode
+	// Providers maps from provider name to provider node for this module's provider instantiations. This map is
+	// used to bind a provider reference to the corresponding provider node.
 	Providers map[string]*ProviderNode
+	// Resources maps from resource name to module node for this module's module instantiations. This map is used
+	// to bind a resource variable access in an interpolation to the corresponding resource node.
 	Resources map[string]*ResourceNode
+	// Outputs maps from output name to output node for this module's outputs.
 	Outputs   map[string]*OutputNode
+	// Locals maps from local value name to local value node for this module's local values. This map is used to bind a
+	// local variable access in an interpolation to the corresponding local value node.
 	Locals    map[string]*LocalNode
+	// Variables maps from variable name to variable node for this module's variables. This map is used to bind a
+	// variable access in an interpolation to the corresponding variable node.
 	Variables map[string]*VariableNode
 }
 
+// A Node represents a single node in a dependency graph. A node is connected to other nodes by dependency edges.
+// The set of nodes and edges forms a DAG. Each concrete node type corresponds to a particular Terraform concept;
+// ResourceNode, for example, represents a resource in a Terraform configuration.
+//
+// In general, a node's dependencies are the union from its implicit dependencies (i.e. the nodes referenced by the
+// interpolations in its properties, if any) and its explicit dependencies.
+type Node interface {
+	// Dependencies returns the list of nodes the node depends on.
+	Dependencies() []Node
+	// sortKey returns the key that should be used when sorting this node (e.g. to ensure a stable order for code
+	// generation).
+	sortKey() string
+}
+
+// A ModuleNode is the analyzed form of a module instantiation in a Terraform configuration.
 type ModuleNode struct {
+	// Config is the module's raw Terraform configuration.
 	Config     *config.Module
+	// Deps is the list of the module's dependencies as implied by the nodes referenced by its configuration.
 	Deps       []Node
+	// Properties is the bound form of the module's configuration properties.
 	Properties *BoundMapProperty
 }
 
+// A ProviderNode is the analyzed form of a provider instantiation in a Terraform configuration.
 type ProviderNode struct {
+	// Config is the provider's raw Terraform configuration.
 	Config     *config.ProviderConfig
+	// Deps is the list of the provider's dependencies as implied by the nodes referenced by its configuration.
 	Deps       []Node
+	// Properties is the bound form of the provider's configuration properties.
 	Properties *BoundMapProperty
+	// Info is the set of Pulumi-specific information about this particular resource provider. Of particular interest
+	// is per-{resource,data source} schema information, which is used to calculate names and types for resources and
+	// their properties.
 	Info       *tfbridge.ProviderInfo
 }
 
+// A ResourceNode is the analyzed form of a resource or data source instatiation in a Terraform configuration. In
+// keeping with Terraform's internal terminology, these concepts will be collectively referred to as resources: when it
+// is necessary to differentiate between the two, the former are referred to as "managed resources" and the latter as
+// "data resources".
 type ResourceNode struct {
+	// Config is the resource's raw Terraform configuration.
 	Config       *config.Resource
+	// Provider is a reference to the resource's provider. Consumers of this package will never observe a nil value in
+	// this field.
 	Provider     *ProviderNode
+	// Deps is the list of the resource's dependencies as implied by the nodes referenced by its configuration.
 	Deps         []Node
+	// ExplicitDeps is the list of the resource's explicit dependencies. This is a subset of Deps.
 	ExplicitDeps []Node
+	// Count is the bound form of the resource's count property.
 	Count        BoundNode
+	// Properties is the bound form of the resource's configuration properties.
 	Properties   *BoundMapProperty
 }
 
+// An OutputNode is the analyzed form of an output in a Terraform configuration. An OutputNode may never be referenced
+// by another node, as its value is not nameable in a Terraform configuration.
 type OutputNode struct {
+	// Config is the output's raw Terraform configuration.
 	Config       *config.Output
+	// Deps is the list of the output's dependencies as implied by the nodes referenced by its configuration.
 	Deps         []Node
+	// ExplicitDeps is the list of the output's explicit dependencies. This is a subset of Deps.
 	ExplicitDeps []Node
+	// Value is the bound from of the output's value.
 	Value        BoundNode
 }
 
+// A LocalNode is the analyzed form of a local value in a Terraform configuration.
 type LocalNode struct {
+	// Config is the local value's raw Terraform configuration.
 	Config *config.Local
+	// Deps is the list of the local value's dependencies as implied by the nodes referenced by its configuration.
 	Deps   []Node
+	// Value is the bound form of the local value's value.
 	Value  BoundNode
 }
+
+// A VariableNode is the analyzed form of a Terraform variable. A VariableNode's list of dependencies is always empty.
 type VariableNode struct {
+	// Config is the variable's raw Terraform configuration.
 	Config       *config.Variable
+	// DefaultValue is the bound form of the variable's default value (if any).
 	DefaultValue BoundNode
 }
 
+// Depdendencies returns the list of nodes the module depends on.
 func (m *ModuleNode) Dependencies() []Node {
 	return m.Deps
 }
@@ -84,6 +142,7 @@ func (m *ModuleNode) sortKey() string {
 	return "m" + m.Config.Name
 }
 
+// Depdendencies returns the list of nodes the provider depends on.
 func (p *ProviderNode) Dependencies() []Node {
 	return p.Deps
 }
@@ -92,10 +151,13 @@ func (p *ProviderNode) sortKey() string {
 	return "p" + p.Config.Name
 }
 
+// Depdendencies returns the list of nodes the resource depends on.
 func (r *ResourceNode) Dependencies() []Node {
 	return r.Deps
 }
 
+// Schemas returns the Terraform and Pulumi schemas for this resource. These schemas can are principally used to
+// calculate the types and names of a resource's properties during binding and code generation.
 func (r *ResourceNode) Schemas() Schemas {
 	switch {
 	case r.Provider == nil || r.Provider.Info == nil:
@@ -115,6 +177,7 @@ func (r *ResourceNode) Schemas() Schemas {
 	}
 }
 
+// Tok returns the Pulumi token for this resource. These tokens are of the form "provider:module/func:member".
 func (r *ResourceNode) Tok() (string, bool) {
 	switch {
 	case r.Provider == nil || r.Provider.Info == nil:
@@ -130,6 +193,7 @@ func (r *ResourceNode) sortKey() string {
 	return "r" + r.Config.Id()
 }
 
+// Depdendencies returns the list of nodes the output depends on.
 func (o *OutputNode) Dependencies() []Node {
 	return o.Deps
 }
@@ -138,6 +202,7 @@ func (o *OutputNode) sortKey() string {
 	return "o" + o.Config.Name
 }
 
+// Depdendencies returns the list of nodes the local value depends on.
 func (l *LocalNode) Dependencies() []Node {
 	return l.Deps
 }
@@ -146,6 +211,7 @@ func (l *LocalNode) sortKey() string {
 	return "l" + l.Config.Name
 }
 
+// Depdendencies returns the list of nodes the variable depends on. This list is always emtpy.
 func (v *VariableNode) Dependencies() []Node {
 	return nil
 }
@@ -154,6 +220,8 @@ func (v *VariableNode) sortKey() string {
 	return "v" + v.Config.Name
 }
 
+// A builder is a temporary structure used to hold the contents of a graph that while it is under construction. The
+// various fields are aligned with their similarly-named peers in Graph.
 type builder struct {
 	modules   map[string]*ModuleNode
 	providers map[string]*ProviderNode
@@ -174,26 +242,12 @@ func newBuilder() *builder {
 	}
 }
 
-func (b *builder) getNode(name string) (Node, bool) {
-	if p, ok := b.providers[name]; ok {
-		return p, true
-	}
-	if r, ok := b.resources[name]; ok {
-		return r, true
-	}
-	if o, ok := b.outputs[name]; ok {
-		return o, true
-	}
-	if l, ok := b.locals[name]; ok {
-		return l, true
-	}
-	if v, ok := b.variables[name]; ok {
-		return v, true
-	}
-	return nil, false
-}
-
-func (b *builder) buildValue(v interface{}, sch Schemas, hasCountIndex bool) (BoundNode, map[Node]struct{}, error) {
+// bindProperty binds a paroperty value with the given schemas. If hasCountIndex is true, this property's
+// interpolations may legally contain references to their container's count variable (i.e. `count,index`).
+//
+// In addition to the bound property, this function returns the set of nodes referenced by the property's
+// interpolations. If v is nil, the returned BoundNode will also be nil.
+func (b *builder) bindProperty(v interface{}, sch Schemas, hasCountIndex bool) (BoundNode, map[Node]struct{}, error) {
 	if v == nil {
 		return nil, nil, nil
 	}
@@ -222,14 +276,22 @@ func (b *builder) buildValue(v interface{}, sch Schemas, hasCountIndex bool) (Bo
 	return prop, deps, nil
 }
 
-func (b *builder) buildProperties(raw *config.RawConfig, sch Schemas, hasCountIndex bool) (*BoundMapProperty, map[Node]struct{}, error) {
-	v, deps, err := b.buildValue(raw.Raw, sch, hasCountIndex)
+// bindProperties binds the set of properties represented by the given Terraform config with using the given schema. If
+// hasCountIndex is true, this property's interpolations may legally contain references to their container's count
+// variable (i.e. `count,index`).
+//
+// In addition to the bound property, this function returns the set of nodes referenced by the property's
+// interpolations.
+func (b *builder) bindProperties(raw *config.RawConfig, sch Schemas, hasCountIndex bool) (*BoundMapProperty, map[Node]struct{}, error) {
+	v, deps, err := b.bindProperty(raw.Raw, sch, hasCountIndex)
 	if err != nil {
 		return nil, nil, err
 	}
 	return v.(*BoundMapProperty), deps, nil
 }
 
+// sortableNodes is a helper type that allows a slice of nodes to be passed to sort.Sort. This is used e.g. to ensure a
+// consistent order for a node's dependency list.
 type sortableNodes []Node
 
 func (sn sortableNodes) Len() int {
@@ -244,6 +306,9 @@ func (sn sortableNodes) Swap(i, j int) {
 	sn[i], sn[j] = sn[j], sn[i]
 }
 
+// buildDeps calculates the union of a node's implicit and explicit dependencies. It returns this union as a list of
+// Nodes as well as the list of the node's explicit dependencies. This function will fail if a node referenced in the
+// list of explicit dependencies is not present in the graph.
 func (b *builder) buildDeps(deps map[Node]struct{}, dependsOn []string) ([]Node, []Node, error) {
 	sort.Strings(dependsOn)
 
@@ -269,6 +334,7 @@ func (b *builder) buildDeps(deps map[Node]struct{}, dependsOn []string) ([]Node,
 	return allDeps, explicitDeps, nil
 }
 
+// fixupTFResource recursively fixes up a resource schema's Elem values.
 func fixupTFResource(r *schema.Resource) error {
 	for _, s := range r.Schema {
 		if err := fixupTFSchema(s); err != nil {
@@ -278,6 +344,8 @@ func fixupTFResource(r *schema.Resource) error {
 	return nil
 }
 
+// fixupTFSchema turns a schema's Elem value from a raw map produced by codec into a proper schema.Schema or
+// schema.Resource value using mapstructure.
 func fixupTFSchema(s *schema.Schema) error {
 	rawElem, ok := s.Elem.(map[interface{}]interface{})
 	if !ok {
@@ -303,6 +371,8 @@ func fixupTFSchema(s *schema.Schema) error {
 	return nil
 }
 
+// getProviderInfo fetches the tfbridge information for a particular provider. It does so by launching the provider
+// plugin with the "-get-provider-info" flag and deserializing the JSON representation dumped to stdout.
 func getProviderInfo(p *ProviderNode) (*tfbridge.ProviderInfo, error) {
 	if info, ok := builtinProviderInfo[p.Config.Name]; ok {
 		return info, nil
@@ -341,8 +411,9 @@ func getProviderInfo(p *ProviderNode) (*tfbridge.ProviderInfo, error) {
 	return &info, nil
 }
 
+// buildModule binds the given module node's properties and computes its dependency edges.
 func (b *builder) buildModule(m *ModuleNode) error {
-	props, deps, err := b.buildProperties(m.Config.RawConfig, Schemas{}, false)
+	props, deps, err := b.bindProperties(m.Config.RawConfig, Schemas{}, false)
 	if err != nil {
 		return err
 	}
@@ -353,6 +424,7 @@ func (b *builder) buildModule(m *ModuleNode) error {
 	return nil
 }
 
+// buildProvider fetches the given provider's tfbridge data, binds its properties, and computes its dependency edges.
 func (b *builder) buildProvider(p *ProviderNode) error {
 	info, err := getProviderInfo(p)
 	if err != nil {
@@ -360,7 +432,7 @@ func (b *builder) buildProvider(p *ProviderNode) error {
 	}
 	p.Info = info
 
-	props, deps, err := b.buildProperties(p.Config.RawConfig, Schemas{}, false)
+	props, deps, err := b.bindProperties(p.Config.RawConfig, Schemas{}, false)
 	if err != nil {
 		return err
 	}
@@ -371,6 +443,8 @@ func (b *builder) buildProvider(p *ProviderNode) error {
 	return nil
 }
 
+// ensureProvider ensures that the given resource node's provider field is non-nil, This function should be called
+// before accessing a ResourceNode's Provider field until all resource nodes have been built.
 func (b *builder) ensureProvider(r *ResourceNode) error {
 	if r.Provider != nil {
 		return nil
@@ -379,7 +453,8 @@ func (b *builder) ensureProvider(r *ResourceNode) error {
 	providerName := r.Config.ProviderFullName()
 	p, ok := b.providers[providerName]
 	if !ok {
-		// fake up a provider entry.
+		// It is possible to reference a provider that is not present in the Terraform configuration. In this case,
+		// we create a new provider node with an empty configuration and insert it into the graph.
 		rawConfig, err := config.NewRawConfig(map[string]interface{}{})
 		if err != nil {
 			return err
@@ -400,10 +475,11 @@ func (b *builder) ensureProvider(r *ResourceNode) error {
 	return nil
 }
 
+// buildResource binds a resource's properties (including its count property) and computes its dependency edges.
 func (b *builder) buildResource(r *ResourceNode) error {
 	b.ensureProvider(r)
 
-	count, countDeps, err := b.buildValue(r.Config.RawCount.Value(), Schemas{}, false)
+	count, countDeps, err := b.bindProperty(r.Config.RawCount.Value(), Schemas{}, false)
 	if err != nil {
 		return err
 	}
@@ -420,7 +496,7 @@ func (b *builder) buildResource(r *ResourceNode) error {
 		}
 	}
 
-	props, deps, err := b.buildProperties(r.Config.RawConfig, r.Schemas(), count != nil)
+	props, deps, err := b.bindProperties(r.Config.RawConfig, r.Schemas(), count != nil)
 	if err != nil {
 		return err
 	}
@@ -437,8 +513,9 @@ func (b *builder) buildResource(r *ResourceNode) error {
 	return nil
 }
 
+// buildOutput binds an output's value and computes its dependency edges.
 func (b *builder) buildOutput(o *OutputNode) error {
-	props, deps, err := b.buildProperties(o.Config.RawConfig, Schemas{}, false)
+	props, deps, err := b.bindProperties(o.Config.RawConfig, Schemas{}, false)
 	if err != nil {
 		return err
 	}
@@ -460,8 +537,9 @@ func (b *builder) buildOutput(o *OutputNode) error {
 	return nil
 }
 
+// buildLocal binds a local value's value and computes its dependency edges.
 func (b *builder) buildLocal(l *LocalNode) error {
-	props, deps, err := b.buildProperties(l.Config.RawConfig, Schemas{}, false)
+	props, deps, err := b.bindProperties(l.Config.RawConfig, Schemas{}, false)
 	if err != nil {
 		return err
 	}
@@ -481,8 +559,9 @@ func (b *builder) buildLocal(l *LocalNode) error {
 	return nil
 }
 
+// buildVariable builds a variable's default value (if any). This value must not depend on any other nodes.
 func (b *builder) buildVariable(v *VariableNode) error {
-	defaultValue, deps, err := b.buildValue(v.Config.Default, Schemas{}, false)
+	defaultValue, deps, err := b.bindProperty(v.Config.Default, Schemas{}, false)
 	if err != nil {
 		return err
 	}
@@ -493,6 +572,9 @@ func (b *builder) buildVariable(v *VariableNode) error {
 	return nil
 }
 
+// BuildGraph analyzes the various entities present in the given module's configuration and constructs the 
+// corresponding dependency graph. Building the graph involves binding each entity's properties (if any) and
+// computing its list of dependency edges.
 func BuildGraph(tree *module.Tree) (*Graph, error) {
 	b := newBuilder()
 
@@ -518,7 +600,7 @@ func BuildGraph(tree *module.Tree) (*Graph, error) {
 		b.variables[v.Name] = &VariableNode{Config: v}
 	}
 
-	// Now translate each node's properties and connect any dependency edges.
+	// Now bind each node's properties and compute any dependency edges.
 	for _, m := range b.modules {
 		if err := b.buildModule(m); err != nil {
 			return nil, err
@@ -538,7 +620,6 @@ func BuildGraph(tree *module.Tree) (*Graph, error) {
 		if err := b.buildOutput(o); err != nil {
 			return nil, err
 		}
-		// outputs are sinks; we always deal with them last
 	}
 	for _, l := range b.locals {
 		if err := b.buildLocal(l); err != nil {
@@ -549,10 +630,9 @@ func BuildGraph(tree *module.Tree) (*Graph, error) {
 		if err := b.buildVariable(v); err != nil {
 			return nil, err
 		}
-		// variables are sources; we always deal with them before other nodes.
 	}
 
-	// put the graph together
+	// Put the graph together
 	return &Graph{
 		Tree:      tree,
 		Modules:   b.modules,

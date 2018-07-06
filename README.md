@@ -5,8 +5,7 @@
 - data sources:
 	- explicit dependencies
 - modules
-	- generate child module as a function
-	- call function to instantiate
+	- unification
 - variables accesses:
 	- path
 	- self
