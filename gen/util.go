@@ -7,6 +7,7 @@ import (
 	"github.com/pulumi/pulumi/pkg/util/contract"
 )
 
+// SortedKeys returns a sorted list of keys for the given map. The map's key type must be of kind string.
 func SortedKeys(m interface{}) []string {
 	mv := reflect.ValueOf(m)
 

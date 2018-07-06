@@ -6,19 +6,30 @@ import (
 	"github.com/pgavlin/firewalker/il"
 )
 
+// Generator defines the interface that a language-specific code generator must expose in order to generate code for a
+// set of Terraform modules.
 type Generator interface {
+	// GeneratePreamble generates any preamble required by the language. The complete list of modules that will be
+	// generated is passed as an input.
 	GeneratePreamble(gs []*il.Graph) error
-
+	// BeginModule does any work specific to the generation of a new module definition.
 	BeginModule(g *il.Graph) error
+	// EndModule does any work specific to the end of code generation for a module definition.
 	EndModule(g *il.Graph) error
-
+	// GenerateVariables generates variable definitions in the context of the current module definition.
 	GenerateVariables(vs []*il.VariableNode) error
+	// GenerateModule generates a single module instantiation in the context of the current module definition.
 	GenerateModule(m *il.ModuleNode) error
+	// GenerateLocal generates a single local value definition in the context of the current module definition.
 	GenerateLocal(l *il.LocalNode) error
+	// GenerateResource generates a single resource instantiation in the context of the current module definition.
 	GenerateResource(r *il.ResourceNode) error
+	// GenerateOutputs generates the list of outputs in the context of the current module definition.
 	GenerateOutputs(os []*il.OutputNode) error
 }
 
+// generateNode generates a single local value, module, or resource node, ensuring that its dependencies have been
+// generated before it is itself generated.
 func generateNode(n il.Node, lang Generator, done map[il.Node]struct{}) error {
 	if _, ok := done[n]; ok {
 		return nil
@@ -49,6 +60,7 @@ func generateNode(n il.Node, lang Generator, done map[il.Node]struct{}) error {
 	return nil
 }
 
+// generateModuleDef sequences the generation of a single module definition.
 func generateModuleDef(g *il.Graph, lang Generator) error {
 	// We currently do not support multiple provider instantiations, so fail if any providers have dependencies on
 	// nodes that do not represent config vars.
@@ -136,6 +148,7 @@ func generateModuleDef(g *il.Graph, lang Generator) error {
 	return lang.EndModule(g)
 }
 
+// Generate generates source for a list of modules using the given language-specific generator.
 func Generate(modules []*il.Graph, lang Generator) error {
 	// Generate any necessary preamble.
 	if err := lang.GeneratePreamble(modules); err != nil {
