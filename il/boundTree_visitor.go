@@ -1,5 +1,10 @@
 package il
 
+import (
+	"github.com/pkg/errors"
+	"github.com/pulumi/pulumi/pkg/util/contract"
+)
+
 // A BoundNodeVisitor is a function that visits and optionally replaces a node in a bound property tree.
 type BoundNodeVisitor func(n BoundNode) (BoundNode, error)
 

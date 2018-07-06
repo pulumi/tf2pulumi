@@ -7,16 +7,24 @@ import (
 	"github.com/pulumi/pulumi/pkg/util/contract"
 )
 
+// The applyRewriter is responsible for transforming expressions involving Pulumi output properties into a call to the
+// __apply intrinsic and replacing the output properties with appropriate calls to the __applyArg intrinsic.
 type applyRewriter struct {
 	root      BoundExpr
 	applyArgs []BoundExpr
 }
 
+// rewriteBoundVariableAccess replaces a single access to an ouptut-typed BoundVariableAccess with a call to the
+// __applyArg intrinsic.
 func (r *applyRewriter) rewriteBoundVariableAccess(n *BoundVariableAccess) (BoundExpr, error) {
+	// If the access is not output-typed, return the node as-is.
 	if !n.Type().IsOutput() {
 		return n, nil
 	}
 
+	// Otherwise, append the access to the list of apply arguments and return an appropriate call to __applyArg.
+	//
+	// TODO: deduplicate multiple accesses to the same variable and field.
 	idx := len(r.applyArgs)
 	r.applyArgs = append(r.applyArgs, n)
 
@@ -27,9 +35,11 @@ func (r *applyRewriter) rewriteBoundVariableAccess(n *BoundVariableAccess) (Boun
 	}, nil
 }
 
+// rewriteRoot replaces the root node in a bound expression with a call to the __apply intrinsic if necessary.
 func (r *applyRewriter) rewriteRoot(n BoundExpr) (BoundNode, error) {
 	contract.Require(n == r.root, "n")
 
+	// Clear the root context so that future calls to enterNode recognize new expression roots.
 	r.root = nil
 	if len(r.applyArgs) == 0 {
 		return n, nil
@@ -44,6 +54,7 @@ func (r *applyRewriter) rewriteRoot(n BoundExpr) (BoundNode, error) {
 	}, nil
 }
 
+// rewriteNode performs the apply rewrite on a single node, delegating to type-specific functions as necessary.
 func (r *applyRewriter) rewriteNode(n BoundNode) (BoundNode, error) {
 	if e, ok := n.(BoundExpr); ok {
 		v, isVar := e.(*BoundVariableAccess)
@@ -51,8 +62,8 @@ func (r *applyRewriter) rewriteNode(n BoundNode) (BoundNode, error) {
 			if isVar {
 				rv, ok := v.TFVar.(*config.ResourceVariable)
 				if ok {
-					// If we're accessing a field of a data source or a nested field of a resource, we need to perform an
-					// apply. As such, we'll synthesize an output here.
+					// If we're accessing a field of a data source or a nested field of a resource, we need to
+					// perform an apply. As such, we'll synthesize an output here.
 					if rv.Mode == config.DataResourceMode && len(v.Elements) > 0 || len(v.Elements) > 1 {
 						ee, err := r.rewriteBoundVariableAccess(v)
 						if err != nil {
@@ -71,6 +82,9 @@ func (r *applyRewriter) rewriteNode(n BoundNode) (BoundNode, error) {
 	return n, nil
 }
 
+// enterNode is a pre-order visitor that is used to find roots for bound expression trees. This approach is intended to
+// allow consumers of the apply rewrite to call RewriteApplies on a list or map property that may contain multiple
+// independent bound expressions rather than requiring that they find and rewrite these expressions individually.
 func (r *applyRewriter) enterNode(n BoundNode) (BoundNode, error) {
 	e, ok := n.(BoundExpr)
 	if ok && r.root == nil {
@@ -79,11 +93,75 @@ func (r *applyRewriter) enterNode(n BoundNode) (BoundNode, error) {
 	return n, nil
 }
 
+// RewriteApplies transforms all bound expression trees in the given BoundNode that reference output-typed properties
+// into appropiate calls to the __apply and __applyArg intrinsic. Given an expression tree, the rewrite proceeds as
+// follows:
+// - let the list of outputs be an empty list
+// - for each node in post-order:
+//     - if the node is the root of the expresison tree:
+//         - if the node is a variable access:
+//             - if the access has an output-typed element on its path, replace the variable access with a call to the
+//               __applyArg intrinsic and append the access to the list of outputs.
+//             - otherwise, the access does not need to be transformed; return it as-is.
+//         - if the list of outputs is empty, the root does not need to be transformed; return it as-is.
+//         - otherwise, replace the root with a call to the __apply intrinstic. The first n arguments to this call are
+//           the elementss of the list of outputs. The final argument is the original root node.
+//     - otherwise, if the root is an output-typed variable access, replace the variable access with a call to the
+//       __applyArg instrinsic and append the access to the list of outputs.
+//
+// As an example, this transforms the following expression:
+//     (output string
+//         "#!/bin/bash -xe\n\nCA_CERTIFICATE_DIRECTORY=/etc/kubernetes/pki\necho \""
+//         (aws_eks_cluster.demo.certificate_authority.0.data output<unknown> *config.ResourceVariable)
+//         "\" | base64 -d >  $CA_CERTIFICATE_FILE_PATH\nsed -i s,MASTER_ENDPOINT,"
+//         (aws_eks_cluster.demo.endpoint output<string> *config.ResourceVariable)
+//         ",g /var/lib/kubelet/kubeconfig\nsed -i s,CLUSTER_NAME,"
+//         (var.cluster-name string *config.UserVariable)
+//         ",g /var/lib/kubelet/kubeconfig\nsed -i s,REGION,"
+//         (data.aws_region.current.name output<string> *config.ResourceVariable)
+//         ",g /etc/systemd/system/kubelet.servicesed -i s,MASTER_ENDPOINT,"
+//         (aws_eks_cluster.demo.endpoint output<string> *config.ResourceVariable)
+//         ",g /etc/systemd/system/kubelet.service"
+//     )
+//
+// into this expression:
+//     (call output<unknown> __apply
+//         (aws_eks_cluster.demo.certificate_authority.0.data output<unknown> *config.ResourceVariable)
+//         (aws_eks_cluster.demo.endpoint output<string> *config.ResourceVariable)
+//         (data.aws_region.current.name output<string> *config.ResourceVariable)
+//         (aws_eks_cluster.demo.endpoint output<string> *config.ResourceVariable)
+//         (output string
+//             "#!/bin/bash -xe\n\nCA_CERTIFICATE_DIRECTORY=/etc/kubernetes/pki\necho \""
+//             (call unknown __applyArg
+//                 0
+//             )
+//             "\" | base64 -d >  $CA_CERTIFICATE_FILE_PATH\nsed -i s,MASTER_ENDPOINT,"
+//             (call string __applyArg
+//                 1
+//             )
+//             ",g /var/lib/kubelet/kubeconfig\nsed -i s,CLUSTER_NAME,"
+//             (var.cluster-name string *config.UserVariable)
+//             ",g /var/lib/kubelet/kubeconfig\nsed -i s,REGION,"
+//             (call string __applyArg
+//                 2
+//             )
+//             ",g /etc/systemd/system/kubelet.servicesed -i s,MASTER_ENDPOINT,"
+//             (call string __applyArg
+//                 3
+//             )
+//             ",g /etc/systemd/system/kubelet.service"
+//         )
+//     )
+//
+// This form is amenable to code generation for targets that require that outputs are resolved before their values are
+// accessible (e.g. Pulumi's JS/TS libraries).
 func RewriteApplies(n BoundNode) (BoundNode, error) {
 	rewriter := &applyRewriter{}
 	return VisitBoundNode(n, rewriter.enterNode, rewriter.rewriteNode)
 }
 
+// RewriteAssets transforms all arguments to Terraform properties that are projected as Pulumi assets or archives into
+// calls to the appropriate __asset or __archive intrinsic.
 func RewriteAssets(n BoundNode) (BoundNode, error) {
 	rewriter := func(n BoundNode) (BoundNode, error) {
 		m, ok := n.(*BoundMapProperty)

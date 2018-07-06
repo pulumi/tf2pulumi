@@ -6,7 +6,6 @@ import (
 
 	"github.com/hashicorp/hil/ast"
 	"github.com/hashicorp/terraform/config"
-	"github.com/pkg/errors"
 	"github.com/pulumi/pulumi/pkg/util/contract"
 )
 

@@ -8,6 +8,7 @@ import (
 	"github.com/pkg/errors"
 )
 
+// bindArithmetic binds an HIL arithmetic expression.
 func (b *propertyBinder) bindArithmetic(n *ast.Arithmetic) (BoundExpr, error) {
 	exprs, err := b.bindExprs(n.Exprs)
 	if err != nil {
@@ -17,6 +18,9 @@ func (b *propertyBinder) bindArithmetic(n *ast.Arithmetic) (BoundExpr, error) {
 	return &BoundArithmetic{HILNode: n, Exprs: exprs}, nil
 }
 
+// bindCall binds an HIL call expression. This involves binding the call's arguments, then using the name of the called
+// function to determine the type of the call expression. The binder curretly only supports a subset of the functions
+// supported by terraform.
 func (b *propertyBinder) bindCall(n *ast.Call) (BoundExpr, error) {
 	args, err := b.bindExprs(n.Args)
 	if err != nil {
@@ -57,6 +61,7 @@ func (b *propertyBinder) bindCall(n *ast.Call) (BoundExpr, error) {
 	return &BoundCall{HILNode: n, ExprType: exprType, Args: args}, nil
 }
 
+// bindConditional binds an HIL conditional expression.
 func (b *propertyBinder) bindConditional(n *ast.Conditional) (BoundExpr, error) {
 	condExpr, err := b.bindExpr(n.CondExpr)
 	if err != nil {
@@ -71,6 +76,8 @@ func (b *propertyBinder) bindConditional(n *ast.Conditional) (BoundExpr, error) 
 		return nil, err
 	}
 
+	// If the types of both branches match, then the type of the expression is that of the branches. If the types of
+	// both branches differ, then mark the type as unknown.
 	exprType := trueExpr.Type()
 	if exprType != falseExpr.Type() {
 		exprType = TypeUnknown
@@ -85,6 +92,7 @@ func (b *propertyBinder) bindConditional(n *ast.Conditional) (BoundExpr, error) 
 	}, nil
 }
 
+// bindIndex binds an HIL index expression.
 func (b *propertyBinder) bindIndex(n *ast.Index) (BoundExpr, error) {
 	boundTarget, err := b.bindExpr(n.Target)
 	if err != nil {
@@ -95,6 +103,8 @@ func (b *propertyBinder) bindIndex(n *ast.Index) (BoundExpr, error) {
 		return nil, err
 	}
 
+	// If the target type is not a list, then the type of the expression is unknown. Otherwise it is the element type
+	// of the list.
 	exprType := TypeUnknown
 	targetType := boundTarget.Type()
 	if targetType.IsList() {
@@ -109,6 +119,7 @@ func (b *propertyBinder) bindIndex(n *ast.Index) (BoundExpr, error) {
 	}, nil
 }
 
+// bindLiteral binds an HIL literal expression. The literal must be of type bool, int, float, or string.
 func (b *propertyBinder) bindLiteral(n *ast.LiteralNode) (BoundExpr, error) {
 	exprType := TypeUnknown
 	switch n.Typex {
@@ -124,6 +135,8 @@ func (b *propertyBinder) bindLiteral(n *ast.LiteralNode) (BoundExpr, error) {
 
 	return &BoundLiteral{ExprType: exprType, Value: n.Value}, nil
 }
+
+// bindOutput binds an HIL output expression.
 func (b *propertyBinder) bindOutput(n *ast.Output) (BoundExpr, error) {
 	exprs, err := b.bindExprs(n.Exprs)
 	if err != nil {
@@ -138,6 +151,10 @@ func (b *propertyBinder) bindOutput(n *ast.Output) (BoundExpr, error) {
 	return &BoundOutput{HILNode: n, Exprs: exprs}, nil
 }
 
+// bindVariableAccess binds an HIL variable access expression. This involves first interpreting the variable name as a
+// Terraform interpolated variable, then using the result of that interpretation to decide which graph node the
+// variable access refers to, if any: count, path, and Terraformn variables may not refer to graph nodes. It is an
+// error for a variable access to refer to a non-existent node.
 func (b *propertyBinder) bindVariableAccess(n *ast.VariableAccess) (BoundExpr, error) {
 	tfVar, err := config.NewInterpolatedVariable(n.Name)
 	if err != nil {
@@ -181,29 +198,29 @@ func (b *propertyBinder) bindVariableAccess(n *ast.VariableAccess) (BoundExpr, e
 	case *config.ResourceVariable:
 		// default
 
-		// look up the resource.
+		// Look up the resource.
 		r, ok := b.builder.resources[v.ResourceId()]
 		if !ok {
 			return nil, errors.Errorf("unknown resource %v", v.ResourceId())
 		}
 		ilNode = r
 
-		// ensure that the resource has a provider.
+		// Ensure that the resource has a provider.
 		if err := b.builder.ensureProvider(r); err != nil {
 			return nil, err
 		}
 
-		// fetch the resource's schema info
+		// Fetch the resource's schema info.
 		sch = r.Schemas()
 
-		// name{.property}+
+		// Parse the path of the accessed field (name{.property}+).
 		elements = strings.Split(v.Field, ".")
 		elemSch := sch
 		for _, e := range elements {
 			elemSch = elemSch.PropertySchemas(e)
 		}
 
-		// Handle multi-references (splats and indexes)
+		// Handle multi-references (splats and indexes).
 		exprType = elemSch.Type().OutputOf()
 		if v.Multi && v.Index == -1 {
 			exprType = exprType.ListOf()
@@ -223,7 +240,7 @@ func (b *propertyBinder) bindVariableAccess(n *ast.VariableAccess) (BoundExpr, e
 			return nil, errors.New("NYI: user variable elements")
 		}
 
-		// look up the variable.
+		// Look up the variable.
 		vn, ok := b.builder.variables[v.Name]
 		if !ok {
 			return nil, errors.Errorf("unknown variable %s", v.Name)
@@ -231,7 +248,8 @@ func (b *propertyBinder) bindVariableAccess(n *ast.VariableAccess) (BoundExpr, e
 		ilNode = vn
 
 		// If the variable does not have a default, its type is string. If it does have a default, its type is string
-		// iff the default's type is also string. Note that we don't try all that hard here.
+		// iff the default's type is also string. Note that we don't try all that hard here to get things right, and we
+		// more likely than not need to do better.
 		exprType = TypeString
 		if vn.DefaultValue != nil && vn.DefaultValue.Type() != TypeString {
 			exprType = TypeUnknown
@@ -250,6 +268,7 @@ func (b *propertyBinder) bindVariableAccess(n *ast.VariableAccess) (BoundExpr, e
 	}, nil
 }
 
+// bindExprs binds the list of HIL expressions and returns the resulting list.
 func (b *propertyBinder) bindExprs(ns []ast.Node) ([]BoundExpr, error) {
 	boundExprs := make([]BoundExpr, len(ns))
 	for i, n := range ns {
@@ -262,6 +281,7 @@ func (b *propertyBinder) bindExprs(ns []ast.Node) ([]BoundExpr, error) {
 	return boundExprs, nil
 }
 
+// bindExpr binds a single HIL expression.
 func (b *propertyBinder) bindExpr(n ast.Node) (BoundExpr, error) {
 	switch n := n.(type) {
 	case *ast.Arithmetic:
