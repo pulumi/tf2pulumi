@@ -24,10 +24,10 @@ import (
 // A Graph is the analyzed form of the configuration for a single Terraform module.
 type Graph struct {
 	// Tree is the module's entry in the module tree. The tree is used e.g. to determine the module's name.
-	Tree      *module.Tree
+	Tree *module.Tree
 	// Modules maps from module name to module node for this module's module instantiations. This map is used to
 	// bind a module variable access in an interpolation to the corresponding module node.
-	Modules   map[string]*ModuleNode
+	Modules map[string]*ModuleNode
 	// Providers maps from provider name to provider node for this module's provider instantiations. This map is
 	// used to bind a provider reference to the corresponding provider node.
 	Providers map[string]*ProviderNode
@@ -35,10 +35,10 @@ type Graph struct {
 	// to bind a resource variable access in an interpolation to the corresponding resource node.
 	Resources map[string]*ResourceNode
 	// Outputs maps from output name to output node for this module's outputs.
-	Outputs   map[string]*OutputNode
+	Outputs map[string]*OutputNode
 	// Locals maps from local value name to local value node for this module's local values. This map is used to bind a
 	// local variable access in an interpolation to the corresponding local value node.
-	Locals    map[string]*LocalNode
+	Locals map[string]*LocalNode
 	// Variables maps from variable name to variable node for this module's variables. This map is used to bind a
 	// variable access in an interpolation to the corresponding variable node.
 	Variables map[string]*VariableNode
@@ -61,9 +61,9 @@ type Node interface {
 // A ModuleNode is the analyzed form of a module instantiation in a Terraform configuration.
 type ModuleNode struct {
 	// Config is the module's raw Terraform configuration.
-	Config     *config.Module
+	Config *config.Module
 	// Deps is the list of the module's dependencies as implied by the nodes referenced by its configuration.
-	Deps       []Node
+	Deps []Node
 	// Properties is the bound form of the module's configuration properties.
 	Properties *BoundMapProperty
 }
@@ -71,15 +71,15 @@ type ModuleNode struct {
 // A ProviderNode is the analyzed form of a provider instantiation in a Terraform configuration.
 type ProviderNode struct {
 	// Config is the provider's raw Terraform configuration.
-	Config     *config.ProviderConfig
+	Config *config.ProviderConfig
 	// Deps is the list of the provider's dependencies as implied by the nodes referenced by its configuration.
-	Deps       []Node
+	Deps []Node
 	// Properties is the bound form of the provider's configuration properties.
 	Properties *BoundMapProperty
 	// Info is the set of Pulumi-specific information about this particular resource provider. Of particular interest
 	// is per-{resource,data source} schema information, which is used to calculate names and types for resources and
 	// their properties.
-	Info       *tfbridge.ProviderInfo
+	Info *tfbridge.ProviderInfo
 }
 
 // A ResourceNode is the analyzed form of a resource or data source instatiation in a Terraform configuration. In
@@ -88,31 +88,31 @@ type ProviderNode struct {
 // "data resources".
 type ResourceNode struct {
 	// Config is the resource's raw Terraform configuration.
-	Config       *config.Resource
+	Config *config.Resource
 	// Provider is a reference to the resource's provider. Consumers of this package will never observe a nil value in
 	// this field.
-	Provider     *ProviderNode
+	Provider *ProviderNode
 	// Deps is the list of the resource's dependencies as implied by the nodes referenced by its configuration.
-	Deps         []Node
+	Deps []Node
 	// ExplicitDeps is the list of the resource's explicit dependencies. This is a subset of Deps.
 	ExplicitDeps []Node
 	// Count is the bound form of the resource's count property.
-	Count        BoundNode
+	Count BoundNode
 	// Properties is the bound form of the resource's configuration properties.
-	Properties   *BoundMapProperty
+	Properties *BoundMapProperty
 }
 
 // An OutputNode is the analyzed form of an output in a Terraform configuration. An OutputNode may never be referenced
 // by another node, as its value is not nameable in a Terraform configuration.
 type OutputNode struct {
 	// Config is the output's raw Terraform configuration.
-	Config       *config.Output
+	Config *config.Output
 	// Deps is the list of the output's dependencies as implied by the nodes referenced by its configuration.
-	Deps         []Node
+	Deps []Node
 	// ExplicitDeps is the list of the output's explicit dependencies. This is a subset of Deps.
 	ExplicitDeps []Node
 	// Value is the bound from of the output's value.
-	Value        BoundNode
+	Value BoundNode
 }
 
 // A LocalNode is the analyzed form of a local value in a Terraform configuration.
@@ -120,15 +120,15 @@ type LocalNode struct {
 	// Config is the local value's raw Terraform configuration.
 	Config *config.Local
 	// Deps is the list of the local value's dependencies as implied by the nodes referenced by its configuration.
-	Deps   []Node
+	Deps []Node
 	// Value is the bound form of the local value's value.
-	Value  BoundNode
+	Value BoundNode
 }
 
 // A VariableNode is the analyzed form of a Terraform variable. A VariableNode's list of dependencies is always empty.
 type VariableNode struct {
 	// Config is the variable's raw Terraform configuration.
-	Config       *config.Variable
+	Config *config.Variable
 	// DefaultValue is the bound form of the variable's default value (if any).
 	DefaultValue BoundNode
 }
@@ -572,7 +572,7 @@ func (b *builder) buildVariable(v *VariableNode) error {
 	return nil
 }
 
-// BuildGraph analyzes the various entities present in the given module's configuration and constructs the 
+// BuildGraph analyzes the various entities present in the given module's configuration and constructs the
 // corresponding dependency graph. Building the graph involves binding each entity's properties (if any) and
 // computing its list of dependency edges.
 func BuildGraph(tree *module.Tree) (*Graph, error) {
