@@ -10,44 +10,62 @@ import (
 	"github.com/pulumi/pulumi/pkg/util/contract"
 )
 
-// TODO: real, actual output types :groan:
-
+// Type represents the type of a single node in a bound property tree. Types are fairly simplistic: in addition to the
+// primitive types--bool, string, number, map, and unknown--there are the composite types list and output. A type that
+// is both a list and an output is considered to be an output of a list. Outputs have the semantic that their values may
+// not be known promptly; in particular, the target language may need to introduce special elements (e.g. `apply`) to
+// access the concrete value of an output.
 type Type uint32
 
 const (
+	// TypeInvalid is self-explanatory.
 	TypeInvalid Type = 0
-	TypeBool    Type = 1
-	TypeString  Type = 1 << 1
-	TypeNumber  Type = 1 << 2
-	TypeMap     Type = 1 << 3
+	// TypeBool represents the universe of boolean values.
+	TypeBool Type = 1
+	// TypeString represents the universe of string values.
+	TypeString Type = 1 << 1
+	// TypeNumber represents the universe of real number values.
+	TypeNumber Type = 1 << 2
+	// TypeMap represents the universe of string -> unknown values.
+	TypeMap Type = 1 << 3
+	// TypeUnknown represnets the universe of unknown values. These values may have any type at runtime, and dynamic
+	// conversions may be necessary when assigning these values to differently-typed destinations.
 	TypeUnknown Type = 1 << 4
 
-	TypeList   Type = 1 << 5
+	// TypeList represents the universe of list values. A list's element type must be a primitive type.
+	TypeList Type = 1 << 5
+	// TypeOutput represents the universe of output value.
 	TypeOutput Type = 1 << 6
 
 	elementTypeMask Type = TypeBool | TypeString | TypeNumber | TypeMap | TypeUnknown
 )
 
+// IsList returns true if this value represents a list type.
 func (t Type) IsList() bool {
 	return t&TypeList != 0
 }
 
+// ListOf returns this a list type with this value as its element type.
 func (t Type) ListOf() Type {
 	return t | TypeList
 }
 
+// IsOutput returns true if this value represents an output type.
 func (t Type) IsOutput() bool {
 	return t&TypeOutput != 0
 }
 
+// ListOf returns this an output type with this value as its element type.
 func (t Type) OutputOf() Type {
 	return t | TypeOutput
 }
 
+// ElementType returns the element type of this value.
 func (t Type) ElementType() Type {
 	return t & elementTypeMask
 }
 
+// String returns the string representation of this type.
 func (t Type) String() string {
 	s := "invalid"
 	switch t.ElementType() {
@@ -74,16 +92,16 @@ func (t Type) String() string {
 
 }
 
+// dumper is used to dump bound nodes in a simple S-expression style.
 type dumper struct {
 	w      io.Writer
 	indent string
 }
 
 func (d *dumper) indented(f func()) {
-	indent := d.indent
 	d.indent += "    "
-	defer func() { d.indent = indent }()
 	f()
+	d.indent = d.indent[:len(d.indent)-4]
 }
 
 func (d *dumper) dump(vs ...interface{}) {
@@ -99,6 +117,8 @@ func (d *dumper) dump(vs ...interface{}) {
 	}
 }
 
+// A BoundNode represents a single bound property map, property list, or interpolation expression. Every
+// BoundNode has a Type.
 type BoundNode interface {
 	Type() Type
 
@@ -106,18 +126,23 @@ type BoundNode interface {
 	isNode()
 }
 
+// A BoundExpr represents a single node in a bound interpolation expression. This type is used to help ensure that
+// bound interpolation expressions only reference nodes that may be present in such expressions.
 type BoundExpr interface {
 	BoundNode
 
 	isExpr()
 }
 
+// BoundArithmetic is the bound form of an HIL arithmetic expression (e.g. `${a + b}`).
 type BoundArithmetic struct {
+	// HILNode is the HIL node associated with this arithmetic expression.
 	HILNode *ast.Arithmetic
-
+	// Exprs is the bound list of the arithmetic expression's operands.
 	Exprs []BoundExpr
 }
 
+// Type returns the type of the arithmetic expression, which is always TypeNumber.
 func (n *BoundArithmetic) Type() Type {
 	return TypeNumber
 }
@@ -135,13 +160,17 @@ func (n *BoundArithmetic) dump(d *dumper) {
 func (n *BoundArithmetic) isNode() {}
 func (n *BoundArithmetic) isExpr() {}
 
+// BoundCall is the bound form of an HIL call expression (e.g. `${foo(bar, baz)}`).
 type BoundCall struct {
-	HILNode  *ast.Call
+	// HILNode is the HIL node associated with this call.
+	HILNode *ast.Call
+	// ExprType is the type of the call expression.
 	ExprType Type
-
+	// Args is the bound list of the call's arguments.
 	Args []BoundExpr
 }
 
+// Type returns the type of the call expression.
 func (n *BoundCall) Type() Type {
 	return n.ExprType
 }
@@ -159,15 +188,21 @@ func (n *BoundCall) dump(d *dumper) {
 func (n *BoundCall) isNode() {}
 func (n *BoundCall) isExpr() {}
 
+// BoundConditional is the bound form of an HIL conditional expression (e.g. `foo ? bar : baz`).
 type BoundConditional struct {
-	HILNode  *ast.Conditional
+	// HILNode is the HIL node associated with this conditional expression.
+	HILNode *ast.Conditional
+	// ExprType is the type of the conditional expression.
 	ExprType Type
-
-	CondExpr  BoundExpr
-	TrueExpr  BoundExpr
+	// CondExpr is the bound form of the conditional expression's predicate.
+	CondExpr BoundExpr
+	// TrueExpr is the bound form of the conditional expression's true branch.
+	TrueExpr BoundExpr
+	// FalseExpr is the bound from of the condition expression's false branch.
 	FalseExpr BoundExpr
 }
 
+// Type returns the type of the conditional expression.
 func (n *BoundConditional) Type() Type {
 	return n.ExprType
 }
@@ -185,14 +220,19 @@ func (n *BoundConditional) dump(d *dumper) {
 func (n *BoundConditional) isNode() {}
 func (n *BoundConditional) isExpr() {}
 
+// BoundIndex is the bound form of an HIL index expression (e.g. `${foo[bar]}`).
 type BoundIndex struct {
-	HILNode  *ast.Index
+	// HILNode is the HIL node associated with this index expression.
+	HILNode *ast.Index
+	// ExprType is the type of the index expression.
 	ExprType Type
-
+	// TargetExpr is the bound form of the index expression's target (e.g. `foo` in `${foo[bar]}`).
 	TargetExpr BoundExpr
-	KeyExpr    BoundExpr
+	// KeyExpr is the bound form of the index expression's key (e.g. `bar` in `${foo[bar]}`).
+	KeyExpr BoundExpr
 }
 
+// Type returns the type of the index expression.
 func (n *BoundIndex) Type() Type {
 	return n.ExprType
 }
@@ -209,11 +249,16 @@ func (n *BoundIndex) dump(d *dumper) {
 func (n *BoundIndex) isNode() {}
 func (n *BoundIndex) isExpr() {}
 
+// BoundLiteral is the bound form of a literal value.
 type BoundLiteral struct {
+	// ExprType is the type of the literal expression.
 	ExprType Type
-	Value    interface{}
+	// Value is the value of the literal expression. This may be a bool, string, float64, or in the case of the
+	// argument to the __applyArg intrinsic, an int.
+	Value interface{}
 }
 
+// Type returns the type of the literal expression.
 func (n *BoundLiteral) Type() Type {
 	return n.ExprType
 }
@@ -230,12 +275,15 @@ func (n *BoundLiteral) dump(d *dumper) {
 func (n *BoundLiteral) isNode() {}
 func (n *BoundLiteral) isExpr() {}
 
+// BoundOutput is the bound form of an HIL output expression (e.g. `foo ${bar} baz`).
 type BoundOutput struct {
+	// HILNode is the HIL node associated with this output expression.
 	HILNode *ast.Output
-
+	// Exprs is the bound list of the output's operands.
 	Exprs []BoundExpr
 }
 
+// Type returns the type of the output expression (which is always TypeString).
 func (n *BoundOutput) Type() Type {
 	return TypeString
 }
@@ -253,16 +301,23 @@ func (n *BoundOutput) dump(d *dumper) {
 func (n *BoundOutput) isNode() {}
 func (n *BoundOutput) isExpr() {}
 
+// BoundVariableAccess is the bound form of an HIL variable access expression (e.g. `${foo.bar}`).
 type BoundVariableAccess struct {
-	HILNode  *ast.VariableAccess
+	// HILNode is the HIL node associated with this variable access expression.
+	HILNode *ast.VariableAccess
+	// Elements are the path elements that comprise the variable access expression.
 	Elements []string
-	Schemas  Schemas
+	// Schemas are the Terraform and Pulumi schemas associated with the referenced variable.
+	Schemas Schemas
+	// ExprType is the type of the variable access expression.
 	ExprType Type
-
-	TFVar  config.InterpolatedVariable
+	// TFVar is the Terraform representation of the variable access expression.
+	TFVar config.InterpolatedVariable
+	// ILNode is the dependency graph node associated with the accessed variable.
 	ILNode Node
 }
 
+// Type returns the type of the variable access expression.
 func (n *BoundVariableAccess) Type() Type {
 	return n.ExprType
 }
@@ -274,11 +329,15 @@ func (n *BoundVariableAccess) dump(d *dumper) {
 func (n *BoundVariableAccess) isNode() {}
 func (n *BoundVariableAccess) isExpr() {}
 
+// BoundListProperty is the bound form of an HCL list property. (e.g. `[ foo, bar ]`).
 type BoundListProperty struct {
-	Schemas  Schemas
+	// Schemas are the Terraform and Pulumi schemas associated with the list.
+	Schemas Schemas
+	// Elements is the bound list of the list's elements.
 	Elements []BoundNode
 }
 
+// Type returns the type of the list property (always a list type).
 func (n *BoundListProperty) Type() Type {
 	return n.Schemas.ElemSchemas().Type().ListOf()
 }
@@ -295,11 +354,15 @@ func (n *BoundListProperty) dump(d *dumper) {
 
 func (n *BoundListProperty) isNode() {}
 
+// BoundMapProperty is the bound form of an HCL map property. (e.g. `{ foo = bar ]`).
 type BoundMapProperty struct {
-	Schemas  Schemas
+	// Schemas are the Terraform and Pulumi schemas associated with the map.
+	Schemas Schemas
+	// Elements is a map from name to bound value of the map's elements.
 	Elements map[string]BoundNode
 }
 
+// Type returns the type of the map property (always TypeMap).
 func (n *BoundMapProperty) Type() Type {
 	return TypeMap
 }
@@ -316,196 +379,7 @@ func (n *BoundMapProperty) dump(d *dumper) {
 
 func (n *BoundMapProperty) isNode() {}
 
-type BoundNodeVisitor func(n BoundNode) (BoundNode, error)
-
-func IdentityVisitor(n BoundNode) (BoundNode, error) {
-	return n, nil
-}
-
-func visitBoundArithmetic(n *BoundArithmetic, pre, post BoundNodeVisitor) (BoundNode, error) {
-	exprs, err := visitBoundExprs(n.Exprs, pre, post)
-	if err != nil {
-		return nil, err
-	}
-	if len(exprs) == 0 {
-		return nil, nil
-	}
-	n.Exprs = exprs
-	return post(n)
-}
-
-func visitBoundCall(n *BoundCall, pre, post BoundNodeVisitor) (BoundNode, error) {
-	exprs, err := visitBoundExprs(n.Args, pre, post)
-	if err != nil {
-		return nil, err
-	}
-	n.Args = exprs
-	return post(n)
-}
-
-func visitBoundConditional(n *BoundConditional, pre, post BoundNodeVisitor) (BoundNode, error) {
-	condExpr, err := VisitBoundExpr(n.CondExpr, pre, post)
-	if err != nil {
-		return nil, err
-	}
-	trueExpr, err := VisitBoundExpr(n.TrueExpr, pre, post)
-	if err != nil {
-		return nil, err
-	}
-	falseExpr, err := VisitBoundExpr(n.FalseExpr, pre, post)
-	if err != nil {
-		return nil, err
-	}
-	n.CondExpr, n.TrueExpr, n.FalseExpr = condExpr, trueExpr, falseExpr
-	return post(n)
-}
-
-func visitBoundIndex(n *BoundIndex, pre, post BoundNodeVisitor) (BoundNode, error) {
-	targetExpr, err := VisitBoundExpr(n.TargetExpr, pre, post)
-	if err != nil {
-		return nil, err
-	}
-	keyExpr, err := VisitBoundExpr(n.KeyExpr, pre, post)
-	if err != nil {
-		return nil, err
-	}
-	n.TargetExpr, n.KeyExpr = targetExpr, keyExpr
-	return post(n)
-}
-
-func visitBoundListProperty(n *BoundListProperty, pre, post BoundNodeVisitor) (BoundNode, error) {
-	exprs, err := visitBoundNodes(n.Elements, pre, post)
-	if err != nil {
-		return nil, err
-	}
-	if len(exprs) == 0 {
-		return nil, nil
-	}
-	n.Elements = exprs
-	return post(n)
-}
-
-func visitBoundMapProperty(n *BoundMapProperty, pre, post BoundNodeVisitor) (BoundNode, error) {
-	for k, e := range n.Elements {
-		ee, err := VisitBoundNode(e, pre, post)
-		if err != nil {
-			return nil, err
-		}
-		if ee == nil {
-			delete(n.Elements, k)
-		} else {
-			n.Elements[k] = ee
-		}
-	}
-	return post(n)
-}
-
-func visitBoundOutput(n *BoundOutput, pre, post BoundNodeVisitor) (BoundNode, error) {
-	exprs, err := visitBoundExprs(n.Exprs, pre, post)
-	if err != nil {
-		return nil, err
-	}
-	if len(exprs) == 0 {
-		return nil, nil
-	}
-	n.Exprs = exprs
-	return post(n)
-}
-
-func visitBoundExprs(ns []BoundExpr, pre, post BoundNodeVisitor) ([]BoundExpr, error) {
-	nils := 0
-	for i, e := range ns {
-		ee, err := VisitBoundExpr(e, pre, post)
-		if err != nil {
-			return nil, err
-		}
-		if ee == nil {
-			nils++
-		}
-		ns[i] = ee
-	}
-	if nils == 0 {
-		return ns, nil
-	} else if nils == len(ns) {
-		return []BoundExpr{}, nil
-	}
-
-	nns := make([]BoundExpr, 0, len(ns)-nils)
-	for _, e := range ns {
-		if e != nil {
-			nns = append(nns, e)
-		}
-	}
-	return nns, nil
-}
-
-func visitBoundNodes(ns []BoundNode, pre, post BoundNodeVisitor) ([]BoundNode, error) {
-	nils := 0
-	for i, e := range ns {
-		ee, err := VisitBoundNode(e, pre, post)
-		if err != nil {
-			return nil, err
-		}
-		if ee == nil {
-			nils++
-		}
-		ns[i] = ee
-	}
-	if nils == 0 {
-		return ns, nil
-	} else if nils == len(ns) {
-		return []BoundNode{}, nil
-	}
-
-	nns := make([]BoundNode, 0, len(ns)-nils)
-	for _, e := range ns {
-		if e != nil {
-			nns = append(nns, e)
-		}
-	}
-	return nns, nil
-}
-
-func VisitBoundNode(n BoundNode, pre, post BoundNodeVisitor) (BoundNode, error) {
-	nn, err := pre(n)
-	if err != nil {
-		return nil, err
-	}
-	n = nn
-
-	switch n := n.(type) {
-	case *BoundArithmetic:
-		return visitBoundArithmetic(n, pre, post)
-	case *BoundCall:
-		return visitBoundCall(n, pre, post)
-	case *BoundConditional:
-		return visitBoundConditional(n, pre, post)
-	case *BoundIndex:
-		return visitBoundIndex(n, pre, post)
-	case *BoundListProperty:
-		return visitBoundListProperty(n, pre, post)
-	case *BoundLiteral:
-		return post(n)
-	case *BoundMapProperty:
-		return visitBoundMapProperty(n, pre, post)
-	case *BoundOutput:
-		return visitBoundOutput(n, pre, post)
-	case *BoundVariableAccess:
-		return post(n)
-	default:
-		contract.Failf("unexpected node type in visitBoundExpr: %T", n)
-		return nil, errors.Errorf("unexpected node type in visitBoundExpr: %T", n)
-	}
-}
-
-func VisitBoundExpr(n BoundExpr, pre, post BoundNodeVisitor) (BoundExpr, error) {
-	nn, err := VisitBoundNode(n, pre, post)
-	if err != nil || nn == nil {
-		return nil, err
-	}
-	return nn.(BoundExpr), nil
-}
-
+// DumpBoundNode dumps the string representation of the given bound node to the given writer.
 func DumpBoundNode(w io.Writer, e BoundNode) {
 	e.dump(&dumper{w: w})
 	fmt.Fprint(w, "\n")
