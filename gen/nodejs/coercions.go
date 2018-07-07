@@ -6,6 +6,8 @@ import (
 	"github.com/pgavlin/firewalker/il"
 )
 
+// makeCoercion inserts a call to the `__coerce` intrinsic if one is required to convert the given expression to the
+// given type.
 func makeCoercion(n il.BoundNode, toType il.Type) il.BoundNode {
 	// TODO: we really need dynamic coercions for the negative case.
 	from, to := n.Type().ElementType(), toType.ElementType()
@@ -35,6 +37,8 @@ func makeCoercion(n il.BoundNode, toType il.Type) il.BoundNode {
 	}
 }
 
+// addCoercions inserts calls to the `__coerce` intrinsic in cases where a list or map element's type disagrees with
+// the element type present in the list or map's schema.
 func addCoercions(prop il.BoundNode) (il.BoundNode, error) {
 	rewriter := func(n il.BoundNode) (il.BoundNode, error) {
 		switch n := n.(type) {

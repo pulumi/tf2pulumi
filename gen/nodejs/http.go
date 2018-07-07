@@ -10,6 +10,8 @@ import (
 	"github.com/pgavlin/firewalker/il"
 )
 
+// computeHTTPInputs computes the arguments for a call to request-promise-native's single function from the bound input
+// properties of the given http resource.
 func (g *Generator) computeHTTPInputs(r *il.ResourceNode, indent bool, count string) (string, error) {
 	urlProperty, ok := r.Properties.Elements["url"]
 	if !ok {
@@ -38,6 +40,7 @@ func (g *Generator) computeHTTPInputs(r *il.ResourceNode, indent bool, count str
 	return buf.String(), nil
 }
 
+// generateHTTP generates the given http resource as a call to request-promise-native's single exported function.
 func (g *Generator) generateHTTP(r *il.ResourceNode) error {
 	contract.Require(r.Provider.Config.Name == "http", "r")
 

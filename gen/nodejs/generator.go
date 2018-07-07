@@ -16,15 +16,22 @@ import (
 	"github.com/pgavlin/firewalker/il"
 )
 
+// Generator generates Typescript code that targets the Pulumi libraries from a Terraform configuration.
 type Generator struct {
+	// ProjectName is the name of the Pulumi project.
 	ProjectName string
-	module      *il.Graph
-
-	indent     string
+	// module is the module currently being generated;.
+	module *il.Graph
+	// indent is the current indentation level for the generated source.
+	indent string
+	// countIndex is the name (if any) of the currently in-scope count variable.
 	countIndex string
-	applyArgs  []il.BoundExpr
+	// applyArgs is the list of currently in-scope apply arguments.
+	applyArgs []il.BoundExpr
 }
 
+// cleanName replaces characters that are not allowed in Typescript identifiers with underscores. No attempt is made to
+// ensure that the result is unique.
 func cleanName(name string) string {
 	if !strings.ContainsAny(name, " -.") {
 		return name
@@ -37,14 +44,17 @@ func cleanName(name string) string {
 	}, name)
 }
 
+// localName returns the name for a local value with the given Terraform name.
 func localName(name string) string {
 	return "local_" + cleanName(name)
 }
 
+// resName returns the name for a resource instantiation with the given Terraform type and name.
 func resName(typ, name string) string {
 	return cleanName(fmt.Sprintf("%s_%s", typ, name))
 }
 
+// tsName returns the Pulumi name for the property with the given Terraform name and schemas.
 func tsName(tfName string, tfSchema *schema.Schema, schemaInfo *tfbridge.SchemaInfo, isObjectKey bool) string {
 	if schemaInfo != nil && schemaInfo.Name != "" {
 		return schemaInfo.Name
@@ -59,17 +69,64 @@ func tsName(tfName string, tfSchema *schema.Schema, schemaInfo *tfbridge.SchemaI
 	return tfbridge.TerraformToPulumiName(tfName, tfSchema, false)
 }
 
-func (g *Generator) isRoot() bool {
-	return len(g.module.Tree.Path()) == 0
-}
-
+// indented bumps the current indentation level, invokes the given function, and then resets the indentation level to
+// its prior value.
 func (g *Generator) indented(f func()) {
 	g.indent += "    "
 	f()
 	g.indent = g.indent[:len(g.indent)-4]
 }
 
+// gen generates code for a list of strings and expression trees. The former are written directly to the destination;
+// the latter are recursively generated using the appropriate gen* functions.
+func (g *Generator) gen(w io.Writer, vs ...interface{}) {
+	for _, v := range vs {
+		switch v := v.(type) {
+		case string:
+			fmt.Fprint(w, v)
+		case *il.BoundArithmetic:
+			g.genArithmetic(w, v)
+		case *il.BoundCall:
+			g.genCall(w, v)
+		case *il.BoundConditional:
+			g.genConditional(w, v)
+		case *il.BoundIndex:
+			g.genIndex(w, v)
+		case *il.BoundLiteral:
+			g.genLiteral(w, v)
+		case *il.BoundOutput:
+			g.genOutput(w, v)
+		case *il.BoundVariableAccess:
+			g.genVariableAccess(w, v)
+		case *il.BoundListProperty:
+			g.genListProperty(w, v)
+		case *il.BoundMapProperty:
+			g.genMapProperty(w, v)
+		default:
+			contract.Failf("unexpected type in gen: %T", v)
+		}
+	}
+}
+
+// genf generates code using a format string and its arguments. Any arguments that are BoundNode values are wrapped in
+// a FormatFunc that calls the appropriate recursive generation function. This allows for the composition of standard
+// format strings with expression/property code gen (e.g. `g.genf(w, ".apply(__arg0 => %v)", then)`, where `then` is
+// an expression tree).
+func (g *Generator) genf(w io.Writer, format string, args ...interface{}) {
+	for i := range args {
+		if node, ok := args[i].(il.BoundNode); ok {
+			args[i] = gen.FormatFunc(func(f fmt.State, c rune) { g.gen(f, node) })
+		}
+	}
+	fmt.Fprintf(w, format, args...)
+}
+
+// computeProperty generates code for the given property into a string ala fmt.Sprintf. It returns both the generated
+// code and a bool value that indicates whether or not any output-typed values were nested in the property value.
 func (g *Generator) computeProperty(prop il.BoundNode, indent bool, count string) (string, bool, error) {
+	// First:
+	// - retype any module inputs as the appropriate output types if we are generated a child module definition
+	// - discover whether or not the property contains any output-typed expressions
 	containsOutputs := false
 	il.VisitBoundNode(prop, il.IdentityVisitor, func(n il.BoundNode) (il.BoundNode, error) {
 		if v, ok := n.(*il.BoundVariableAccess); ok {
@@ -83,6 +140,7 @@ func (g *Generator) computeProperty(prop il.BoundNode, indent bool, count string
 		return n, nil
 	})
 
+	// Next, rewrite assets, insert any necessary coercions, and run the apply transform.
 	p, err := il.RewriteAssets(prop)
 	if err != nil {
 		return "", false, err
@@ -98,6 +156,7 @@ func (g *Generator) computeProperty(prop il.BoundNode, indent bool, count string
 		return "", false, err
 	}
 
+	// Finally, generate code for the property.
 	if indent {
 		g.indent += "    "
 		defer func() { g.indent = g.indent[:len(g.indent)-4] }()
@@ -107,6 +166,12 @@ func (g *Generator) computeProperty(prop il.BoundNode, indent bool, count string
 	return buf.String(), containsOutputs, nil
 }
 
+// isRoot returns true if we are generating code for the root module.
+func (g *Generator) isRoot() bool {
+	return len(g.module.Tree.Path()) == 0
+}
+
+// GeneratePreamble generates appropriate import statements based on the providers referenced by the set of modules.
 func (g *Generator) GeneratePreamble(modules []*il.Graph) error {
 	// Emit imports for the various providers
 	fmt.Printf("import * as pulumi from \"@pulumi/pulumi\";\n")
@@ -135,6 +200,8 @@ func (g *Generator) GeneratePreamble(modules []*il.Graph) error {
 	return nil
 }
 
+// BeginModule saves the indicated module in the Generator and emits an appropriate function declaration if the module
+// is a child module.
 func (g *Generator) BeginModule(m *il.Graph) error {
 	g.module = m
 	if !g.isRoot() {
@@ -144,6 +211,8 @@ func (g *Generator) BeginModule(m *il.Graph) error {
 	return nil
 }
 
+// EndModule closes the current module definition if the module is a child module and clears the Generator's module
+// field.
 func (g *Generator) EndModule(m *il.Graph) error {
 	if !g.isRoot() {
 		g.indent = g.indent[:len(g.indent)-4]
@@ -153,6 +222,7 @@ func (g *Generator) EndModule(m *il.Graph) error {
 	return nil
 }
 
+// GenerateVariables generates definitions for the set of user variables in the context of the current module.
 func (g *Generator) GenerateVariables(vs []*il.VariableNode) error {
 	// If there are no variables, we're done.
 	if len(vs) == 0 {
@@ -194,6 +264,8 @@ func (g *Generator) GenerateVariables(vs []*il.VariableNode) error {
 	return nil
 }
 
+// GenerateLocal generates a single local value. These values are generated as local variable definitions. All local
+// values are output-typed for the sake of consistency.
 func (g *Generator) GenerateLocal(l *il.LocalNode) error {
 	value, hasOutputs, err := g.computeProperty(l.Value, false, "")
 	if err != nil {
@@ -212,6 +284,8 @@ func (g *Generator) GenerateLocal(l *il.LocalNode) error {
 	return nil
 }
 
+// GenerateModule generates a single module instantiation. A module instantiation is generated as a call to the
+// appropriate module factory function; the result is assigned to a local variable.
 func (g *Generator) GenerateModule(m *il.ModuleNode) error {
 	// generate a call to the module constructor
 	args, _, err := g.computeProperty(m.Properties, false, "")
@@ -224,7 +298,13 @@ func (g *Generator) GenerateModule(m *il.ModuleNode) error {
 	return nil
 }
 
+// GenerateResource generates a single resource instantiation. Each resource instantiation is generated as a call or
+// sequence of calls (in the case of a counted resource) to the approriate resource constructor or data source
+// function. Single-instance resources are assigned to a local variable; counted resources are stored in an array-typed
+// local.
 func (g *Generator) GenerateResource(r *il.ResourceNode) error {
+	// If this resource's provider is one of the built-ins, perform whatever provider-specific code generation is
+	// required.
 	switch r.Provider.Config.Name {
 	case "archive":
 		return g.generateArchive(r)
@@ -232,14 +312,17 @@ func (g *Generator) GenerateResource(r *il.ResourceNode) error {
 		return g.generateHTTP(r)
 	}
 
+	// Compute the provider name and resource type from the Terraform type.
 	underscore := strings.IndexRune(r.Config.Type, '_')
 	if underscore == -1 {
 		return errors.New("NYI: single-resource providers")
 	}
 	provider, resourceType := r.Config.Type[:underscore], r.Config.Type[underscore+1:]
 
+	// Convert the TF resource type into its Pulumi name.
 	memberName := tfbridge.TerraformToPulumiName(resourceType, nil, true)
 
+	// Compute the module in which the Pulumi type definition lives.
 	module := ""
 	if tok, ok := r.Tok(); ok {
 		components := strings.Split(tok, ":")
@@ -333,11 +416,15 @@ func (g *Generator) GenerateResource(r *il.ResourceNode) error {
 	return nil
 }
 
+// GenerateOutputs generates the list of Terraform outputs in the context of the current module.
 func (g *Generator) GenerateOutputs(os []*il.OutputNode) error {
+	// If there are no outputs, we're done.
 	if len(os) == 0 {
 		return nil
 	}
 
+	// Otherwise, what we do depends on whether or not we're the root module: if we are, we generate a list of exports;
+	// if we are not, we generate an appropriate return statement with the outputs as properties in a map.
 	isRoot := g.isRoot()
 
 	fmt.Printf("\n")
@@ -362,42 +449,4 @@ func (g *Generator) GenerateOutputs(os []*il.OutputNode) error {
 		fmt.Printf("%s};\n", g.indent)
 	}
 	return nil
-}
-
-func (g *Generator) gen(w io.Writer, vs ...interface{}) {
-	for _, v := range vs {
-		switch v := v.(type) {
-		case string:
-			fmt.Fprint(w, v)
-		case *il.BoundArithmetic:
-			g.genArithmetic(w, v)
-		case *il.BoundCall:
-			g.genCall(w, v)
-		case *il.BoundConditional:
-			g.genConditional(w, v)
-		case *il.BoundIndex:
-			g.genIndex(w, v)
-		case *il.BoundLiteral:
-			g.genLiteral(w, v)
-		case *il.BoundOutput:
-			g.genOutput(w, v)
-		case *il.BoundVariableAccess:
-			g.genVariableAccess(w, v)
-		case *il.BoundListProperty:
-			g.genListProperty(w, v)
-		case *il.BoundMapProperty:
-			g.genMapProperty(w, v)
-		default:
-			contract.Failf("unexpected type in gen: %T", v)
-		}
-	}
-}
-
-func (g *Generator) genf(w io.Writer, format string, args ...interface{}) {
-	for i := range args {
-		if node, ok := args[i].(il.BoundNode); ok {
-			args[i] = gen.FormatFunc(func(f fmt.State, c rune) { g.gen(f, node) })
-		}
-	}
-	fmt.Fprintf(w, format, args...)
 }

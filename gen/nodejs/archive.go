@@ -10,6 +10,8 @@ import (
 	"github.com/pgavlin/firewalker/il"
 )
 
+// computeArchiveInputs computes the inputs for a call to the pulumi.AssetArchive constructor based on the values
+// present in the given resource's bound input properties.
 func (g *Generator) computeArchiveInputs(r *il.ResourceNode, indent bool, count string) (string, error) {
 	contract.Require(r.Provider.Config.Name == "archive", "r")
 
@@ -82,6 +84,7 @@ func (g *Generator) computeArchiveInputs(r *il.ResourceNode, indent bool, count 
 	return buf.String(), nil
 }
 
+// generateArchive generates a call to the pulumi.AssetArchive constructor for the given archive resource.
 func (g *Generator) generateArchive(r *il.ResourceNode) error {
 	contract.Require(r.Provider.Config.Name == "archive", "r")
 

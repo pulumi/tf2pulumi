@@ -7,6 +7,7 @@ import (
 	"github.com/pgavlin/firewalker/il"
 )
 
+// genListProperty generates code for as single list property.
 func (g *Generator) genListProperty(w io.Writer, n *il.BoundListProperty) {
 	if len(n.Elements) == 0 {
 		g.gen(w, "[]")
@@ -28,6 +29,7 @@ func (g *Generator) genListProperty(w io.Writer, n *il.BoundListProperty) {
 	}
 }
 
+// genMapProperty generates code for a single map property.
 func (g *Generator) genMapProperty(w io.Writer, n *il.BoundMapProperty) {
 	if len(n.Elements) == 0 {
 		g.gen(w, "{}")

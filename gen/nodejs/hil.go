@@ -13,6 +13,11 @@ import (
 	"github.com/pgavlin/firewalker/il"
 )
 
+// This file contains the code necessary to generate code for bound expression trees. It is the responsibility of each
+// node-specific generation function to ensure that the generated code is appropriately parenthesized where necessary
+// in order to avoid unexpected issues with operator precedence.
+
+// genArithmetic generates code for the given arithmetic expression.
 func (g *Generator) genArithmetic(w io.Writer, n *il.BoundArithmetic) {
 	op := ""
 	switch n.HILNode.Op {
@@ -55,6 +60,7 @@ func (g *Generator) genArithmetic(w io.Writer, n *il.BoundArithmetic) {
 	g.gen(w, ")")
 }
 
+// genApplyOutput generates code for a single argument to a `.apply` invocation.
 func (g *Generator) genApplyOutput(w io.Writer, n *il.BoundVariableAccess) {
 	if rv, ok := n.TFVar.(*config.ResourceVariable); ok && rv.Multi && rv.Index == -1 {
 		g.genf(w, "pulumi.all(%v)", n)
@@ -63,14 +69,18 @@ func (g *Generator) genApplyOutput(w io.Writer, n *il.BoundVariableAccess) {
 	}
 }
 
+// genApply generates code for a single `.apply` invocation as represented by a call to the `__apply` intrinsic.
 func (g *Generator) genApply(w io.Writer, n *il.BoundCall) {
+	// Extract the list of outputs and the continuation expression from the `__apply` arguments.
 	g.applyArgs = n.Args[:len(n.Args)-1]
 	then := n.Args[len(n.Args)-1]
 
 	if len(g.applyArgs) == 1 {
+		// If we only have a single output, just generate a normal `.apply`.
 		g.genApplyOutput(w, g.applyArgs[0].(*il.BoundVariableAccess))
 		g.genf(w, ".apply(__arg0 => %v)", then)
 	} else {
+		// Otherwise, generate a call to `pulumi.all([]).apply()`.
 		g.gen(w, "pulumi.all([")
 		for i, o := range g.applyArgs {
 			if i > 0 {
@@ -88,9 +98,11 @@ func (g *Generator) genApply(w io.Writer, n *il.BoundCall) {
 		g.gen(w, "]) => ", then, ")")
 	}
 
+	// Finally, clear the current set of apply arguments.
 	g.applyArgs = nil
 }
 
+// genApplyArg generates a single refernce to a resolved output value inside the context of a call top `.apply`.
 func (g *Generator) genApplyArg(w io.Writer, index int) {
 	contract.Assert(g.applyArgs != nil)
 
@@ -136,6 +148,7 @@ func (g *Generator) genApplyArg(w io.Writer, index int) {
 	}
 }
 
+// genCoercion generates code for a single call to the __coerce intrinsic that converts an expression between types.
 func (g *Generator) genCoercion(w io.Writer, n il.BoundExpr, toType il.Type) {
 	switch n.Type() {
 	case il.TypeBool:
@@ -176,6 +189,7 @@ func (g *Generator) genCoercion(w io.Writer, n il.BoundExpr, toType il.Type) {
 	g.gen(w, n)
 }
 
+// genCall generates code for a call expression.
 func (g *Generator) genCall(w io.Writer, n *il.BoundCall) {
 	switch n.HILNode.Func {
 	case "__apply":
@@ -256,14 +270,17 @@ func (g *Generator) genCall(w io.Writer, n *il.BoundCall) {
 	}
 }
 
+// genConditional generates code for a single conditional expression.
 func (g *Generator) genConditional(w io.Writer, n *il.BoundConditional) {
 	g.genf(w, "(%v ? %v : %v)", n.CondExpr, n.TrueExpr, n.FalseExpr)
 }
 
+// genIndex generates code for a single index expression.
 func (g *Generator) genIndex(w io.Writer, n *il.BoundIndex) {
 	g.genf(w, "%v[%v]", n.TargetExpr, n.KeyExpr)
 }
 
+// genLiteral generates code for a single literal expression
 func (g *Generator) genLiteral(w io.Writer, n *il.BoundLiteral) {
 	switch n.ExprType {
 	case il.TypeBool, il.TypeNumber:
@@ -275,6 +292,7 @@ func (g *Generator) genLiteral(w io.Writer, n *il.BoundLiteral) {
 	}
 }
 
+// genOutput generates code for a single output expression.
 func (g *Generator) genOutput(w io.Writer, n *il.BoundOutput) {
 	g.gen(w, "`")
 	for _, s := range n.Exprs {
@@ -287,6 +305,7 @@ func (g *Generator) genOutput(w io.Writer, n *il.BoundOutput) {
 	g.gen(w, "`")
 }
 
+// genVariableAccess generates code for a single variable access expression.
 func (g *Generator) genVariableAccess(w io.Writer, n *il.BoundVariableAccess) {
 	switch v := n.TFVar.(type) {
 	case *config.CountVariable:
