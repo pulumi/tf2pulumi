@@ -3,7 +3,7 @@ package nodejs
 import (
 	"github.com/hashicorp/hil/ast"
 
-	"github.com/pgavlin/firewalker/il"
+	"github.com/pulumi/tf2pulumi/il"
 )
 
 // makeCoercion inserts a call to the `__coerce` intrinsic if one is required to convert the given expression to the

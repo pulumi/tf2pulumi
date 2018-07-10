@@ -10,7 +10,7 @@ import (
 	"github.com/pulumi/pulumi-terraform/pkg/tfbridge"
 	"github.com/pulumi/pulumi/pkg/util/contract"
 
-	"github.com/pgavlin/firewalker/il"
+	"github.com/pulumi/tf2pulumi/il"
 )
 
 // This file contains the code necessary to generate code for bound expression trees. It is the responsibility of each

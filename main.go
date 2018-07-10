@@ -12,9 +12,9 @@ import (
 	"github.com/hashicorp/terraform/svchost/auth"
 	"github.com/hashicorp/terraform/svchost/disco"
 
-	"github.com/pgavlin/firewalker/gen"
-	"github.com/pgavlin/firewalker/gen/nodejs"
-	"github.com/pgavlin/firewalker/il"
+	"github.com/pulumi/tf2pulumi/gen"
+	"github.com/pulumi/tf2pulumi/gen/nodejs"
+	"github.com/pulumi/tf2pulumi/il"
 )
 
 type noCredentials struct{}

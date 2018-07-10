@@ -7,7 +7,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/pulumi/pulumi/pkg/util/contract"
 
-	"github.com/pgavlin/firewalker/il"
+	"github.com/pulumi/tf2pulumi/il"
 )
 
 // computeHTTPInputs computes the arguments for a call to request-promise-native's single function from the bound input

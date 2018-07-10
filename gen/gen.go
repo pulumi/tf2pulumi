@@ -3,7 +3,7 @@ package gen
 import (
 	"github.com/pkg/errors"
 
-	"github.com/pgavlin/firewalker/il"
+	"github.com/pulumi/tf2pulumi/il"
 )
 
 // Generator defines the interface that a language-specific code generator must expose in order to generate code for a

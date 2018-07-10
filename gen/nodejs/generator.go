@@ -12,8 +12,8 @@ import (
 	"github.com/pulumi/pulumi-terraform/pkg/tfbridge"
 	"github.com/pulumi/pulumi/pkg/util/contract"
 
-	"github.com/pgavlin/firewalker/gen"
-	"github.com/pgavlin/firewalker/il"
+	"github.com/pulumi/tf2pulumi/gen"
+	"github.com/pulumi/tf2pulumi/il"
 )
 
 // Generator generates Typescript code that targets the Pulumi libraries from a Terraform configuration.

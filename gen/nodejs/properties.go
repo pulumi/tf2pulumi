@@ -3,8 +3,8 @@ package nodejs
 import (
 	"io"
 
-	"github.com/pgavlin/firewalker/gen"
-	"github.com/pgavlin/firewalker/il"
+	"github.com/pulumi/tf2pulumi/gen"
+	"github.com/pulumi/tf2pulumi/il"
 )
 
 // genListProperty generates code for as single list property.
