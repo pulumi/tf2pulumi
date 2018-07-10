@@ -3,6 +3,8 @@ package nodejs
 import (
 	"io"
 
+	"github.com/hashicorp/terraform/helper/schema"
+
 	"github.com/pulumi/tf2pulumi/gen"
 	"github.com/pulumi/tf2pulumi/il"
 )
@@ -34,11 +36,16 @@ func (g *Generator) genMapProperty(w io.Writer, n *il.BoundMapProperty) {
 	if len(n.Elements) == 0 {
 		g.gen(w, "{}")
 	} else {
+		useExactKeys := n.Schemas.TF != nil && n.Schemas.TF.Type == schema.TypeMap
+
 		g.gen(w, "{")
 		g.indented(func() {
 			for _, k := range gen.SortedKeys(n.Elements) {
-				propSch := n.Schemas.PropertySchemas(k)
-				g.genf(w, "\n%s%s: %v,", g.indent, tsName(k, propSch.TF, propSch.Pulumi, true), n.Elements[k])
+				propSch, key := n.Schemas.PropertySchemas(k), k
+				if !useExactKeys {
+					key = tsName(k, propSch.TF, propSch.Pulumi, true)
+				}
+				g.genf(w, "\n%s%s: %v,", g.indent, key, n.Elements[k])
 			}
 		})
 		g.gen(w, "\n", g.indent, "}")
