@@ -197,16 +197,7 @@ func (g *Generator) genCall(w io.Writer, n *il.BoundCall) {
 	case "__applyArg":
 		g.genApplyArg(w, n.Args[0].(*il.BoundLiteral).Value.(int))
 	case "__archive":
-		arg := n.Args[0]
-		if v, ok := arg.(*il.BoundVariableAccess); ok {
-			if r, ok := v.ILNode.(*il.ResourceNode); ok && r.Provider.Config.Name == "archive" {
-				// Just generate a reference to the asset itself.
-				g.gen(w, resName(r.Config.Type, r.Config.Name))
-				return
-			}
-		}
-
-		g.genf(w, "new pulumi.asset.FileArchive(%v)", arg)
+		g.genf(w, "new pulumi.asset.FileArchive(%v)", n.Args[0])
 	case "__asset":
 		g.genf(w, "new pulumi.asset.FileAsset(%v)", n.Args[0])
 	case "__coerce":

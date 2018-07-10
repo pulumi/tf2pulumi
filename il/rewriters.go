@@ -182,15 +182,27 @@ func RewriteAssets(n BoundNode) (BoundNode, error) {
 
 			asset := elemSch.Pulumi.Asset
 
-			builtin := "__asset"
-			if asset.Kind == tfbridge.FileArchive || asset.Kind == tfbridge.BytesArchive {
-				builtin = "__archive"
+			// If the argument to this parameter is an archive resource, strip the field off of the variable access and
+			// pass the variable directly.
+			isArchiveResource := false
+			if v, ok := e.(*BoundVariableAccess); ok {
+				if r, ok := v.ILNode.(*ResourceNode); ok && r.Provider.Config.Name == "archive" {
+					v.Elements = nil
+					isArchiveResource = true
+				}
 			}
 
-			m.Elements[k] = &BoundCall{
-				HILNode:  &ast.Call{Func: builtin},
-				ExprType: TypeUnknown,
-				Args:     []BoundExpr{e},
+			if !isArchiveResource {
+				builtin := "__asset"
+				if asset.Kind == tfbridge.FileArchive || asset.Kind == tfbridge.BytesArchive {
+					builtin = "__archive"
+				}
+
+				m.Elements[k] = &BoundCall{
+					HILNode:  &ast.Call{Func: builtin},
+					ExprType: TypeUnknown,
+					Args:     []BoundExpr{e},
+				}
 			}
 
 			if asset.HashField != "" {
