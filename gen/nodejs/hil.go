@@ -154,7 +154,7 @@ func (g *Generator) genCoercion(w io.Writer, n il.BoundExpr, toType il.Type) {
 	case il.TypeBool:
 		if toType == il.TypeString {
 			if lit, ok := n.(*il.BoundLiteral); ok {
-				g.genf(w, "\"%v\"", lit.Value)
+				g.genf(w, "\"%v\"", lit)
 			} else {
 				g.genf(w, "`${%v}`", n)
 			}
@@ -163,7 +163,7 @@ func (g *Generator) genCoercion(w io.Writer, n il.BoundExpr, toType il.Type) {
 	case il.TypeNumber:
 		if toType == il.TypeString {
 			if lit, ok := n.(*il.BoundLiteral); ok {
-				g.genf(w, "\"%f\"", lit.Value)
+				g.genf(w, "\"%v\"", lit)
 			} else {
 				g.genf(w, "`${%v}`", n)
 			}
@@ -294,8 +294,15 @@ func (g *Generator) genIndex(w io.Writer, n *il.BoundIndex) {
 // genLiteral generates code for a single literal expression
 func (g *Generator) genLiteral(w io.Writer, n *il.BoundLiteral) {
 	switch n.ExprType {
-	case il.TypeBool, il.TypeNumber:
+	case il.TypeBool:
 		g.genf(w, "%v", n.Value)
+	case il.TypeNumber:
+		f := n.Value.(float64)
+		if float64(int64(f)) == f {
+			g.genf(w, "%d", int64(f))
+		} else {
+			g.genf(w, "%f", n.Value)
+		}
 	case il.TypeString:
 		g.genf(w, "%q", n.Value)
 	default:

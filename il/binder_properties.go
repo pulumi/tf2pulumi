@@ -105,7 +105,7 @@ func (b *propertyBinder) bindProperty(p reflect.Value, sch Schemas) (BoundNode, 
 	case reflect.Bool:
 		return &BoundLiteral{ExprType: TypeBool, Value: p.Bool()}, nil
 	case reflect.Int:
-		return &BoundLiteral{ExprType: TypeNumber, Value: p.Int()}, nil
+		return &BoundLiteral{ExprType: TypeNumber, Value: float64(p.Int())}, nil
 	case reflect.Float64:
 		return &BoundLiteral{ExprType: TypeNumber, Value: p.Float()}, nil
 	case reflect.String:
