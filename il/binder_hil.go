@@ -35,6 +35,10 @@ func (b *propertyBinder) bindCall(n *ast.Call) (BoundExpr, error) {
 		exprType = TypeString
 	case "chomp":
 		exprType = TypeString
+	case "coalesce":
+		exprType = TypeString
+	case "compact":
+		exprType = TypeString.ListOf()
 	case "element":
 		if args[0].Type().IsList() {
 			exprType = args[0].Type().ElementType()
@@ -52,6 +56,8 @@ func (b *propertyBinder) bindCall(n *ast.Call) (BoundExpr, error) {
 			return nil, errors.Errorf("the numbner of arguments to \"map\" must be even")
 		}
 		exprType = TypeMap
+	case "replace":
+		exprType = TypeString
 	case "split":
 		exprType = TypeString.ListOf()
 	default:
@@ -247,12 +253,11 @@ func (b *propertyBinder) bindVariableAccess(n *ast.VariableAccess) (BoundExpr, e
 		}
 		ilNode = vn
 
-		// If the variable does not have a default, its type is string. If it does have a default, its type is string
-		// iff the default's type is also string. Note that we don't try all that hard here to get things right, and we
-		// more likely than not need to do better.
+		// If the variable does not have a default, its type is string. If it does have a default, its type is the type
+		// of the default.
 		exprType = TypeString
-		if vn.DefaultValue != nil && vn.DefaultValue.Type() != TypeString {
-			exprType = TypeUnknown
+		if vn.DefaultValue != nil {
+			exprType = vn.DefaultValue.Type()
 		}
 	default:
 		return nil, errors.Errorf("unexpected variable type %T", v)

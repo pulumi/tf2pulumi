@@ -208,6 +208,17 @@ func (g *Generator) genCall(w io.Writer, n *il.BoundCall) {
 		g.genf(w, "Buffer.from(%v).toString(\"base64\")", n.Args[0])
 	case "chomp":
 		g.genf(w, "%v.replace(/(\\n|\\r\\n)*$/, \"\")", n.Args[0])
+	case "coalesce":
+		g.gen(w, "[")
+		for i, v := range n.Args {
+			if i > 0 {
+				g.gen(w, ", ")
+			}
+			g.gen(w, v)
+		}
+		g.gen(w, "].find(v => v !== \"\")")
+	case "compact":
+		g.genf(w, "%v.filter(v => v !== \"\")", n.Args[0])
 	case "element":
 		g.genf(w, "%v[%v]", n.Args[0], n.Args[1])
 	case "file":
@@ -254,6 +265,15 @@ func (g *Generator) genCall(w io.Writer, n *il.BoundCall) {
 			g.genf(w, ": %v", n.Args[i+1])
 		}
 		g.gen(w, "}")
+	case "replace":
+		pat := (interface{})(n.Args[1])
+		if lit, ok := pat.(*il.BoundLiteral); ok && lit.Type() == il.TypeString {
+			patStr := lit.Value.(string)
+			if len(patStr) > 1 && patStr[0] == '/' && patStr[1] == '/' {
+				pat = patStr
+			}
+		}
+		g.genf(w, "%v.replace(%v, %v)", n.Args[0], pat, n.Args[2])
 	case "split":
 		g.genf(w, "%v.split(%v)", n.Args[1], n.Args[0])
 	default:
@@ -334,7 +354,7 @@ func (g *Generator) genVariableAccess(w io.Writer, n *il.BoundVariableAccess) {
 			}
 		}
 	case *config.UserVariable:
-		g.gen(w, tsName(v.Name, nil, nil, false))
+		g.gen(w, "var_", cleanName(v.Name))
 	default:
 		contract.Failf("unexpected TF var type in genVariableAccess: %T", n.TFVar)
 	}

@@ -1,6 +1,7 @@
 package il
 
 import (
+	"encoding/json"
 	"os/exec"
 	"reflect"
 	"sort"
@@ -9,13 +10,13 @@ import (
 
 	"github.com/hashicorp/terraform/config"
 	"github.com/hashicorp/terraform/config/module"
-	"github.com/hashicorp/terraform/helper/schema"
-	"github.com/mitchellh/mapstructure"
+	_ "github.com/hashicorp/terraform/helper/schema"
+	_ "github.com/mitchellh/mapstructure"
 	"github.com/pkg/errors"
 	"github.com/pulumi/pulumi-terraform/pkg/tfbridge"
 	"github.com/pulumi/pulumi/pkg/util/contract"
 	"github.com/pulumi/pulumi/pkg/workspace"
-	"github.com/ugorji/go/codec"
+	_ "github.com/ugorji/go/codec"
 )
 
 // TODO
@@ -334,43 +335,6 @@ func (b *builder) buildDeps(deps map[Node]struct{}, dependsOn []string) ([]Node,
 	return allDeps, explicitDeps, nil
 }
 
-// fixupTFResource recursively fixes up a resource schema's Elem values.
-func fixupTFResource(r *schema.Resource) error {
-	for _, s := range r.Schema {
-		if err := fixupTFSchema(s); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-// fixupTFSchema turns a schema's Elem value from a raw map produced by codec into a proper schema.Schema or
-// schema.Resource value using mapstructure.
-func fixupTFSchema(s *schema.Schema) error {
-	rawElem, ok := s.Elem.(map[interface{}]interface{})
-	if !ok {
-		return nil
-	}
-
-	if _, hasType := rawElem["type"]; hasType {
-		var elemSch schema.Schema
-		if err := mapstructure.Decode(rawElem, &elemSch); err != nil {
-			return err
-		}
-		fixupTFSchema(&elemSch)
-		s.Elem = &elemSch
-	} else {
-		var elemRes schema.Resource
-		if err := mapstructure.Decode(rawElem, &elemRes); err != nil {
-			return err
-		}
-		fixupTFResource(&elemRes)
-		s.Elem = &elemRes
-	}
-
-	return nil
-}
-
 // getProviderInfo fetches the tfbridge information for a particular provider. It does so by launching the provider
 // plugin with the "-get-provider-info" flag and deserializing the JSON representation dumped to stdout.
 func getProviderInfo(p *ProviderNode) (*tfbridge.ProviderInfo, error) {
@@ -392,9 +356,8 @@ func getProviderInfo(p *ProviderNode) (*tfbridge.ProviderInfo, error) {
 		return nil, err
 	}
 
-	var info tfbridge.ProviderInfo
-	json := &codec.JsonHandle{}
-	err = codec.NewDecoder(out, json).Decode(&info)
+	var info *tfbridge.ProviderInfo
+	err = json.NewDecoder(out).Decode(&info)
 
 	if cErr := cmd.Wait(); cErr != nil {
 		return nil, cErr
@@ -403,12 +366,7 @@ func getProviderInfo(p *ProviderNode) (*tfbridge.ProviderInfo, error) {
 		return nil, err
 	}
 
-	// Fix up schema elems.
-	for _, r := range info.P.ResourcesMap {
-		fixupTFResource(r)
-	}
-
-	return &info, nil
+	return info, nil
 }
 
 // buildModule binds the given module node's properties and computes its dependency edges.
@@ -581,28 +539,28 @@ func BuildGraph(tree *module.Tree) (*Graph, error) {
 	conf := tree.Config()
 
 	// Next create our nodes.
-	for _, m := range conf.Modules {
-		b.modules[m.Name] = &ModuleNode{Config: m}
+	for _, v := range conf.Variables {
+		b.variables[v.Name] = &VariableNode{Config: v}
 	}
 	for _, p := range conf.ProviderConfigs {
 		b.providers[p.Name] = &ProviderNode{Config: p}
 	}
+	for _, m := range conf.Modules {
+		b.modules[m.Name] = &ModuleNode{Config: m}
+	}
 	for _, r := range conf.Resources {
 		b.resources[r.Id()] = &ResourceNode{Config: r}
-	}
-	for _, o := range conf.Outputs {
-		b.outputs[o.Name] = &OutputNode{Config: o}
 	}
 	for _, l := range conf.Locals {
 		b.locals[l.Name] = &LocalNode{Config: l}
 	}
-	for _, v := range conf.Variables {
-		b.variables[v.Name] = &VariableNode{Config: v}
+	for _, o := range conf.Outputs {
+		b.outputs[o.Name] = &OutputNode{Config: o}
 	}
 
 	// Now bind each node's properties and compute any dependency edges.
-	for _, m := range b.modules {
-		if err := b.buildModule(m); err != nil {
+	for _, v := range b.variables {
+		if err := b.buildVariable(v); err != nil {
 			return nil, err
 		}
 	}
@@ -611,13 +569,13 @@ func BuildGraph(tree *module.Tree) (*Graph, error) {
 			return nil, err
 		}
 	}
-	for _, r := range b.resources {
-		if err := b.buildResource(r); err != nil {
+	for _, m := range b.modules {
+		if err := b.buildModule(m); err != nil {
 			return nil, err
 		}
 	}
-	for _, o := range b.outputs {
-		if err := b.buildOutput(o); err != nil {
+	for _, r := range b.resources {
+		if err := b.buildResource(r); err != nil {
 			return nil, err
 		}
 	}
@@ -626,8 +584,8 @@ func BuildGraph(tree *module.Tree) (*Graph, error) {
 			return nil, err
 		}
 	}
-	for _, v := range b.variables {
-		if err := b.buildVariable(v); err != nil {
+	for _, o := range b.outputs {
+		if err := b.buildOutput(o); err != nil {
 			return nil, err
 		}
 	}

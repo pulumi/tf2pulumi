@@ -238,7 +238,7 @@ func (g *Generator) GenerateVariables(vs []*il.VariableNode) error {
 	for _, v := range vs {
 		name := tsName(v.Config.Name, nil, nil, false)
 
-		fmt.Printf("%sconst %s = ", g.indent, name)
+		fmt.Printf("%sconst var_%s = ", g.indent, cleanName(v.Config.Name))
 		if v.DefaultValue == nil {
 			if isRoot {
 				fmt.Printf("config.require(\"%s\")", name)
@@ -252,7 +252,14 @@ func (g *Generator) GenerateVariables(vs []*il.VariableNode) error {
 			}
 
 			if isRoot {
-				fmt.Printf("config.get(\"%s\") || %s", name, def)
+				get := "get"
+				switch v.DefaultValue.Type() {
+				case il.TypeBool:
+					get = "getBoolean"
+				case il.TypeNumber:
+					get = "getNumber"
+				}
+				fmt.Printf("config.%v(\"%s\") || %s", get, name, def)
 			} else {
 				fmt.Printf("pulumi.output(mod_args[\"%s\"] || %s)", name, def)
 			}
