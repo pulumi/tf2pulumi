@@ -3,6 +3,7 @@ package nodejs
 import (
 	"fmt"
 	"io"
+	"path/filepath"
 	"strings"
 
 	"github.com/hashicorp/hil/ast"
@@ -216,9 +217,9 @@ func (g *Generator) genCall(w io.Writer, n *il.BoundCall) {
 			}
 			g.gen(w, v)
 		}
-		g.gen(w, "].find(v => v !== \"\")")
+		g.gen(w, "].find((v: any) => <string>v !== \"\")")
 	case "compact":
-		g.genf(w, "%v.filter(v => v !== \"\")", n.Args[0])
+		g.genf(w, "%v.filter((v: any) => <string>v !== \"\")", n.Args[0])
 	case "element":
 		g.genf(w, "%v[%v]", n.Args[0], n.Args[1])
 	case "file":
@@ -232,6 +233,10 @@ func (g *Generator) genCall(w io.Writer, n *il.BoundCall) {
 			g.gen(w, a)
 		}
 		g.gen(w, ")")
+	case "join":
+		g.genf(w, "%v.join(%v)", n.Args[1], n.Args[0])
+	case "length":
+		g.genf(w, "%v.length", n.Args[0])
 	case "list":
 		g.gen(w, "[")
 		for i, e := range n.Args {
@@ -276,8 +281,11 @@ func (g *Generator) genCall(w io.Writer, n *il.BoundCall) {
 		g.genf(w, "%v.replace(%v, %v)", n.Args[0], pat, n.Args[2])
 	case "split":
 		g.genf(w, "%v.split(%v)", n.Args[1], n.Args[0])
+	case "zipmap":
+		g.genf(w, "((keys, values) => Object.assign.apply({}, keys.map((k: any, i: number) => ({[k]: values[i]}))))(%v, %v)",
+			n.Args[0], n.Args[1])
 	default:
-		contract.Failf("unexpected function in genCall: %v", n.HILNode.Func)
+		g.genf(w, "(() => { throw \"NYI: call to %v\"; })()", n.HILNode.Func)
 	}
 }
 
@@ -334,6 +342,24 @@ func (g *Generator) genVariableAccess(w io.Writer, n *il.BoundVariableAccess) {
 		g.genf(w, "mod_%s", cleanName(v.Name))
 		for _, e := range strings.Split(v.Field, ".") {
 			g.genf(w, ".%s", tfbridge.TerraformToPulumiName(e, nil, false))
+		}
+	case *config.PathVariable:
+		switch v.Type {
+		case config.PathValueCwd:
+			g.gen(w, "process.cwd()")
+		case config.PathValueModule:
+			path := g.module.Tree.Config().Dir
+
+			// Attempt to make this path relative to that of the root module.
+			rel, err := filepath.Rel(g.rootPath, path)
+			if err == nil {
+				path = rel
+			}
+
+			g.gen(w, &il.BoundLiteral{ExprType: il.TypeString, Value: path})
+		case config.PathValueRoot:
+			// NOTE: this might not be the most useful or correct value. Might want Node's __directory or similar.
+			g.gen(w, &il.BoundLiteral{ExprType: il.TypeString, Value: "."})
 		}
 	case *config.ResourceVariable:
 		r := n.ILNode.(*il.ResourceNode)

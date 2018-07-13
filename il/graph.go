@@ -81,6 +81,8 @@ type ProviderNode struct {
 	// is per-{resource,data source} schema information, which is used to calculate names and types for resources and
 	// their properties.
 	Info *tfbridge.ProviderInfo
+	// PluginName is the name of the Pulumi plugin associated with this provider.
+	PluginName string
 }
 
 // A ResourceNode is the analyzed form of a resource or data source instatiation in a Terraform configuration. In
@@ -337,36 +339,45 @@ func (b *builder) buildDeps(deps map[Node]struct{}, dependsOn []string) ([]Node,
 
 // getProviderInfo fetches the tfbridge information for a particular provider. It does so by launching the provider
 // plugin with the "-get-provider-info" flag and deserializing the JSON representation dumped to stdout.
-func getProviderInfo(p *ProviderNode) (*tfbridge.ProviderInfo, error) {
+var pluginNames = map[string]string{
+	"azurerm": "azure",
+	"template": "terraform-template",
+}
+func getProviderInfo(p *ProviderNode) (*tfbridge.ProviderInfo, string, error) {
 	if info, ok := builtinProviderInfo[p.Config.Name]; ok {
-		return info, nil
+		return info, p.Config.Name, nil
 	}
 
-	_, path, err := workspace.GetPluginPath(workspace.ResourcePlugin, p.Config.Name, nil)
+	pluginName, hasPluginName := pluginNames[p.Config.Name]
+	if !hasPluginName {
+		pluginName = p.Config.Name
+	}
+
+	_, path, err := workspace.GetPluginPath(workspace.ResourcePlugin, pluginName, nil)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	} else if path == "" {
-		return nil, errors.Errorf("could not find plugin for provider %s", p.Config.Name)
+		return nil, "", errors.Errorf("could not find plugin %s for provider %s", pluginName, p.Config.Name)
 	}
 
 	// Run the plugin and decode its provider config.
 	cmd := exec.Command(path, "-get-provider-info")
 	out, _ := cmd.StdoutPipe()
 	if err := cmd.Start(); err != nil {
-		return nil, err
+		return nil, "", errors.Wrapf(err, "failed to load plugin %s for provider %s", pluginName, p.Config.Name)
 	}
 
 	var info *tfbridge.ProviderInfo
 	err = json.NewDecoder(out).Decode(&info)
 
 	if cErr := cmd.Wait(); cErr != nil {
-		return nil, cErr
+		return nil, "", errors.Wrapf(err, "failed to run plugin %s for provider %s", pluginName, p.Config.Name)
 	}
 	if err != nil {
-		return nil, err
+		return nil, "", errors.Wrapf(err, "could not decode schema information for provider %s", p.Config.Name)
 	}
 
-	return info, nil
+	return info, pluginName, nil
 }
 
 // buildModule binds the given module node's properties and computes its dependency edges.
@@ -384,11 +395,11 @@ func (b *builder) buildModule(m *ModuleNode) error {
 
 // buildProvider fetches the given provider's tfbridge data, binds its properties, and computes its dependency edges.
 func (b *builder) buildProvider(p *ProviderNode) error {
-	info, err := getProviderInfo(p)
+	info, pluginName, err := getProviderInfo(p)
 	if err != nil {
 		return err
 	}
-	p.Info = info
+	p.Info, p.PluginName = info, pluginName
 
 	props, deps, err := b.bindProperties(p.Config.RawConfig, Schemas{}, false)
 	if err != nil {
@@ -435,7 +446,9 @@ func (b *builder) ensureProvider(r *ResourceNode) error {
 
 // buildResource binds a resource's properties (including its count property) and computes its dependency edges.
 func (b *builder) buildResource(r *ResourceNode) error {
-	b.ensureProvider(r)
+	if err := b.ensureProvider(r); err != nil {
+		return err
+	}
 
 	count, countDeps, err := b.bindProperty(r.Config.RawCount.Value(), Schemas{}, false)
 	if err != nil {

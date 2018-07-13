@@ -35,6 +35,8 @@ func (b *propertyBinder) bindCall(n *ast.Call) (BoundExpr, error) {
 		exprType = TypeString
 	case "chomp":
 		exprType = TypeString
+	case "cidrhost":
+		exprType = TypeString
 	case "coalesce":
 		exprType = TypeString
 	case "compact":
@@ -47,6 +49,10 @@ func (b *propertyBinder) bindCall(n *ast.Call) (BoundExpr, error) {
 		exprType = TypeString
 	case "format":
 		exprType = TypeString
+	case "join":
+		exprType = TypeString
+	case "length":
+		exprType = TypeNumber
 	case "list":
 		exprType = TypeUnknown.ListOf()
 	case "lookup":
@@ -60,6 +66,8 @@ func (b *propertyBinder) bindCall(n *ast.Call) (BoundExpr, error) {
 		exprType = TypeString
 	case "split":
 		exprType = TypeString.ListOf()
+	case "zipmap":
+		exprType = TypeMap
 	default:
 		return nil, errors.Errorf("NYI: call to %s", n.Func)
 	}
@@ -127,11 +135,13 @@ func (b *propertyBinder) bindIndex(n *ast.Index) (BoundExpr, error) {
 
 // bindLiteral binds an HIL literal expression. The literal must be of type bool, int, float, or string.
 func (b *propertyBinder) bindLiteral(n *ast.LiteralNode) (BoundExpr, error) {
-	exprType := TypeUnknown
+	exprType, value := TypeUnknown, n.Value
 	switch n.Typex {
 	case ast.TypeBool:
 		exprType = TypeBool
-	case ast.TypeInt, ast.TypeFloat:
+	case ast.TypeInt:
+		exprType, value = TypeNumber, float64(value.(int))
+	case ast.TypeFloat:
 		exprType = TypeNumber
 	case ast.TypeString:
 		exprType = TypeString
@@ -139,7 +149,7 @@ func (b *propertyBinder) bindLiteral(n *ast.LiteralNode) (BoundExpr, error) {
 		return nil, errors.Errorf("Unexpected literal type %v", n.Typex)
 	}
 
-	return &BoundLiteral{ExprType: exprType, Value: n.Value}, nil
+	return &BoundLiteral{ExprType: exprType, Value: value}, nil
 }
 
 // bindOutput binds an HIL output expression.
@@ -200,7 +210,7 @@ func (b *propertyBinder) bindVariableAccess(n *ast.VariableAccess) (BoundExpr, e
 		exprType = TypeUnknown.OutputOf()
 	case *config.PathVariable:
 		// "path."
-		return nil, errors.New("NYI: path variables")
+		exprType = TypeString
 	case *config.ResourceVariable:
 		// default
 

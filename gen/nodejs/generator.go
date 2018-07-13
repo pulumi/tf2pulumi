@@ -20,6 +20,8 @@ import (
 type Generator struct {
 	// ProjectName is the name of the Pulumi project.
 	ProjectName string
+	// rootPath is the path to the directory that contains the root module.
+	rootPath string
 	// module is the module currently being generated;.
 	module *il.Graph
 	// indent is the current indentation level for the generated source.
@@ -28,6 +30,8 @@ type Generator struct {
 	countIndex string
 	// applyArgs is the list of currently in-scope apply arguments.
 	applyArgs []il.BoundExpr
+	// unknownInputs is the set of input variables that may be unknown at runtime.
+	unknownInputs map[*il.VariableNode]struct{}
 }
 
 // cleanName replaces characters that are not allowed in Typescript identifiers with underscores. No attempt is made to
@@ -125,17 +129,17 @@ func (g *Generator) genf(w io.Writer, format string, args ...interface{}) {
 // code and a bool value that indicates whether or not any output-typed values were nested in the property value.
 func (g *Generator) computeProperty(prop il.BoundNode, indent bool, count string) (string, bool, error) {
 	// First:
-	// - retype any module inputs as the appropriate output types if we are generated a child module definition
+	// - retype any possibly-unknown module inputs as the appropriate output types
 	// - discover whether or not the property contains any output-typed expressions
 	containsOutputs := false
 	il.VisitBoundNode(prop, il.IdentityVisitor, func(n il.BoundNode) (il.BoundNode, error) {
-		if v, ok := n.(*il.BoundVariableAccess); ok {
-			if !g.isRoot() {
-				if _, ok := v.TFVar.(*config.UserVariable); ok {
-					v.ExprType = v.ExprType.OutputOf()
+		if n, ok := n.(*il.BoundVariableAccess); ok {
+			if v, ok := n.ILNode.(*il.VariableNode); ok {
+				if _, ok = g.unknownInputs[v]; ok {
+					n.ExprType = n.ExprType.OutputOf()
 				}
 			}
-			containsOutputs = containsOutputs || v.Type().IsOutput()
+			containsOutputs = containsOutputs || n.Type().IsOutput()
 		}
 		return n, nil
 	})
@@ -161,6 +165,7 @@ func (g *Generator) computeProperty(prop il.BoundNode, indent bool, count string
 		g.indent += "    "
 		defer func() { g.indent = g.indent[:len(g.indent)-4] }()
 	}
+	g.countIndex = count
 	buf := &bytes.Buffer{}
 	g.gen(buf, p)
 	return buf.String(), containsOutputs, nil
@@ -173,13 +178,24 @@ func (g *Generator) isRoot() bool {
 
 // GeneratePreamble generates appropriate import statements based on the providers referenced by the set of modules.
 func (g *Generator) GeneratePreamble(modules []*il.Graph) error {
+	// Find the root module and stash its path.
+	for _, m := range modules {
+		if len(m.Tree.Path()) == 0 {
+			g.rootPath = m.Tree.Config().Dir
+			break
+		}
+	}
+	if g.rootPath == "" {
+		return errors.New("could not determine root module path")
+	}
+
 	// Emit imports for the various providers
 	fmt.Printf("import * as pulumi from \"@pulumi/pulumi\";\n")
 
 	providers := make(map[string]struct{})
 	for _, m := range modules {
 		for _, p := range m.Providers {
-			providers[p.Config.Name] = struct{}{}
+			providers[p.PluginName] = struct{}{}
 		}
 	}
 
@@ -190,10 +206,11 @@ func (g *Generator) GeneratePreamble(modules []*il.Graph) error {
 		case "http":
 			fmt.Printf("import rpn = require(\"request-promise-native\");\n")
 		default:
-			fmt.Printf("import * as %s from \"@pulumi/%s\";\n", p, p)
+			fmt.Printf("import * as %s from \"@pulumi/%s\";\n", cleanName(p), p)
 		}
 	}
 	fmt.Printf("import * as fs from \"fs\";\n")
+	fmt.Printf("import * as process from \"process\";\n")
 	fmt.Printf("import sprintf = require(\"sprintf-js\");\n")
 	fmt.Printf("\n")
 
@@ -207,6 +224,29 @@ func (g *Generator) BeginModule(m *il.Graph) error {
 	if !g.isRoot() {
 		fmt.Printf("const new_mod_%s = function(mod_name: string, mod_args: pulumi.Inputs) {\n", cleanName(m.Tree.Name()))
 		g.indent += "    "
+
+		// Discover the set of input variables that may have unknown values. This is the complete set of inputs minus
+		// the set of variables used in count interpolations, as Terraform requires that the latter are known at graph
+		// generation time (and thus at Pulumi run time).
+		knownInputs := make(map[*il.VariableNode]struct{})
+		for _, n := range m.Resources {
+			if n.Count != nil {
+				il.VisitBoundNode(n.Count, il.IdentityVisitor, func(n il.BoundNode) (il.BoundNode, error) {
+					if n, ok := n.(*il.BoundVariableAccess); ok {
+						if v, ok := n.ILNode.(*il.VariableNode); ok {
+							knownInputs[v] = struct{}{}
+						}
+					}
+					return n, nil
+				})
+			}
+		}
+		g.unknownInputs = make(map[*il.VariableNode]struct{})
+		for _, v := range m.Variables {
+			if _, ok := knownInputs[v]; !ok {
+				g.unknownInputs[v] = struct{}{}
+			}
+		}
 	}
 	return nil
 }
@@ -237,13 +277,18 @@ func (g *Generator) GenerateVariables(vs []*il.VariableNode) error {
 	}
 	for _, v := range vs {
 		name := tsName(v.Config.Name, nil, nil, false)
+		_, isUnknown := g.unknownInputs[v]
 
 		fmt.Printf("%sconst var_%s = ", g.indent, cleanName(v.Config.Name))
 		if v.DefaultValue == nil {
 			if isRoot {
 				fmt.Printf("config.require(\"%s\")", name)
 			} else {
-				fmt.Printf("pulumi.output(mod_args[\"%s\"])", name)
+				f := "mod_args[\"%s\"]"
+				if isUnknown {
+					f = "pulumi.output(" + f + ")"
+				}
+				fmt.Printf(f, name)
 			}
 		} else {
 			def, _, err := g.computeProperty(v.DefaultValue, false, "")
@@ -261,7 +306,11 @@ func (g *Generator) GenerateVariables(vs []*il.VariableNode) error {
 				}
 				fmt.Printf("config.%v(\"%s\") || %s", get, name, def)
 			} else {
-				fmt.Printf("pulumi.output(mod_args[\"%s\"] || %s)", name, def)
+				f := "mod_args[\"%s\"] || %s"
+				if isUnknown {
+					f = "pulumi.output(" + f + ")"
+				}
+				fmt.Printf(f, name, def)
 			}
 		}
 		fmt.Printf(";\n")
@@ -319,12 +368,12 @@ func (g *Generator) GenerateResource(r *il.ResourceNode) error {
 		return g.generateHTTP(r)
 	}
 
-	// Compute the provider name and resource type from the Terraform type.
+	// Compute the resource type from the Terraform type.
 	underscore := strings.IndexRune(r.Config.Type, '_')
 	if underscore == -1 {
 		return errors.New("NYI: single-resource providers")
 	}
-	provider, resourceType := r.Config.Type[:underscore], r.Config.Type[underscore+1:]
+	provider, resourceType := cleanName(r.Provider.PluginName), r.Config.Type[underscore+1:]
 
 	// Convert the TF resource type into its Pulumi name.
 	memberName := tfbridge.TerraformToPulumiName(resourceType, nil, true)
@@ -407,8 +456,8 @@ func (g *Generator) GenerateResource(r *il.ResourceNode) error {
 			arrElementType = fmt.Sprintf("Output<%s%s.%sResult>", provider, module, strings.ToUpper(memberName))
 		}
 
-		fmt.Printf("const %s: %s[] = [];\n", name, arrElementType)
-		fmt.Printf("for (let i = 0; i < %s; i++) {\n", count)
+		fmt.Printf("%sconst %s: %s[] = [];\n", g.indent, name, arrElementType)
+		fmt.Printf("%sfor (let i = 0; i < %s; i++) {\n", g.indent, count)
 		g.indented(func() {
 			if r.Config.Mode == config.ManagedResourceMode {
 				fmt.Printf("%s%s.push(new %s(`%s-${i}`, %s%s));\n", g.indent, name, qualifiedMemberName, r.Config.Name, inputs, explicitDeps)
@@ -417,7 +466,7 @@ func (g *Generator) GenerateResource(r *il.ResourceNode) error {
 				fmt.Printf("%s%s.push(pulumi.output(%s(%s)));\n", g.indent, name, qualifiedMemberName, inputs)
 			}
 		})
-		fmt.Printf("}\n")
+		fmt.Printf("%s}\n", g.indent)
 	}
 
 	return nil
