@@ -69,9 +69,6 @@ func visitBoundListProperty(n *BoundListProperty, pre, post BoundNodeVisitor) (B
 	if err != nil {
 		return nil, err
 	}
-	if len(exprs) == 0 {
-		return nil, nil
-	}
 	n.Elements = exprs
 	return post(n)
 }
@@ -95,9 +92,6 @@ func visitBoundOutput(n *BoundOutput, pre, post BoundNodeVisitor) (BoundNode, er
 	exprs, err := visitBoundExprs(n.Exprs, pre, post)
 	if err != nil {
 		return nil, err
-	}
-	if len(exprs) == 0 {
-		return nil, nil
 	}
 	n.Exprs = exprs
 	return post(n)

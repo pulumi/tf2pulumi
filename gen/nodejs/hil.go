@@ -217,7 +217,16 @@ func (g *Generator) genCall(w io.Writer, n *il.BoundCall) {
 			}
 			g.gen(w, v)
 		}
-		g.gen(w, "].find((v: any) => <string>v !== \"\")")
+		g.gen(w, "].find((v: any) => v !== undefined && v !== \"\")")
+	case "coalescelist":
+		g.gen(w, "[")
+		for i, v := range n.Args {
+			if i > 0 {
+				g.gen(w, ", ")
+			}
+			g.gen(w, v)
+		}
+		g.gen(w, "].find((v: any) => v !== undefined && (<any[]>v).length > 0)")
 	case "compact":
 		g.genf(w, "%v.filter((v: any) => <string>v !== \"\")", n.Args[0])
 	case "element":
@@ -255,6 +264,8 @@ func (g *Generator) genCall(w io.Writer, n *il.BoundCall) {
 		if hasDefault {
 			g.genf(w, " || %v)", n.Args[2])
 		}
+	case "lower":
+		g.genf(w, "%v.toLowerCase()", n.Args[0])
 	case "map":
 		contract.Assert(len(n.Args)%2 == 0)
 		g.gen(w, "{")

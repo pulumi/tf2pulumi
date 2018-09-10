@@ -39,6 +39,12 @@ func (b *propertyBinder) bindCall(n *ast.Call) (BoundExpr, error) {
 		exprType = TypeString
 	case "coalesce":
 		exprType = TypeString
+	case "coalescelist":
+		if args[0].Type().IsList() {
+			exprType = args[0].Type()
+		} else {
+			exprType = TypeUnknown.ListOf()
+		}
 	case "compact":
 		exprType = TypeString.ListOf()
 	case "element":
@@ -57,6 +63,8 @@ func (b *propertyBinder) bindCall(n *ast.Call) (BoundExpr, error) {
 		exprType = TypeUnknown.ListOf()
 	case "lookup":
 		// nothing to do
+	case "lower":
+		exprType = TypeString
 	case "map":
 		if len(args)%2 != 0 {
 			return nil, errors.Errorf("the numbner of arguments to \"map\" must be even")
