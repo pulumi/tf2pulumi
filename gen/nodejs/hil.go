@@ -242,6 +242,8 @@ func (g *Generator) genCall(w io.Writer, n *il.BoundCall) {
 			g.gen(w, a)
 		}
 		g.gen(w, ")")
+	case "indent":
+		g.genf(w, "((str, indent) => str.split(\"\\n\").map((l, i) => i == 0 ? l : indent + l).join(\"\"))(%v, \" \".repeat(%v))", n.Args[1], n.Args[0])
 	case "join":
 		g.genf(w, "%v.join(%v)", n.Args[1], n.Args[0])
 	case "length":
@@ -281,6 +283,8 @@ func (g *Generator) genCall(w io.Writer, n *il.BoundCall) {
 			g.genf(w, ": %v", n.Args[i+1])
 		}
 		g.gen(w, "}")
+	case "min":
+		g.genf(w, "%v.reduce((min, v) => !min ? v : Math.min(min, v))", n.Args[0])
 	case "replace":
 		pat := (interface{})(n.Args[1])
 		if lit, ok := pat.(*il.BoundLiteral); ok && lit.Type() == il.TypeString {
@@ -292,6 +296,8 @@ func (g *Generator) genCall(w io.Writer, n *il.BoundCall) {
 		g.genf(w, "%v.replace(%v, %v)", n.Args[0], pat, n.Args[2])
 	case "split":
 		g.genf(w, "%v.split(%v)", n.Args[1], n.Args[0])
+	case "substr":
+		g.genf(w, "((str, s, l) => str.slice(s, l === -1 ? s.length : s + l))(%v, %v, %v)", n.Args[0], n.Args[1], n.Args[2])
 	case "zipmap":
 		g.genf(w, "((keys, values) => Object.assign.apply({}, keys.map((k: any, i: number) => ({[k]: values[i]}))))(%v, %v)",
 			n.Args[0], n.Args[1])

@@ -55,6 +55,10 @@ func (b *propertyBinder) bindCall(n *ast.Call) (BoundExpr, error) {
 		exprType = TypeString
 	case "format":
 		exprType = TypeString
+	case "formatlist":
+		exprType = TypeString.ListOf()
+	case "indent":
+		exprType = TypeString
 	case "join":
 		exprType = TypeString
 	case "length":
@@ -70,10 +74,14 @@ func (b *propertyBinder) bindCall(n *ast.Call) (BoundExpr, error) {
 			return nil, errors.Errorf("the numbner of arguments to \"map\" must be even")
 		}
 		exprType = TypeMap
+	case "min":
+		exprType = TypeNumber
 	case "replace":
 		exprType = TypeString
 	case "split":
 		exprType = TypeString.ListOf()
+	case "substr":
+		exprType = TypeString
 	case "zipmap":
 		exprType = TypeMap
 	default:
