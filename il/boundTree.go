@@ -343,12 +343,16 @@ func (n *BoundListProperty) Type() Type {
 
 func (n *BoundListProperty) dump(d *dumper) {
 	d.dump("(list ", fmt.Sprintf("%v", n.Type()))
-	d.indented(func() {
-		for _, e := range n.Elements {
-			d.dump("\n", d.indent, e)
-		}
-	})
-	d.dump("\n", d.indent, ")")
+	if len(n.Elements) == 0 {
+		d.dump(")")
+	} else {
+		d.indented(func() {
+			for _, e := range n.Elements {
+				d.dump("\n", d.indent, e)
+			}
+		})
+		d.dump("\n", d.indent, ")")
+	}
 }
 
 func (n *BoundListProperty) isNode() {}
@@ -368,12 +372,16 @@ func (n *BoundMapProperty) Type() Type {
 
 func (n *BoundMapProperty) dump(d *dumper) {
 	d.dump("(map ", fmt.Sprintf("%v", n.Type()))
-	d.indented(func() {
-		for k, e := range n.Elements {
-			d.dump("\n", d.indent, k, ": ", e)
-		}
-	})
-	d.dump("\n", d.indent, ")")
+	if len(n.Elements) == 0 {
+		d.dump(")")
+	} else {
+		d.indented(func() {
+			for k, e := range n.Elements {
+				d.dump("\n", d.indent, k, ": ", e)
+			}
+		})
+		d.dump("\n", d.indent, ")")
+	}
 }
 
 func (n *BoundMapProperty) isNode() {}
