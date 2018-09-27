@@ -45,9 +45,13 @@ func (pluginProviderInfoSource) GetProviderInfo(tfProviderName string) (*tfbridg
 	}
 
 	// Run the plugin and decode its provider config.
+	// nolint: gas
 	cmd := exec.Command(path, "-get-provider-info")
-	out, _ := cmd.StdoutPipe()
-	if err := cmd.Start(); err != nil {
+	out, err := cmd.StdoutPipe()
+	if err != nil {
+		return nil, "", errors.Wrapf(err, "failed to load plugin %s for provider %s", pluginName, tfProviderName)
+	}
+	if err = cmd.Start(); err != nil {
 		return nil, "", errors.Wrapf(err, "failed to load plugin %s for provider %s", pluginName, tfProviderName)
 	}
 

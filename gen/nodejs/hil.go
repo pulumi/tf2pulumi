@@ -103,7 +103,7 @@ func (g *Generator) genApply(w io.Writer, n *il.BoundCall) {
 	g.applyArgs = nil
 }
 
-// genApplyArg generates a single refernce to a resolved output value inside the context of a call top `.apply`.
+// genApplyArg generates a single reference to a resolved output value inside the context of a call top `.apply`.
 func (g *Generator) genApplyArg(w io.Writer, index int) {
 	contract.Assert(g.applyArgs != nil)
 
@@ -243,7 +243,9 @@ func (g *Generator) genCall(w io.Writer, n *il.BoundCall) {
 		}
 		g.gen(w, ")")
 	case "indent":
-		g.genf(w, "((str, indent) => str.split(\"\\n\").map((l, i) => i == 0 ? l : indent + l).join(\"\"))(%v, \" \".repeat(%v))", n.Args[1], n.Args[0])
+		g.genf(w,
+			"((str, indent) => str.split(\"\\n\").map((l, i) => i == 0 ? l : indent + l).join(\"\"))(%v, \" \".repeat(%v))",
+			n.Args[1], n.Args[0])
 	case "join":
 		g.genf(w, "%v.join(%v)", n.Args[1], n.Args[0])
 	case "length":

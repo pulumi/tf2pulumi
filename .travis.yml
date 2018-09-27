@@ -1,0 +1,23 @@
+# It may be tempting to add parens around each individual clause in this expression, but Travis then builds pushes anyway
+if: branch = master OR branch =~ ^release/ OR tag IS present
+language: go
+go: "1.10"
+sudo: true # give us 7.5GB and >2 bursted cores.
+git:
+  depth: false
+before_install:
+    - git clone https://github.com/pulumi/scripts ${GOPATH}/src/github.com/pulumi/scripts
+    - source ${GOPATH}/src/github.com/pulumi/scripts/ci/prepare-environment.sh
+    - source ${PULUMI_SCRIPTS}/ci/keep-failed-tests.sh
+install:
+    - source ${PULUMI_SCRIPTS}/ci/install-common-toolchain.sh
+    - curl -L https://get.pulumi.com/ | bash -s -- --version 0.15.1
+    - export PATH=$HOME/.pulumi/bin:$PATH
+before_script:
+    - ${PULUMI_SCRIPTS}/ci/ensure-dependencies
+script:
+    - make travis_${TRAVIS_EVENT_TYPE}
+after_failure:
+    - ${PULUMI_SCRIPTS}/ci/upload-failed-tests
+notifications:
+    webhooks: https://ufci1w66n3.execute-api.us-west-2.amazonaws.com/stage/travis

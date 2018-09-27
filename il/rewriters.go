@@ -94,11 +94,11 @@ func (r *applyRewriter) enterNode(n BoundNode) (BoundNode, error) {
 }
 
 // RewriteApplies transforms all bound expression trees in the given BoundNode that reference output-typed properties
-// into appropiate calls to the __apply and __applyArg intrinsic. Given an expression tree, the rewrite proceeds as
+// into appropriate calls to the __apply and __applyArg intrinsic. Given an expression tree, the rewrite proceeds as
 // follows:
 // - let the list of outputs be an empty list
 // - for each node in post-order:
-//     - if the node is the root of the expresison tree:
+//     - if the node is the root of the expression tree:
 //         - if the node is a variable access:
 //             - if the access has an output-typed element on its path, replace the variable access with a call to the
 //               __applyArg intrinsic and append the access to the list of outputs.

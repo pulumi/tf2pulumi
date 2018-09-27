@@ -17,6 +17,9 @@ import (
 	"github.com/pulumi/tf2pulumi/il"
 )
 
+// The version of this tool.
+var Version string
+
 type noCredentials struct{}
 
 func (noCredentials) ForHost(host svchost.Hostname) (auth.HostCredentials, error) {

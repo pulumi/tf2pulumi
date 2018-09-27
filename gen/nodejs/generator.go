@@ -87,7 +87,8 @@ func (g *Generator) gen(w io.Writer, vs ...interface{}) {
 	for _, v := range vs {
 		switch v := v.(type) {
 		case string:
-			fmt.Fprint(w, v)
+			_, err := fmt.Fprint(w, v)
+			contract.IgnoreError(err)
 		case *il.BoundArithmetic:
 			g.genArithmetic(w, v)
 		case *il.BoundCall:
@@ -428,7 +429,7 @@ func (g *Generator) GenerateResource(r *il.ResourceNode) error {
 		}
 
 		if r.Config.Mode == config.ManagedResourceMode {
-			resName := ""
+			var resName string
 			if len(g.module.Tree.Path()) == 0 {
 				resName = fmt.Sprintf("\"%s\"", r.Config.Name)
 			} else {
@@ -460,7 +461,8 @@ func (g *Generator) GenerateResource(r *il.ResourceNode) error {
 		fmt.Printf("%sfor (let i = 0; i < %s; i++) {\n", g.indent, count)
 		g.indented(func() {
 			if r.Config.Mode == config.ManagedResourceMode {
-				fmt.Printf("%s%s.push(new %s(`%s-${i}`, %s%s));\n", g.indent, name, qualifiedMemberName, r.Config.Name, inputs, explicitDeps)
+				fmt.Printf("%s%s.push(new %s(`%s-${i}`, %s%s));\n", g.indent, name, qualifiedMemberName, r.Config.Name,
+					inputs, explicitDeps)
 			} else {
 				// TODO: explicit dependencies
 				fmt.Printf("%s%s.push(pulumi.output(%s(%s)));\n", g.indent, name, qualifiedMemberName, inputs)

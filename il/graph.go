@@ -211,7 +211,7 @@ func (l *LocalNode) sortKey() string {
 	return "l" + l.Config.Name
 }
 
-// Depdendencies returns the list of nodes the variable depends on. This list is always emtpy.
+// Depdendencies returns the list of nodes the variable depends on. This list is always empty.
 func (v *VariableNode) Dependencies() []Node {
 	return nil
 }
@@ -284,7 +284,9 @@ func (b *builder) bindProperty(v interface{}, sch Schemas, hasCountIndex bool) (
 //
 // In addition to the bound property, this function returns the set of nodes referenced by the property's
 // interpolations.
-func (b *builder) bindProperties(raw *config.RawConfig, sch Schemas, hasCountIndex bool) (*BoundMapProperty, map[Node]struct{}, error) {
+func (b *builder) bindProperties(raw *config.RawConfig, sch Schemas,
+	hasCountIndex bool) (*BoundMapProperty, map[Node]struct{}, error) {
+
 	v, deps, err := b.bindProperty(raw.Raw, sch, hasCountIndex)
 	if err != nil {
 		return nil, nil, err

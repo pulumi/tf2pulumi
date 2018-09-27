@@ -30,8 +30,8 @@ func (b *propertyBinder) bindListProperty(s reflect.Value, sch Schemas) (BoundNo
 	elemSchemas := sch.ElemSchemas()
 
 	// If this is a max-single-element list that we intend to project as its element, just bind its element and return.
-	projectListElement := false
-	if sch.TF != nil && sch.TF.Type == schema.TypeMap{
+	var projectListElement bool
+	if sch.TF != nil && sch.TF.Type == schema.TypeMap {
 		elemSchemas, projectListElement = sch, true
 	} else {
 		projectListElement = tfbridge.IsMaxItemsOne(sch.TF, sch.Pulumi)

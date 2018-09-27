@@ -1,0 +1,26 @@
+{
+    "Deadline": "5m",
+    "DisableAll": true,
+    "Enable": [
+        "deadcode",
+        "errcheck",
+        "gas",
+        "gofmt",
+        "golint",
+        "gosimple",
+        "ineffassign",
+        "interfacer",
+        "lll",
+        "misspell",
+        "staticcheck",
+        "structcheck",
+        "unconvert",
+        "varcheck",
+        "vet"
+    ],
+    "Exclude": [
+        "/usr/local/go"
+    ],
+    "LineLength": 120
+}
+
