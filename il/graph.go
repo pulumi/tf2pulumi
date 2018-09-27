@@ -1,8 +1,6 @@
 package il
 
 import (
-	"encoding/json"
-	"os/exec"
 	"reflect"
 	"sort"
 	"strconv"
@@ -15,7 +13,6 @@ import (
 	"github.com/pkg/errors"
 	"github.com/pulumi/pulumi-terraform/pkg/tfbridge"
 	"github.com/pulumi/pulumi/pkg/util/contract"
-	"github.com/pulumi/pulumi/pkg/workspace"
 	_ "github.com/ugorji/go/codec"
 )
 
@@ -226,22 +223,24 @@ func (v *VariableNode) sortKey() string {
 // A builder is a temporary structure used to hold the contents of a graph that while it is under construction. The
 // various fields are aligned with their similarly-named peers in Graph.
 type builder struct {
-	modules   map[string]*ModuleNode
-	providers map[string]*ProviderNode
-	resources map[string]*ResourceNode
-	outputs   map[string]*OutputNode
-	locals    map[string]*LocalNode
-	variables map[string]*VariableNode
+	providerInfo ProviderInfoSource
+	modules      map[string]*ModuleNode
+	providers    map[string]*ProviderNode
+	resources    map[string]*ResourceNode
+	outputs      map[string]*OutputNode
+	locals       map[string]*LocalNode
+	variables    map[string]*VariableNode
 }
 
-func newBuilder() *builder {
+func newBuilder(providerInfo ProviderInfoSource) *builder {
 	return &builder{
-		modules:   make(map[string]*ModuleNode),
-		providers: make(map[string]*ProviderNode),
-		resources: make(map[string]*ResourceNode),
-		outputs:   make(map[string]*OutputNode),
-		locals:    make(map[string]*LocalNode),
-		variables: make(map[string]*VariableNode),
+		providerInfo: providerInfo,
+		modules:      make(map[string]*ModuleNode),
+		providers:    make(map[string]*ProviderNode),
+		resources:    make(map[string]*ResourceNode),
+		outputs:      make(map[string]*OutputNode),
+		locals:       make(map[string]*LocalNode),
+		variables:    make(map[string]*VariableNode),
 	}
 }
 
@@ -339,45 +338,12 @@ func (b *builder) buildDeps(deps map[Node]struct{}, dependsOn []string) ([]Node,
 
 // getProviderInfo fetches the tfbridge information for a particular provider. It does so by launching the provider
 // plugin with the "-get-provider-info" flag and deserializing the JSON representation dumped to stdout.
-var pluginNames = map[string]string{
-	"azurerm": "azure",
-	"template": "terraform-template",
-}
-func getProviderInfo(p *ProviderNode) (*tfbridge.ProviderInfo, string, error) {
+func (b *builder) getProviderInfo(p *ProviderNode) (*tfbridge.ProviderInfo, string, error) {
 	if info, ok := builtinProviderInfo[p.Config.Name]; ok {
 		return info, p.Config.Name, nil
 	}
 
-	pluginName, hasPluginName := pluginNames[p.Config.Name]
-	if !hasPluginName {
-		pluginName = p.Config.Name
-	}
-
-	_, path, err := workspace.GetPluginPath(workspace.ResourcePlugin, pluginName, nil)
-	if err != nil {
-		return nil, "", err
-	} else if path == "" {
-		return nil, "", errors.Errorf("could not find plugin %s for provider %s", pluginName, p.Config.Name)
-	}
-
-	// Run the plugin and decode its provider config.
-	cmd := exec.Command(path, "-get-provider-info")
-	out, _ := cmd.StdoutPipe()
-	if err := cmd.Start(); err != nil {
-		return nil, "", errors.Wrapf(err, "failed to load plugin %s for provider %s", pluginName, p.Config.Name)
-	}
-
-	var info *tfbridge.ProviderInfo
-	err = json.NewDecoder(out).Decode(&info)
-
-	if cErr := cmd.Wait(); cErr != nil {
-		return nil, "", errors.Wrapf(err, "failed to run plugin %s for provider %s", pluginName, p.Config.Name)
-	}
-	if err != nil {
-		return nil, "", errors.Wrapf(err, "could not decode schema information for provider %s", p.Config.Name)
-	}
-
-	return info, pluginName, nil
+	return b.providerInfo.GetProviderInfo(p.Config.Name)
 }
 
 // buildModule binds the given module node's properties and computes its dependency edges.
@@ -395,7 +361,7 @@ func (b *builder) buildModule(m *ModuleNode) error {
 
 // buildProvider fetches the given provider's tfbridge data, binds its properties, and computes its dependency edges.
 func (b *builder) buildProvider(p *ProviderNode) error {
-	info, pluginName, err := getProviderInfo(p)
+	info, pluginName, err := b.getProviderInfo(p)
 	if err != nil {
 		return err
 	}
@@ -547,7 +513,7 @@ func (b *builder) buildVariable(v *VariableNode) error {
 // corresponding dependency graph. Building the graph involves binding each entity's properties (if any) and
 // computing its list of dependency edges.
 func BuildGraph(tree *module.Tree) (*Graph, error) {
-	b := newBuilder()
+	b := newBuilder(PluginProviderInfoSource)
 
 	conf := tree.Config()
 

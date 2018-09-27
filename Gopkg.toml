@@ -1,27 +1,27 @@
-# Redirect all Terraform references to our fork.
-#[[override]]
-#  name = "github.com/terraform-providers/terraform-provider-aws"
-#  source = "github.com/pulumi/terraform-provider-aws"
-#  branch = "pulumi-master"
-#
-#[[override]]
-#  name = "github.com/terraform-providers/terraform-provider-azurerm"
-#  source = "github.com/pulumi/terraform-provider-azurerm"
-#  branch = "pulumi-master"
+[[constraint]]
+  name = "github.com/hashicorp/terraform"
+  version = "v0.11.8"
+
+[[override]]
+  name = "github.com/hashicorp/go-retryablehttp"
+  revision = "6e85be8fee1dcaa02c0eaaac2df5a8fbecf94145"
+
+[[override]]
+  name = "github.com/hashicorp/go-tfe"
+  revision = "0e7cd8ef626181232db2d6886263a3db937708cd"
+
+[[override]]
+  name = "github.com/terraform-providers/terraform-provider-openstack"
+  revision = "4080a521c6ea4872f38bae658ac17b774eefcfe1"
 
 [[override]]
   name = "github.com/masterzen/azure-sdk-for-go"
   branch = "master"
 
 [[override]]
-  name = "github.com/aws/aws-sdk-go"
-  branch = "master"
+  name = "github.com/gophercloud/gophercloud"
+  revision = "3027adb1ce72bc52b87b2decccc7852574b90031"
 
 [[override]]
-  name = "github.com/ugorji/go"
-  revision = "d463ef40929c1805e71d5e821ac82f6b90cbc7c6"
-
-[[override]]
-  name = "github.com/hashicorp/terraform"
-  source = "github.com/pulumi/terraform"
-  branch = "pulumi-master"
+  name = "github.com/chzyer/readline"
+  revision = "c914be64f07d9998f52bf0d598ec26d457168c0f"
