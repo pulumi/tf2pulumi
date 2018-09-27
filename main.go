@@ -44,10 +44,8 @@ func buildGraphs(tree *module.Tree, isRoot bool) ([]*il.Graph, error) {
 }
 
 func main() {
-	credentials := noCredentials{}
-	services := disco.NewDisco()
-	services.SetCredentialsSource(credentials)
-	moduleStorage := module.NewStorage(filepath.Join(command.DefaultDataDir, "modules"), services, credentials)
+	services := disco.NewWithCredentialsSource(noCredentials{})
+	moduleStorage := module.NewStorage(filepath.Join(command.DefaultDataDir, "modules"), services)
 
 	mod, err := module.NewTreeModule("", ".")
 	if err != nil {
