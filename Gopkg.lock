@@ -941,6 +941,7 @@
     "pkg/resource/plugin",
     "pkg/resource/provider",
     "pkg/tokens",
+    "pkg/util/buildutil",
     "pkg/util/cmdutil",
     "pkg/util/contract",
     "pkg/util/fsutil",
@@ -1388,6 +1389,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "984487f073307a60b668f323fb233964af4edfe21bfd7be9fd0f31251dae2fcf"
+  inputs-digest = "aad460a0398079ad125bf075472c642ef98c75031bed4ee30dcd140172e5cbf0"
   solver-name = "gps-cdcl"
   solver-version = 1
