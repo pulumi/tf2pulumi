@@ -9,6 +9,13 @@ before_install:
     - git clone https://github.com/pulumi/scripts ${GOPATH}/src/github.com/pulumi/scripts
     - source ${GOPATH}/src/github.com/pulumi/scripts/ci/prepare-environment.sh
     - source ${PULUMI_SCRIPTS}/ci/keep-failed-tests.sh
+
+    # Install Terraform.
+    - curl -sLo /tmp/terraform.zip https://releases.hashicorp.com/terraform/0.11.8/terraform_0.11.8_linux_amd64.zip
+    - unzip /tmp/terraform.zip -d /tmp
+    - mkdir ~/bin
+    - mv /tmp/terraform ~/bin
+    - export PATH="~/bin:$PATH"
 install:
     - source ${PULUMI_SCRIPTS}/ci/install-common-toolchain.sh
     - curl -L https://get.pulumi.com/ | bash -s -- --version 0.15.1
