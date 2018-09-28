@@ -31,6 +31,15 @@
   version = "v12.5.0-beta"
 
 [[projects]]
+  branch = "master"
+  name = "github.com/Azure/go-ansiterm"
+  packages = [
+    ".",
+    "winterm"
+  ]
+  revision = "d6e3b3328b783f23731bc4d058875b0371ff8109"
+
+[[projects]]
   name = "github.com/Azure/go-autorest"
   packages = [
     "autorest",
@@ -68,6 +77,18 @@
   ]
   revision = "2ad3b31cf4a21db70fc0cacd0e0120eaae566f98"
   version = "v1.0-alpha3"
+
+[[projects]]
+  name = "github.com/Nvveen/Gotty"
+  packages = ["."]
+  revision = "a8b993ba6abdb0e0c12b0125c603323a71c7790c"
+  source = "https://github.com/ijc25/Gotty"
+
+[[projects]]
+  name = "github.com/Sirupsen/logrus"
+  packages = ["."]
+  revision = "a67f783a3814b8729bd2dac5780b5f78f8dbd64d"
+  version = "v1.1.0"
 
 [[projects]]
   name = "github.com/Unknwon/com"
@@ -305,6 +326,15 @@
   packages = ["."]
   revision = "95292e44976d1217cf3611dc7c8d9466877d3ed5"
   version = "v1.0.1"
+
+[[projects]]
+  name = "github.com/docker/docker"
+  packages = [
+    "pkg/term",
+    "pkg/term/windows"
+  ]
+  revision = "092cba3727bb9b4a2f0e922cd6c0f93ea270e363"
+  version = "v1.13.1"
 
 [[projects]]
   name = "github.com/dylanmei/iso8601"
@@ -736,6 +766,12 @@
   revision = "ae77be60afb1dcacde03767a8c37337fad28ac14"
 
 [[projects]]
+  branch = "master"
+  name = "github.com/kballard/go-shellquote"
+  packages = ["."]
+  revision = "95032a82bc518f77982ea72343cc1ade730072f0"
+
+[[projects]]
   name = "github.com/kevinburke/ssh_config"
   packages = ["."]
   revision = "81db2a75821ed34e682567d48be488a1c3121088"
@@ -759,6 +795,12 @@
     "openpgp/s2k"
   ]
   revision = "0b2a91ace4489933c854bb17d3f22dabdd91b455"
+
+[[projects]]
+  branch = "master"
+  name = "github.com/konsorten/go-windows-terminal-sequences"
+  packages = ["."]
+  revision = "b729f2633dfe35f4d1d8a32385f6685610ce1cb5"
 
 [[projects]]
   branch = "master"
@@ -806,6 +848,12 @@
   packages = ["."]
   revision = "6ca4dbf54d38eea1a992b3c722a76a5d1c4cb25c"
   version = "v0.0.4"
+
+[[projects]]
+  branch = "master"
+  name = "github.com/mgutz/ansi"
+  packages = ["."]
+  revision = "9520e82c474b0a04dd04f8a40959027271bab992"
 
 [[projects]]
   name = "github.com/mitchellh/cli"
@@ -920,6 +968,12 @@
   revision = "c059e472caf75dbe73903f6521a20abac245b17f"
 
 [[projects]]
+  name = "github.com/pmezard/go-difflib"
+  packages = ["difflib"]
+  revision = "792786c7400a136282c1664665ae0a8db921c6c2"
+  version = "v1.0.0"
+
+[[projects]]
   name = "github.com/posener/complete"
   packages = [
     ".",
@@ -933,15 +987,29 @@
 [[projects]]
   name = "github.com/pulumi/pulumi"
   packages = [
+    "pkg/apitype",
+    "pkg/apitype/migrate",
+    "pkg/backend",
+    "pkg/backend/display",
+    "pkg/backend/filestate",
     "pkg/diag",
     "pkg/diag/colors",
     "pkg/encoding",
+    "pkg/engine",
+    "pkg/operations",
     "pkg/resource",
     "pkg/resource/config",
+    "pkg/resource/deploy",
+    "pkg/resource/deploy/providers",
+    "pkg/resource/graph",
     "pkg/resource/plugin",
     "pkg/resource/provider",
+    "pkg/resource/stack",
+    "pkg/testing",
+    "pkg/testing/integration",
     "pkg/tokens",
     "pkg/util/buildutil",
+    "pkg/util/cancel",
     "pkg/util/cmdutil",
     "pkg/util/contract",
     "pkg/util/fsutil",
@@ -949,9 +1017,12 @@
     "pkg/util/httputil",
     "pkg/util/logging",
     "pkg/util/mapper",
+    "pkg/util/result",
     "pkg/util/retry",
     "pkg/util/rpcutil",
     "pkg/util/rpcutil/rpcerror",
+    "pkg/util/testutil",
+    "pkg/version",
     "pkg/workspace",
     "sdk/proto/go"
   ]
@@ -1010,6 +1081,12 @@
   ]
   revision = "f187355171c936ac84a82793659ebb4936bc1c23"
   version = "v1.3.0"
+
+[[projects]]
+  name = "github.com/stretchr/testify"
+  packages = ["assert"]
+  revision = "f35b8ab0b5a2cef36673838d662e249dd9c94686"
+  version = "v1.2.2"
 
 [[projects]]
   name = "github.com/svanharmelen/jsonapi"
@@ -1316,6 +1393,16 @@
   version = "v1.15.0"
 
 [[projects]]
+  name = "gopkg.in/AlecAivazis/survey.v1"
+  packages = [
+    ".",
+    "core",
+    "terminal"
+  ]
+  revision = "f30c5d1830c892f533140f29a1de89141dc217f5"
+  version = "v1.6.2"
+
+[[projects]]
   name = "gopkg.in/src-d/go-billy.v4"
   packages = [
     ".",
@@ -1389,6 +1476,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "aad460a0398079ad125bf075472c642ef98c75031bed4ee30dcd140172e5cbf0"
+  inputs-digest = "7a28d1cfa26b937b191e31be3b0ecd417da4a89e016f1e501235b7b2d23987e3"
   solver-name = "gps-cdcl"
   solver-version = 1

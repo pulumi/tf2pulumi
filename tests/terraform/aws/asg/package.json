@@ -1,0 +1,12 @@
+{
+    "name": "asg",
+    "devDependencies": {
+        "@types/node": "latest",
+        "@types/sprintf-js": "latest"
+    },
+    "dependencies": {
+        "@pulumi/pulumi": "latest",
+        "@pulumi/aws": "latest",
+        "sprintf-js": "latest"
+    }
+}

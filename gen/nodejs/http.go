@@ -34,9 +34,9 @@ func (g *Generator) computeHTTPInputs(r *il.ResourceNode, indent bool, count str
 
 	buf := &bytes.Buffer{}
 	buf.WriteString("{\n")
-	fmt.Fprintf(buf, "%s    url: %s,\n", indent, url)
-	fmt.Fprintf(buf, "%s    headers: %s,\n", indent, requestHeaders)
-	fmt.Fprintf(buf, "%s}", indent)
+	fmt.Fprintf(buf, "%s    url: %s,\n", g.indent, url)
+	fmt.Fprintf(buf, "%s    headers: %s,\n", g.indent, requestHeaders)
+	fmt.Fprintf(buf, "%s}", g.indent)
 	return buf.String(), nil
 }
 
