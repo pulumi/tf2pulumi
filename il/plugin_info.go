@@ -2,10 +2,13 @@ package il
 
 import (
 	"encoding/json"
+	"fmt"
+	"net/http"
 	"os/exec"
 
 	"github.com/pkg/errors"
 	"github.com/pulumi/pulumi-terraform/pkg/tfbridge"
+	"github.com/pulumi/pulumi/pkg/util/contract"
 	"github.com/pulumi/pulumi/pkg/workspace"
 )
 
@@ -41,7 +44,12 @@ func (pluginProviderInfoSource) GetProviderInfo(tfProviderName string) (*tfbridg
 	if err != nil {
 		return nil, "", err
 	} else if path == "" {
-		return nil, "", errors.Errorf("could not find plugin %s for provider %s", pluginName, tfProviderName)
+		message := fmt.Sprintf("could not find plugin %s for provider %s", pluginName, tfProviderName)
+		latest := getLatestPluginVersion(pluginName)
+		if latest != "" {
+			message += fmt.Sprintf("; try running 'pulumi plugin install resource %s %s'", pluginName, latest)
+		}
+		return nil, "", errors.New(message)
 	}
 
 	// Run the plugin and decode its provider config.
@@ -66,4 +74,24 @@ func (pluginProviderInfoSource) GetProviderInfo(tfProviderName string) (*tfbridg
 	}
 
 	return info.Unmarshal(), pluginName, nil
+}
+
+// getLatestPluginVersion returns the version number for the latest released version of the indicated plugin by
+// querying the value of the `latest` tag in the plugin's corresponding NPM package.
+func getLatestPluginVersion(pluginName string) string {
+	resp, err := http.Get("https://registry.npmjs.org/@pulumi/" + pluginName)
+	if err != nil {
+		return ""
+	}
+	defer contract.IgnoreClose(resp.Body)
+
+	// The structure of the response to the above call is documented here:
+	// - https://github.com/npm/registry/blob/master/docs/responses/package-metadata.md
+	var packument struct {
+		DistTags map[string]string `json:"dist-tags"`
+	}
+	if err = json.NewDecoder(resp.Body).Decode(&packument); err != nil {
+		return ""
+	}
+	return packument.DistTags["latest"]
 }
