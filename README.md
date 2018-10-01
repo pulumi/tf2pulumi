@@ -2,12 +2,12 @@
 
 [![Travis CI](https://img.shields.io/travis/pulumi/tf2pulumi.svg?style=for-the-badge)](https://travis-ci.org/pulumi/tf2pulumi)
 
-Convert Terraform projects to Pulumi Typescript programs.
+Convert Terraform projects to Pulumi TypeScript programs.
 
 ## Goals
 
 The goal of `tf2pulumi` is to help users efficiently convert Terraform-managed infrastructure into
-Pulumi stacks. It translates HCL configuration into Pulumi Typescript programs. In the fullness of
+Pulumi stacks. It translates HCL configuration into Pulumi TypeScript programs. In the fullness of
 time, it will also translate Terraform state files into Pulumi checkpoint files.
 
 ## Installation
@@ -28,10 +28,10 @@ into a directory that is on your path.
 
 ## Usage
 
-In order to use `tf2pulumi` to convert a Terraform project to Pulumi Typescript and then deploy it,
+In order to use `tf2pulumi` to convert a Terraform project to Pulumi TypeScript and then deploy it,
 you'll first need to install the [Pulumi CLI](https://pulumi.io/quickstart/install.html). Once the
 Pulumi CLI has been installed, navigate the to same directory as the Terraform project you'd like to
-import and create a new Pulumi Typescript stack in a subdirectory:
+import and create a new Pulumi TypeScript stack in a subdirectory:
 
 ```console
 $ pulumi new typescript --dir my-stack
@@ -47,7 +47,7 @@ $ tf2pulumi >my-stack/index.ts
 If `tf2pulumi` complains about missing resource plugins, install those plugins as per the
 instructions in the error message and re-run the command above.
 
-This will generate a Pulumi Typescript program in `index.ts` that when run with the  will deploy the
+This will generate a Pulumi TypeScript program in `index.ts` that when run with the  will deploy the
 infrastructure originally described by the Terraform project. Note that if your infrastructure
 references files or directories with paths relative to the location of the Terraform project, you
 will most likely need to update these paths such that they are relative to the generated `index.ts`
