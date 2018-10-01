@@ -65,7 +65,7 @@ func main() {
 
 	gs, err := buildGraphs(mod, true)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "could not build graphs: %v\n", err)
+		fmt.Fprintf(os.Stderr, "could not import Terraform project: %v\n", err)
 		os.Exit(-1)
 	}
 
