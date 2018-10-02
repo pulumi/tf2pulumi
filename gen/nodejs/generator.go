@@ -274,7 +274,7 @@ func (g *Generator) GenerateVariables(vs []*il.VariableNode) error {
 	// a config object and appropriate get/require calls; if we are not, we generate references into the module args.
 	isRoot := g.isRoot()
 	if isRoot {
-		fmt.Printf("const config = new pulumi.Config(\"%s\")\n", g.ProjectName)
+		fmt.Printf("const config = new pulumi.Config();\n")
 	}
 	for _, v := range vs {
 		name := tsName(v.Config.Name, nil, nil, false)
