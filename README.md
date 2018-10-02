@@ -59,12 +59,12 @@ While the majority of Terraform constructs are already supported, there are some
 noteworthy is that `tf2pulumi` cannot currently convert provisioner blocks. Besides that, the
 following constructs are not yet implemented:
 - Various built-in interpolation functions. Calls to unimplemented functions will throw at
-  runtime.
+  runtime (#12).
 - Multiple provider instances and named providers. If a resource or data source names a provider,
-  the reference is currently ignored.
-- Provisioners. Provisioner blocks are currently ignored.
-- Explicit dependencies in data sources.
-- `self` and `terraform` variable references.
+  the reference is currently ignored (#11).
+- Provisioners. Provisioner blocks are currently ignored (#10).
+- Explicit dependencies in data sources (#1).
+- `self` and `terraform` variable references (#2).
 
 ## Example
 
