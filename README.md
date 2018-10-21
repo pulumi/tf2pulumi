@@ -44,10 +44,10 @@ contains the Pulumi project you just created:
 $ tf2pulumi >my-stack/index.ts
 ```
 
-If `tf2pulumi` complains about missing resource plugins, install those plugins as per the
+If `tf2pulumi` complains about missing Terraform resource plugins, install those plugins as per the
 instructions in the error message and re-run the command above.
 
-This will generate a Pulumi TypeScript program in `index.ts` that when run with the  will deploy the
+This will generate a Pulumi TypeScript program in `index.ts` that when run with `pulumi update` will deploy the
 infrastructure originally described by the Terraform project. Note that if your infrastructure
 references files or directories with paths relative to the location of the Terraform project, you
 will most likely need to update these paths such that they are relative to the generated `index.ts`
@@ -70,6 +70,9 @@ following constructs are not yet implemented:
 
 The [AWS EIP test](https://github.com/pulumi/tf2pulumi/tree/master/tests/terraform/aws/eip) provides
 a good example of the results of the conversion on a relatively simple infrastructure definition. 
+
+### Terraform
+
 The Terraform project is structured like so:
 
 ##### variables.tf
@@ -164,7 +167,10 @@ output "elastic ip" {
 }
 ```
 
+### Pulumi
+
 Running `tf2pulumi` on this project produces the following `index.ts` file:
+
 ```typescript
 import * as pulumi from "@pulumi/pulumi";
 import * as aws from "@pulumi/aws";
