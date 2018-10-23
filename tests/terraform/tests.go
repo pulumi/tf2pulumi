@@ -16,6 +16,7 @@ package terraform
 
 import (
 	"bytes"
+	"fmt"
 	"io/ioutil"
 	"os"
 	"os/exec"
@@ -26,6 +27,38 @@ import (
 	"github.com/pulumi/pulumi/pkg/util/contract"
 	"github.com/pulumi/pulumi/pkg/util/fsutil"
 )
+
+func generateCode(t *testing.T, program *integration.ProgramTestOptions) {
+	stdout := program.Stdout
+	if stdout == nil {
+		stdout = os.Stdout
+	}
+	fmt.Fprintf(stdout, "running `terraform init`...\n")
+
+	// Run "terraform init".
+	cmd := exec.Command("terraform", "init")
+	cmd.Dir = program.Dir
+	if out, cmdErr := cmd.CombinedOutput(); cmdErr != nil {
+		t.Fatalf("'terraform init' failed (%v): %v", cmdErr, string(out))
+	}
+
+	fmt.Fprintf(stdout, "running `tf2pulumi`...\n")
+
+	// Generate an index.ts file using `tf2pulumi`.
+	indexTS, err := os.Create(filepath.Join(program.Dir, "index.ts"))
+	if err != nil {
+		t.Fatalf("failed to create index.ts: %v", err)
+	}
+	defer contract.IgnoreClose(indexTS)
+
+	var stderr bytes.Buffer
+	cmd = exec.Command("tf2pulumi")
+	cmd.Dir = program.Dir
+	cmd.Stdout, cmd.Stderr = indexTS, &stderr
+	if err = cmd.Run(); err != nil {
+		t.Fatalf("failed to generate Pulumi program (%v):\n%v", err, stderr.String())
+	}
+}
 
 func IntegrationTest(t *testing.T, program *integration.ProgramTestOptions) {
 	cwd, err := os.Getwd()
@@ -46,27 +79,7 @@ func IntegrationTest(t *testing.T, program *integration.ProgramTestOptions) {
 	}
 	program.Dir = targetDir
 
-	// Run "terraform init".
-	cmd := exec.Command("terraform", "init")
-	cmd.Dir = program.Dir
-	if out, cmdErr := cmd.CombinedOutput(); cmdErr != nil {
-		t.Fatalf("'terraform init' failed (%v): %v", cmdErr, string(out))
-	}
-
-	// Generate an index.ts file using `tf2pulumi`.
-	indexTS, err := os.Create(filepath.Join(targetDir, "index.ts"))
-	if err != nil {
-		t.Fatalf("failed to create index.ts: %v", err)
-	}
-	defer contract.IgnoreClose(indexTS)
-
-	var stderr bytes.Buffer
-	cmd = exec.Command("tf2pulumi")
-	cmd.Dir = program.Dir
-	cmd.Stdout, cmd.Stderr = indexTS, &stderr
-	if err = cmd.Run(); err != nil {
-		t.Fatalf("failed to generate Pulumi program (%v):\n%v", err, stderr.String())
-	}
+	generateCode(t, program)
 
 	integration.ProgramTest(t, program)
 }

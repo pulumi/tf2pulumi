@@ -1,5 +1,10 @@
+# NOTE: we do not specify names for any of the test resources in order to improve the reliability of our CI jobs
+# in the face of parallelism and leftover resources. Explicitly naming these resources can cause conflicts
+# between jobs that run concurrently or jobs that fail to clean up their resources. Pulumi will auto-name these
+# for us.
+
 resource "aws_iam_role" "main" {
-  name = "terraform-example-lambda"
+  # name = "terraform-example-lambda"
 
   assume_role_policy = <<EOF
 {
@@ -20,14 +25,14 @@ EOF
 
 resource "aws_lambda_function" "main" {
   filename      = "lambda_function.zip"
-  function_name = "terraform-example"
+  # function_name = "terraform-example"
   role          = "${aws_iam_role.main.arn}"
   handler       = "exports.example"
   runtime       = "nodejs4.3"
 }
 
 resource "aws_iam_role" "cidp" {
-  name = "terraform-example-cognito-idp"
+  # name = "terraform-example-cognito-idp"
   path = "/service-role/"
 
   assume_role_policy = <<POLICY
@@ -53,7 +58,7 @@ POLICY
 }
 
 resource "aws_iam_role_policy" "main" {
-  name = "terraform-example-cognito-idp"
+  # name = "terraform-example-cognito-idp"
   role = "${aws_iam_role.cidp.id}"
 
   policy = <<EOF
@@ -75,7 +80,7 @@ EOF
 }
 
 resource "aws_cognito_user_pool" "pool" {
-  name                       = "terraform-example"
+  # name                       = "terraform-example"
   email_verification_subject = "Device Verification Code"
   email_verification_message = "Please use the following code {####}"
   sms_verification_message   = "{####} Baz"

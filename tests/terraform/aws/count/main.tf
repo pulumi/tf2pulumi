@@ -1,10 +1,15 @@
+# NOTE: we do not specify names for any of the test resources in order to improve the reliability of our CI jobs
+# in the face of parallelism and leftover resources. Explicitly naming these resources can cause conflicts
+# between jobs that run concurrently or jobs that fail to clean up their resources. Pulumi will auto-name these
+# for us.
+
 # Specify the provider and access details
 provider "aws" {
   region = "${var.aws_region}"
 }
 
 resource "aws_elb" "web" {
-  name = "terraform-example-elb"
+  # name = "terraform-example-elb"
 
   # The same availability zone as our instances
   availability_zones = ["${aws_instance.web.*.availability_zone}"]
