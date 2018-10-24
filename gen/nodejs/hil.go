@@ -243,6 +243,15 @@ func (g *Generator) genCall(w io.Writer, n *il.BoundCall) {
 		g.gen(w, "].find((v: any) => v !== undefined && (<any[]>v).length > 0)")
 	case "compact":
 		g.genf(w, "%v.filter((v: any) => <string>v !== \"\")", n.Args[0])
+	case "concat":
+		g.genf(w, "%v.concat(", n.Args[0])
+		for i, arg := range n.Args[1:] {
+			if i > 0 {
+				g.gen(w, ", ")
+			}
+			g.genf(w, "%v", arg)
+		}
+		g.gen(w, ")")
 	case "element":
 		g.genf(w, "%v[%v]", n.Args[0], n.Args[1])
 	case "file":
@@ -299,6 +308,15 @@ func (g *Generator) genCall(w io.Writer, n *il.BoundCall) {
 			g.genf(w, ": %v", n.Args[i+1])
 		}
 		g.gen(w, "}")
+	case "merge":
+		g.genf(w, "Object.assign(%v", n.Args[0])
+		for i, arg := range n.Args[1:] {
+			if i > 0 {
+				g.gen(w, ", ")
+			}
+			g.genf(w, "%v", arg)
+		}
+		g.gen(w, ")")
 	case "min":
 		g.genf(w, "%v.reduce((min, v) => !min ? v : Math.min(min, v))", n.Args[0])
 	case "replace":
@@ -310,6 +328,8 @@ func (g *Generator) genCall(w io.Writer, n *il.BoundCall) {
 			}
 		}
 		g.genf(w, "%v.replace(%v, %v)", n.Args[0], pat, n.Args[2])
+	case "signum":
+		g.genf(w, "Math.sign(%v)", n.Args[0])
 	case "split":
 		g.genf(w, "%v.split(%v)", n.Args[1], n.Args[0])
 	case "substr":

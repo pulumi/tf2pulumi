@@ -53,7 +53,7 @@ func (b *propertyBinder) bindCall(n *ast.Call) (BoundExpr, error) {
 		exprType = TypeString
 	case "coalesce":
 		exprType = TypeString
-	case "coalescelist":
+	case "coalescelist", "concat":
 		if args[0].Type().IsList() {
 			exprType = args[0].Type()
 		} else {
@@ -88,10 +88,14 @@ func (b *propertyBinder) bindCall(n *ast.Call) (BoundExpr, error) {
 			return nil, errors.Errorf("the numbner of arguments to \"map\" must be even")
 		}
 		exprType = TypeMap
+	case "merge":
+		exprType = TypeMap
 	case "min":
 		exprType = TypeNumber
 	case "replace":
 		exprType = TypeString
+	case "signum":
+		exprType = TypeNumber
 	case "split":
 		exprType = TypeString.ListOf()
 	case "substr":

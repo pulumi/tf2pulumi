@@ -45,12 +45,20 @@ type Generator interface {
 // generateNode generates a single local value, module, or resource node, ensuring that its dependencies have been
 // generated before it is itself generated.
 func generateNode(n il.Node, lang Generator, done map[il.Node]struct{}) error {
+	return generateDependency(n, lang, map[il.Node]struct{}{}, done)
+}
+
+func generateDependency(n il.Node, lang Generator, inProgress, done map[il.Node]struct{}) error {
 	if _, ok := done[n]; ok {
 		return nil
 	}
+	if _, ok := inProgress[n]; ok {
+		return errors.Errorf("circular dependency detected")
+	}
+	inProgress[n] = struct{}{}
 
 	for _, d := range n.Dependencies() {
-		if err := generateNode(d, lang, done); err != nil {
+		if err := generateDependency(d, lang, inProgress, done); err != nil {
 			return err
 		}
 	}
