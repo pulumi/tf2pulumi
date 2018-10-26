@@ -10,7 +10,7 @@ The goal of `tf2pulumi` is to help users efficiently convert Terraform-managed i
 Pulumi stacks. It translates HCL configuration into Pulumi TypeScript programs. In the fullness of
 time, it will also translate Terraform state files into Pulumi checkpoint files.
 
-## Installation
+## Building and Installation
 
 You need to have [Go](https://golang.org/) and [`dep`](https://github.com/golang/dep) installed in
 order to build `tf2pulumi`. Once those prerequisites are installed, run the following to build the
