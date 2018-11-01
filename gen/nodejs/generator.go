@@ -18,6 +18,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"sort"
 	"strings"
 
 	"github.com/hashicorp/terraform/config"
@@ -213,7 +214,6 @@ func (g *Generator) GeneratePreamble(modules []*il.Graph) error {
 			providers[p.PluginName] = struct{}{}
 		}
 	}
-
 	for p := range providers {
 		switch p {
 		case "archive":
@@ -224,9 +224,58 @@ func (g *Generator) GeneratePreamble(modules []*il.Graph) error {
 			fmt.Printf("import * as %s from \"@pulumi/%s\";\n", cleanName(p), p)
 		}
 	}
-	fmt.Printf("import * as fs from \"fs\";\n")
-	fmt.Printf("import * as process from \"process\";\n")
-	fmt.Printf("import sprintf = require(\"sprintf-js\");\n")
+
+	// Look for optional imports
+	optionals := make(map[string]bool)
+	imports := []string{}
+	findOptionals := func(n il.BoundNode) (il.BoundNode, error) {
+		switch n := n.(type) {
+		case *il.BoundCall:
+			switch n.HILNode.Func {
+			case "file":
+				if !optionals["fs"] {
+					imports = append(imports, "import * as fs from \"fs\";\n")
+					optionals["fs"] = true
+				}
+			case "format":
+				if !optionals["sprintf"] {
+					imports = append(imports, "import sprintf = require(\"sprintf-js\");\n")
+					optionals["sprintf"] = true
+				}
+			}
+		case *il.BoundVariableAccess:
+			if v, ok := n.TFVar.(*config.PathVariable); ok && v.Type == config.PathValueCwd && !optionals["process"] {
+				imports = append(imports, "import * as process from \"process\";\n")
+				optionals["process"] = true
+			}
+		}
+		return n, nil
+	}
+	for _, m := range modules {
+		for _, n := range m.Modules {
+			il.VisitBoundNode(n.Properties, findOptionals, il.IdentityVisitor)
+		}
+		for _, n := range m.Providers {
+			il.VisitBoundNode(n.Properties, findOptionals, il.IdentityVisitor)
+		}
+		for _, n := range m.Resources {
+			il.VisitBoundNode(n.Properties, findOptionals, il.IdentityVisitor)
+		}
+		for _, n := range m.Outputs {
+			il.VisitBoundNode(n.Value, findOptionals, il.IdentityVisitor)
+		}
+		for _, n := range m.Locals {
+			il.VisitBoundNode(n.Value, findOptionals, il.IdentityVisitor)
+		}
+		for _, n := range m.Variables {
+			il.VisitBoundNode(n.DefaultValue, findOptionals, il.IdentityVisitor)
+		}
+	}
+
+	sort.Strings(imports)
+	for _, line := range imports {
+		fmt.Print(line)
+	}
 	fmt.Printf("\n")
 
 	return nil
