@@ -25,10 +25,21 @@ import (
 
 // genListProperty generates code for as single list property.
 func (g *Generator) genListProperty(w io.Writer, n *il.BoundListProperty) {
-	if len(n.Elements) == 0 {
+	switch len(n.Elements) {
+	case 0:
 		g.gen(w, "[]")
-	} else {
-		g.gen(w, "[")
+	case 1:
+		v := n.Elements[0]
+		if v.Type().IsList() {
+			// TF flattens list elements that are themselves lists into the parent list.
+			//
+			// TODO: if there is a list element that is dynamically a list, that also needs to be flattened. This is
+			// only knowable at runtime and will require a helper.
+			g.genf(w, "%v", v)
+		} else {
+			g.genf(w, "[%v]", v)
+		}
+	default:
 		g.indented(func() {
 			for _, v := range n.Elements {
 				// TF flattens list elements that are themselves lists into the parent list.
