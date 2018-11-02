@@ -40,6 +40,7 @@ func (g *Generator) genListProperty(w io.Writer, n *il.BoundListProperty) {
 			g.genf(w, "[%v]", v)
 		}
 	default:
+		g.gen(w, "[")
 		g.indented(func() {
 			for _, v := range n.Elements {
 				// TF flattens list elements that are themselves lists into the parent list.
