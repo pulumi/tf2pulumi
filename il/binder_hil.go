@@ -232,7 +232,7 @@ func (b *propertyBinder) bindVariableAccess(n *ast.VariableAccess) (BoundExpr, e
 		}
 		ilNode = l
 
-		exprType = TypeUnknown.OutputOf()
+		exprType = l.Value.Type()
 	case *config.ModuleVariable:
 		// "module."
 		m, ok := b.builder.modules[v.Name]

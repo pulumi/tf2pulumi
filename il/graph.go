@@ -569,13 +569,13 @@ func BuildGraph(tree *module.Tree) (*Graph, error) {
 			return nil, err
 		}
 	}
-	for _, r := range b.resources {
-		if err := b.buildResource(r); err != nil {
+	for _, l := range b.locals {
+		if err := b.buildLocal(l); err != nil {
 			return nil, err
 		}
 	}
-	for _, l := range b.locals {
-		if err := b.buildLocal(l); err != nil {
+	for _, r := range b.resources {
+		if err := b.buildResource(r); err != nil {
 			return nil, err
 		}
 	}

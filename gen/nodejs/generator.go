@@ -335,23 +335,14 @@ func (g *Generator) GenerateVariables(vs []*il.VariableNode) error {
 	return nil
 }
 
-// GenerateLocal generates a single local value. These values are generated as local variable definitions. All local
-// values are output-typed for the sake of consistency.
+// GenerateLocal generates a single local value. These values are generated as local variable definitions.
 func (g *Generator) GenerateLocal(l *il.LocalNode) error {
-	value, hasOutputs, err := g.computeProperty(l.Value, false, "")
+	value, _, err := g.computeProperty(l.Value, false, "")
 	if err != nil {
 		return err
 	}
 
-	fmt.Printf("%sconst %s = ", g.indent, localName(l.Config.Name))
-	if !hasOutputs {
-		fmt.Print("pulumi.output(")
-	}
-	fmt.Printf("%s", value)
-	if !hasOutputs {
-		fmt.Printf(")")
-	}
-	fmt.Printf(";\n")
+	fmt.Printf("%sconst %s = %s;\n", g.indent, localName(l.Config.Name), value)
 	return nil
 }
 

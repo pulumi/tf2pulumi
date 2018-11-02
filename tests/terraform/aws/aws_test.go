@@ -62,6 +62,10 @@ func TestELB(t *testing.T) {
 	integrationTest(t, &integration.ProgramTestOptions{Dir: "elb"})
 }
 
+func TestELB2(t *testing.T) {
+	integrationTest(t, &integration.ProgramTestOptions{Dir: "elb2"})
+}
+
 func TestLambda(t *testing.T) {
 	integrationTest(t, &integration.ProgramTestOptions{Dir: "lambda"})
 }
