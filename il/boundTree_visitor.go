@@ -169,6 +169,10 @@ func visitBoundNodes(ns []BoundNode, pre, post BoundNodeVisitor) ([]BoundNode, e
 // visitor returns a new node, that node's descendents will be visited. This function returns the result of the
 // post-order visitor. If any visitor returns an error, the walk halts and that error is returned.
 func VisitBoundNode(n BoundNode, pre, post BoundNodeVisitor) (BoundNode, error) {
+	if n == nil {
+		return nil, nil
+	}
+
 	nn, err := pre(n)
 	if err != nil {
 		return nil, err
