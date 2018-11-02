@@ -27,7 +27,9 @@ install:
 before_script:
     - ${PULUMI_SCRIPTS}/ci/ensure-dependencies
 script:
+    - ${PULUMI_SCRIPTS}/ci/heartbeat-with-timestamps& HEARTBEAT_PID=$!
     - make travis_${TRAVIS_EVENT_TYPE}
+    - kill $HEARTBEAT_PID
 after_failure:
     - ${PULUMI_SCRIPTS}/ci/upload-failed-tests
 notifications:

@@ -16,7 +16,6 @@ lint::
 	$(GOMETALINTER) ./gen/... ./il/... main.go | sort ; exit "$${PIPESTATUS[0]}"
 
 test_all::
-	if [ $$TRAVIS ]; then $$PULUMI_SCRIPTS/ci/heartbeat-with-timestamps&; fi
 	PATH=$(PULUMI_BIN):$(PATH) go test -v -cover ./il/... ./gen/...
 	PATH=$(PULUMI_BIN):$(PATH) go test -v -cover -timeout 1h ./tests/...
 
