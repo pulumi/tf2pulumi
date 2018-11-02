@@ -220,7 +220,7 @@ func (b *propertyBinder) bindVariableAccess(n *ast.VariableAccess) (BoundExpr, e
 		}
 
 		if !b.hasCountIndex {
-			return nil, errors.Errorf("no count index in scope")
+			return &BoundLiteral{ExprType: TypeNumber, Value: 1.0}, nil
 		}
 
 		exprType = TypeNumber
