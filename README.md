@@ -175,8 +175,6 @@ Running `tf2pulumi` on this project produces the following `index.ts` file:
 import * as pulumi from "@pulumi/pulumi";
 import * as aws from "@pulumi/aws";
 import * as fs from "fs";
-import * as process from "process";
-import sprintf = require("sprintf-js");
 
 const config = new pulumi.Config();
 const var_aws_amis = config.get("awsAmis") || {
@@ -187,42 +185,31 @@ const var_aws_region = config.get("awsRegion") || "us-east-1";
 
 const aws_security_group_default = new aws.ec2.SecurityGroup("default", {
     description: "Used in the terraform",
-    egress: [
+    egress: [{
+        cidrBlocks: ["0.0.0.0/0"],
+        fromPort: 0,
+        protocol: "-1",
+        toPort: 0,
+    }],
+    ingress: 
         {
-            cidrBlocks: [
-                "0.0.0.0/0",
-            ],
-            fromPort: 0,
-            protocol: "-1",
-            toPort: 0,
-        },
-    ],
-    ingress: [
-        {
-            cidrBlocks: [
-                "0.0.0.0/0",
-            ],
+            cidrBlocks: ["0.0.0.0/0"],
             fromPort: 22,
             protocol: "tcp",
             toPort: 22,
         },
         {
-            cidrBlocks: [
-                "0.0.0.0/0",
-            ],
+            cidrBlocks: ["0.0.0.0/0"],
             fromPort: 80,
             protocol: "tcp",
             toPort: 80,
         },
     ],
-    name: "eip_example",
 });
 const aws_instance_web = new aws.ec2.Instance("web", {
     ami: (<any>var_aws_amis)[var_aws_region],
     instanceType: "t2.micro",
-    securityGroups: [
-        aws_security_group_default.name,
-    ],
+    securityGroups: [aws_security_group_default.name],
     tags: {
         Name: "eip-example",
     },
