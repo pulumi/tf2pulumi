@@ -17,7 +17,7 @@ order to build `tf2pulumi`. Once those prerequisites are installed, run the foll
 `tf2pulumi` binary and install it into `$GOPATH/bin`:
 
 ```console
-$ go get github.com/pulumi/tf2pulumi/...
+$ go get -d github.com/pulumi/tf2pulumi/...
 $ cd "$(go env GOPATH)/src/github.com/pulumi/tf2pulumi
 $ dep ensure
 $ go install github.com/pulumi/tf2pulumi
