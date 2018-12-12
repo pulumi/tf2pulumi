@@ -61,6 +61,11 @@ func buildGraphs(tree *module.Tree, isRoot bool) ([]*il.Graph, error) {
 }
 
 func main() {
+	if len(os.Args) == 2 && os.Args[1] == "version" {
+		fmt.Println(Version)
+		return
+	}
+
 	services := disco.NewWithCredentialsSource(noCredentials{})
 	moduleStorage := module.NewStorage(filepath.Join(command.DefaultDataDir, "modules"), services)
 

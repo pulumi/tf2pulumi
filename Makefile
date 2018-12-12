@@ -3,9 +3,6 @@ include build/common.mk
 
 VERSION := $(shell scripts/get-version)
 
-GOMETALINTERBIN=gometalinter
-GOMETALINTER=${GOMETALINTERBIN} --config=Gometalinter.json
-
 # NOTE: Since the plugin is published using the nodejs style semver version
 # We set the PLUGIN_VERSION to be the same as the version we use when building
 # the provider (e.g. x.y.z-dev-... instead of x.y.zdev...)
@@ -13,7 +10,7 @@ build::
 	go install -ldflags "-X github.com/tf2pulumi.Version=${VERSION}" github.com/pulumi/tf2pulumi
 
 lint::
-	$(GOMETALINTER) ./gen/... ./il/... main.go | sort ; exit "$${PIPESTATUS[0]}"
+	golangci-lint run
 
 test_all::
 	PATH=$(PULUMI_BIN):$(PATH) go test -v -cover ./il/... ./gen/...

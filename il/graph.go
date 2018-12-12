@@ -263,7 +263,9 @@ func newBuilder(providerInfo ProviderInfoSource) *builder {
 //
 // In addition to the bound property, this function returns the set of nodes referenced by the property's
 // interpolations. If v is nil, the returned BoundNode will also be nil.
-func (b *builder) bindProperty(path string, v interface{}, sch Schemas, hasCountIndex bool) (BoundNode, map[Node]struct{}, error) {
+func (b *builder) bindProperty(
+	path string, v interface{}, sch Schemas, hasCountIndex bool) (BoundNode, map[Node]struct{}, error) {
+
 	if v == nil {
 		return nil, nil, nil
 	}
@@ -280,7 +282,7 @@ func (b *builder) bindProperty(path string, v interface{}, sch Schemas, hasCount
 
 	// Walk the bound value and collect its dependencies.
 	deps := make(map[Node]struct{})
-	VisitBoundNode(prop, IdentityVisitor, func(n BoundNode) (BoundNode, error) {
+	_, err = VisitBoundNode(prop, IdentityVisitor, func(n BoundNode) (BoundNode, error) {
 		if v, ok := n.(*BoundVariableAccess); ok {
 			if v.ILNode != nil {
 				deps[v.ILNode] = struct{}{}
@@ -288,6 +290,7 @@ func (b *builder) bindProperty(path string, v interface{}, sch Schemas, hasCount
 		}
 		return n, nil
 	})
+	contract.Assert(err == nil)
 
 	return prop, deps, nil
 }
