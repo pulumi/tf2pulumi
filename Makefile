@@ -7,7 +7,7 @@ VERSION := $(shell scripts/get-version)
 # We set the PLUGIN_VERSION to be the same as the version we use when building
 # the provider (e.g. x.y.z-dev-... instead of x.y.zdev...)
 build::
-	go install -ldflags "-X github.com/tf2pulumi.Version=${VERSION}" github.com/pulumi/tf2pulumi
+	go install -ldflags "-X github.com/pulumi/tf2pulumi/version.Version=${VERSION}" github.com/pulumi/tf2pulumi
 
 lint::
 	golangci-lint run
