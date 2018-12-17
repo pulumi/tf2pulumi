@@ -65,6 +65,15 @@ func visitBoundConditional(n *BoundConditional, pre, post BoundNodeVisitor) (Bou
 	return post(n)
 }
 
+func visitBoundError(n *BoundError, pre, post BoundNodeVisitor) (BoundNode, error) {
+	valueNode, err := VisitBoundNode(n.Value, pre, post)
+	if err != nil {
+		return nil, err
+	}
+	n.Value = valueNode
+	return post(n)
+}
+
 func visitBoundIndex(n *BoundIndex, pre, post BoundNodeVisitor) (BoundNode, error) {
 	targetExpr, err := VisitBoundExpr(n.TargetExpr, pre, post)
 	if err != nil {
@@ -186,6 +195,8 @@ func VisitBoundNode(n BoundNode, pre, post BoundNodeVisitor) (BoundNode, error) 
 		return visitBoundCall(n, pre, post)
 	case *BoundConditional:
 		return visitBoundConditional(n, pre, post)
+	case *BoundError:
+		return visitBoundError(n, pre, post)
 	case *BoundIndex:
 		return visitBoundIndex(n, pre, post)
 	case *BoundListProperty:

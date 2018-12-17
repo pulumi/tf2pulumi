@@ -122,6 +122,8 @@ func (g *Generator) gen(w io.Writer, vs ...interface{}) {
 			g.genListProperty(w, v)
 		case *il.BoundMapProperty:
 			g.genMapProperty(w, v)
+		case *il.BoundError:
+			g.genError(w, v)
 		default:
 			contract.Failf("unexpected type in gen: %T", v)
 		}
@@ -139,6 +141,16 @@ func (g *Generator) genf(w io.Writer, format string, args ...interface{}) {
 		}
 	}
 	fmt.Fprintf(w, format, args...)
+}
+
+// genError generates code for a node that represents a binding error.
+func (g *Generator) genError(w io.Writer, v *il.BoundError) {
+	g.gen(w, "(() => {\n")
+	g.indented(func() {
+		g.genf(w, "%sthrow \"tf2pulumi error: %v\";\n", g.indent, v.Error.Error())
+		g.genf(w, "%sreturn %v;\n", g.indent, v.Value)
+	})
+	g.gen(w, g.indent, "})()")
 }
 
 // computeProperty generates code for the given property into a string ala fmt.Sprintf. It returns both the generated

@@ -51,6 +51,7 @@ func (b *propertyBinder) bindListProperty(path string, s reflect.Value, sch Sche
 	} else {
 		projectListElement = tfbridge.IsMaxItemsOne(sch.TF, sch.Pulumi)
 	}
+	var err error
 	if projectListElement {
 		switch s.Len() {
 		case 0:
@@ -58,7 +59,7 @@ func (b *propertyBinder) bindListProperty(path string, s reflect.Value, sch Sche
 		case 1:
 			return b.bindProperty(path+"[0]", s.Index(0), elemSchemas)
 		default:
-			return nil, errors.Errorf("%v: expected at most one item in list, got %v", path, s.Len())
+			err = errors.Errorf("%v: expected at most one item in list, got %v", path, s.Len())
 		}
 	}
 
@@ -81,7 +82,11 @@ func (b *propertyBinder) bindListProperty(path string, s reflect.Value, sch Sche
 		return elements[0], nil
 	}
 
-	return &BoundListProperty{Schemas: sch, Elements: elements}, nil
+	boundList := &BoundListProperty{Schemas: sch, Elements: elements}
+	if err != nil {
+		return &BoundError{Value: boundList, NodeType: boundList.Type(), Error: err}, nil
+	}
+	return boundList, nil
 }
 
 // bindMapProperty binds a map property according to the given schema.

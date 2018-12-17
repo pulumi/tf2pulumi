@@ -15,6 +15,7 @@
 package il
 
 import (
+	"log"
 	"reflect"
 	"sort"
 	"strconv"
@@ -237,6 +238,8 @@ func (v *VariableNode) sortKey() string {
 // A builder is a temporary structure used to hold the contents of a graph that while it is under construction. The
 // various fields are aligned with their similarly-named peers in Graph.
 type builder struct {
+	tolerateMissingPlugins bool
+
 	providerInfo ProviderInfoSource
 	modules      map[string]*ModuleNode
 	providers    map[string]*ProviderNode
@@ -246,8 +249,10 @@ type builder struct {
 	variables    map[string]*VariableNode
 }
 
-func newBuilder(providerInfo ProviderInfoSource) *builder {
+func newBuilder(providerInfo ProviderInfoSource, tolerateMissingPlugins bool) *builder {
 	return &builder{
+		tolerateMissingPlugins: tolerateMissingPlugins,
+
 		providerInfo: providerInfo,
 		modules:      make(map[string]*ModuleNode),
 		providers:    make(map[string]*ProviderNode),
@@ -382,7 +387,14 @@ func (b *builder) buildModule(m *ModuleNode) error {
 func (b *builder) buildProvider(p *ProviderNode) error {
 	info, pluginName, err := b.getProviderInfo(p)
 	if err != nil {
-		return err
+		if !b.tolerateMissingPlugins {
+			return err
+		}
+
+		log.Printf("warning: %v", err)
+		log.Printf("generated code for resources using this provider may be incorrect")
+
+		pluginName = p.Config.Name
 	}
 	p.Info, p.PluginName = info, pluginName
 
@@ -533,8 +545,8 @@ func (b *builder) buildVariable(v *VariableNode) error {
 // BuildGraph analyzes the various entities present in the given module's configuration and constructs the
 // corresponding dependency graph. Building the graph involves binding each entity's properties (if any) and
 // computing its list of dependency edges.
-func BuildGraph(tree *module.Tree) (*Graph, error) {
-	b := newBuilder(PluginProviderInfoSource)
+func BuildGraph(tree *module.Tree, tolerateMissingPlugins bool) (*Graph, error) {
+	b := newBuilder(PluginProviderInfoSource, tolerateMissingPlugins)
 
 	conf := tree.Config()
 
