@@ -263,7 +263,9 @@ func newBuilder(providerInfo ProviderInfoSource) *builder {
 //
 // In addition to the bound property, this function returns the set of nodes referenced by the property's
 // interpolations. If v is nil, the returned BoundNode will also be nil.
-func (b *builder) bindProperty(v interface{}, sch Schemas, hasCountIndex bool) (BoundNode, map[Node]struct{}, error) {
+func (b *builder) bindProperty(
+	path string, v interface{}, sch Schemas, hasCountIndex bool) (BoundNode, map[Node]struct{}, error) {
+
 	if v == nil {
 		return nil, nil, nil
 	}
@@ -273,14 +275,14 @@ func (b *builder) bindProperty(v interface{}, sch Schemas, hasCountIndex bool) (
 		builder:       b,
 		hasCountIndex: hasCountIndex,
 	}
-	prop, err := binder.bindProperty(reflect.ValueOf(v), sch)
+	prop, err := binder.bindProperty(path, reflect.ValueOf(v), sch)
 	if err != nil {
 		return nil, nil, err
 	}
 
 	// Walk the bound value and collect its dependencies.
 	deps := make(map[Node]struct{})
-	VisitBoundNode(prop, IdentityVisitor, func(n BoundNode) (BoundNode, error) {
+	_, err = VisitBoundNode(prop, IdentityVisitor, func(n BoundNode) (BoundNode, error) {
 		if v, ok := n.(*BoundVariableAccess); ok {
 			if v.ILNode != nil {
 				deps[v.ILNode] = struct{}{}
@@ -288,6 +290,7 @@ func (b *builder) bindProperty(v interface{}, sch Schemas, hasCountIndex bool) (
 		}
 		return n, nil
 	})
+	contract.Assert(err == nil)
 
 	return prop, deps, nil
 }
@@ -298,10 +301,10 @@ func (b *builder) bindProperty(v interface{}, sch Schemas, hasCountIndex bool) (
 //
 // In addition to the bound property, this function returns the set of nodes referenced by the property's
 // interpolations.
-func (b *builder) bindProperties(raw *config.RawConfig, sch Schemas,
+func (b *builder) bindProperties(name string, raw *config.RawConfig, sch Schemas,
 	hasCountIndex bool) (*BoundMapProperty, map[Node]struct{}, error) {
 
-	v, deps, err := b.bindProperty(raw.Raw, sch, hasCountIndex)
+	v, deps, err := b.bindProperty(name, raw.Raw, sch, hasCountIndex)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -364,7 +367,7 @@ func (b *builder) getProviderInfo(p *ProviderNode) (*tfbridge.ProviderInfo, stri
 
 // buildModule binds the given module node's properties and computes its dependency edges.
 func (b *builder) buildModule(m *ModuleNode) error {
-	props, deps, err := b.bindProperties(m.Config.RawConfig, Schemas{}, false)
+	props, deps, err := b.bindProperties(m.Config.Name, m.Config.RawConfig, Schemas{}, false)
 	if err != nil {
 		return err
 	}
@@ -383,7 +386,7 @@ func (b *builder) buildProvider(p *ProviderNode) error {
 	}
 	p.Info, p.PluginName = info, pluginName
 
-	props, deps, err := b.bindProperties(p.Config.RawConfig, Schemas{}, false)
+	props, deps, err := b.bindProperties(p.Config.Name, p.Config.RawConfig, Schemas{}, false)
 	if err != nil {
 		return err
 	}
@@ -432,7 +435,9 @@ func (b *builder) buildResource(r *ResourceNode) error {
 		return err
 	}
 
-	count, countDeps, err := b.bindProperty(r.Config.RawCount.Value(), Schemas{}, false)
+	tfName := r.Config.Type + "." + r.Config.Name
+
+	count, countDeps, err := b.bindProperty(tfName+".count", r.Config.RawCount.Value(), Schemas{}, false)
 	if err != nil {
 		return err
 	}
@@ -449,7 +454,7 @@ func (b *builder) buildResource(r *ResourceNode) error {
 		}
 	}
 
-	props, deps, err := b.bindProperties(r.Config.RawConfig, r.Schemas(), count != nil)
+	props, deps, err := b.bindProperties(tfName, r.Config.RawConfig, r.Schemas(), count != nil)
 	if err != nil {
 		return err
 	}
@@ -468,7 +473,7 @@ func (b *builder) buildResource(r *ResourceNode) error {
 
 // buildOutput binds an output's value and computes its dependency edges.
 func (b *builder) buildOutput(o *OutputNode) error {
-	props, deps, err := b.bindProperties(o.Config.RawConfig, Schemas{}, false)
+	props, deps, err := b.bindProperties(o.Config.Name, o.Config.RawConfig, Schemas{}, false)
 	if err != nil {
 		return err
 	}
@@ -492,7 +497,7 @@ func (b *builder) buildOutput(o *OutputNode) error {
 
 // buildLocal binds a local value's value and computes its dependency edges.
 func (b *builder) buildLocal(l *LocalNode) error {
-	props, deps, err := b.bindProperties(l.Config.RawConfig, Schemas{}, false)
+	props, deps, err := b.bindProperties(l.Config.Name, l.Config.RawConfig, Schemas{}, false)
 	if err != nil {
 		return err
 	}
@@ -514,7 +519,7 @@ func (b *builder) buildLocal(l *LocalNode) error {
 
 // buildVariable builds a variable's default value (if any). This value must not depend on any other nodes.
 func (b *builder) buildVariable(v *VariableNode) error {
-	defaultValue, deps, err := b.bindProperty(v.Config.Default, Schemas{}, false)
+	defaultValue, deps, err := b.bindProperty(v.Config.Name+".default", v.Config.Default, Schemas{}, false)
 	if err != nil {
 		return err
 	}

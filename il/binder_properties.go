@@ -15,6 +15,7 @@
 package il
 
 import (
+	"fmt"
 	"reflect"
 
 	"github.com/hashicorp/hil"
@@ -37,7 +38,7 @@ type propertyBinder struct {
 // indicates that the list should be projected as its single element, the binder will return the bound element
 // rather than the list itself. Note that this implies that the result of this function is not necessarily of
 // type TypeList.
-func (b *propertyBinder) bindListProperty(s reflect.Value, sch Schemas) (BoundNode, error) {
+func (b *propertyBinder) bindListProperty(path string, s reflect.Value, sch Schemas) (BoundNode, error) {
 	contract.Require(s.Kind() == reflect.Slice, "s")
 
 	// Grab the element schemas.
@@ -55,16 +56,16 @@ func (b *propertyBinder) bindListProperty(s reflect.Value, sch Schemas) (BoundNo
 		case 0:
 			return nil, nil
 		case 1:
-			return b.bindProperty(s.Index(0), elemSchemas)
+			return b.bindProperty(path+"[0]", s.Index(0), elemSchemas)
 		default:
-			return nil, errors.Errorf("expected at most one item in list")
+			return nil, errors.Errorf("%v: expected at most one item in list, got %v", path, s.Len())
 		}
 	}
 
 	// Otherwise, bind each list element in turn according to the element schema.
 	elements := make([]BoundNode, 0, s.Len())
 	for i := 0; i < s.Len(); i++ {
-		elem, err := b.bindProperty(s.Index(i), elemSchemas)
+		elem, err := b.bindProperty(fmt.Sprintf("%s[%v]", path, i), s.Index(i), elemSchemas)
 		if err != nil {
 			return nil, err
 		}
@@ -84,18 +85,18 @@ func (b *propertyBinder) bindListProperty(s reflect.Value, sch Schemas) (BoundNo
 }
 
 // bindMapProperty binds a map property according to the given schema.
-func (b *propertyBinder) bindMapProperty(m reflect.Value, sch Schemas) (*BoundMapProperty, error) {
+func (b *propertyBinder) bindMapProperty(path string, m reflect.Value, sch Schemas) (*BoundMapProperty, error) {
 	contract.Require(m.Kind() == reflect.Map, "m")
 
 	// Grab the key type and ensure it is of type string.
 	if m.Type().Key().Kind() != reflect.String {
-		return nil, errors.Errorf("unexpected key type %v", m.Type().Key())
+		return nil, errors.Errorf("%v: unexpected key type %v", path, m.Type().Key())
 	}
 
 	// Bind each property in turn according to its appropriate schema.
 	elements := make(map[string]BoundNode)
 	for _, k := range m.MapKeys() {
-		bv, err := b.bindProperty(m.MapIndex(k), sch.PropertySchemas(k.String()))
+		bv, err := b.bindProperty(fmt.Sprintf("%v.%v", path, k), m.MapIndex(k), sch.PropertySchemas(k.String()))
 		if err != nil {
 			return nil, err
 		}
@@ -110,7 +111,7 @@ func (b *propertyBinder) bindMapProperty(m reflect.Value, sch Schemas) (*BoundMa
 
 // bindProperty binds a single Terraform property. This property must be of kind bool, int, float64, string, slice, or
 // map. If this property is a map, its keys must be of kind string.
-func (b *propertyBinder) bindProperty(p reflect.Value, sch Schemas) (BoundNode, error) {
+func (b *propertyBinder) bindProperty(path string, p reflect.Value, sch Schemas) (BoundNode, error) {
 	if p.Kind() == reflect.Interface {
 		p = p.Elem()
 	}
@@ -126,15 +127,19 @@ func (b *propertyBinder) bindProperty(p reflect.Value, sch Schemas) (BoundNode, 
 		// As in Terraform, parse all strings as HIL, then bind the result.
 		rootNode, err := hil.Parse(p.String())
 		if err != nil {
-			return nil, err
+			return nil, errors.Errorf("%v: could not parse HIL (%v)", path, err)
 		}
 		contract.Assert(rootNode != nil)
-		return b.bindExpr(rootNode)
+		n, err := b.bindExpr(rootNode)
+		if err != nil {
+			return nil, errors.Errorf("%v: %v", path, err)
+		}
+		return n, nil
 	case reflect.Slice:
-		return b.bindListProperty(p, sch)
+		return b.bindListProperty(path, p, sch)
 	case reflect.Map:
-		return b.bindMapProperty(p, sch)
+		return b.bindMapProperty(path, p, sch)
 	default:
-		return nil, errors.Errorf("unexpected property type %v", p.Type())
+		return nil, errors.Errorf("%v: unexpected property type %v", path, p.Type())
 	}
 }

@@ -148,7 +148,7 @@ func (g *Generator) computeProperty(prop il.BoundNode, indent bool, count string
 	// - retype any possibly-unknown module inputs as the appropriate output types
 	// - discover whether or not the property contains any output-typed expressions
 	containsOutputs := false
-	il.VisitBoundNode(prop, il.IdentityVisitor, func(n il.BoundNode) (il.BoundNode, error) {
+	_, err := il.VisitBoundNode(prop, il.IdentityVisitor, func(n il.BoundNode) (il.BoundNode, error) {
 		if n, ok := n.(*il.BoundVariableAccess); ok {
 			if v, ok := n.ILNode.(*il.VariableNode); ok {
 				if _, ok = g.unknownInputs[v]; ok {
@@ -159,6 +159,7 @@ func (g *Generator) computeProperty(prop il.BoundNode, indent bool, count string
 		}
 		return n, nil
 	})
+	contract.Assert(err == nil)
 
 	// Next, rewrite assets, insert any necessary coercions, and run the apply transform.
 	p, err := il.RewriteAssets(prop)
@@ -253,22 +254,28 @@ func (g *Generator) GeneratePreamble(modules []*il.Graph) error {
 	}
 	for _, m := range modules {
 		for _, n := range m.Modules {
-			il.VisitBoundNode(n.Properties, findOptionals, il.IdentityVisitor)
+			_, err := il.VisitBoundNode(n.Properties, findOptionals, il.IdentityVisitor)
+			contract.Assert(err == nil)
 		}
 		for _, n := range m.Providers {
-			il.VisitBoundNode(n.Properties, findOptionals, il.IdentityVisitor)
+			_, err := il.VisitBoundNode(n.Properties, findOptionals, il.IdentityVisitor)
+			contract.Assert(err == nil)
 		}
 		for _, n := range m.Resources {
-			il.VisitBoundNode(n.Properties, findOptionals, il.IdentityVisitor)
+			_, err := il.VisitBoundNode(n.Properties, findOptionals, il.IdentityVisitor)
+			contract.Assert(err == nil)
 		}
 		for _, n := range m.Outputs {
-			il.VisitBoundNode(n.Value, findOptionals, il.IdentityVisitor)
+			_, err := il.VisitBoundNode(n.Value, findOptionals, il.IdentityVisitor)
+			contract.Assert(err == nil)
 		}
 		for _, n := range m.Locals {
-			il.VisitBoundNode(n.Value, findOptionals, il.IdentityVisitor)
+			_, err := il.VisitBoundNode(n.Value, findOptionals, il.IdentityVisitor)
+			contract.Assert(err == nil)
 		}
 		for _, n := range m.Variables {
-			il.VisitBoundNode(n.DefaultValue, findOptionals, il.IdentityVisitor)
+			_, err := il.VisitBoundNode(n.DefaultValue, findOptionals, il.IdentityVisitor)
+			contract.Assert(err == nil)
 		}
 	}
 
@@ -295,7 +302,7 @@ func (g *Generator) BeginModule(m *il.Graph) error {
 		knownInputs := make(map[*il.VariableNode]struct{})
 		for _, n := range m.Resources {
 			if n.Count != nil {
-				il.VisitBoundNode(n.Count, il.IdentityVisitor, func(n il.BoundNode) (il.BoundNode, error) {
+				_, err := il.VisitBoundNode(n.Count, il.IdentityVisitor, func(n il.BoundNode) (il.BoundNode, error) {
 					if n, ok := n.(*il.BoundVariableAccess); ok {
 						if v, ok := n.ILNode.(*il.VariableNode); ok {
 							knownInputs[v] = struct{}{}
@@ -303,6 +310,7 @@ func (g *Generator) BeginModule(m *il.Graph) error {
 					}
 					return n, nil
 				})
+				contract.Assert(err == nil)
 			}
 		}
 		g.unknownInputs = make(map[*il.VariableNode]struct{})

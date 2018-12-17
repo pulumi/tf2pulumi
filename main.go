@@ -29,10 +29,8 @@ import (
 	"github.com/pulumi/tf2pulumi/gen"
 	"github.com/pulumi/tf2pulumi/gen/nodejs"
 	"github.com/pulumi/tf2pulumi/il"
+	"github.com/pulumi/tf2pulumi/version"
 )
-
-// The version of this tool.
-var Version string
 
 type noCredentials struct{}
 
@@ -61,6 +59,11 @@ func buildGraphs(tree *module.Tree, isRoot bool) ([]*il.Graph, error) {
 }
 
 func main() {
+	if len(os.Args) == 2 && os.Args[1] == "version" {
+		fmt.Println(version.Version)
+		return
+	}
+
 	services := disco.NewWithCredentialsSource(noCredentials{})
 	moduleStorage := module.NewStorage(filepath.Join(command.DefaultDataDir, "modules"), services)
 
