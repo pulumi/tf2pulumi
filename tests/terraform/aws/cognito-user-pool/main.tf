@@ -28,7 +28,7 @@ resource "aws_lambda_function" "main" {
   # function_name = "terraform-example"
   role          = "${aws_iam_role.main.arn}"
   handler       = "exports.example"
-  runtime       = "nodejs4.3"
+  runtime       = "nodejs8.10"
 }
 
 resource "aws_iam_role" "cidp" {
