@@ -85,7 +85,7 @@ func (b *propertyBinder) bindCall(n *ast.Call) (BoundExpr, error) {
 		exprType = TypeString
 	case "map":
 		if len(args)%2 != 0 {
-			return nil, errors.Errorf("the numbner of arguments to \"map\" must be even")
+			err = errors.Errorf("the number of arguments to \"map\" must be even")
 		}
 		exprType = TypeMap
 	case "merge":
@@ -103,10 +103,14 @@ func (b *propertyBinder) bindCall(n *ast.Call) (BoundExpr, error) {
 	case "zipmap":
 		exprType = TypeMap
 	default:
-		return nil, errors.Errorf("NYI: call to %s", n.Func)
+		err = errors.Errorf("NYI: call to %s", n.Func)
 	}
 
-	return &BoundCall{HILNode: n, ExprType: exprType, Args: args}, nil
+	boundCall := &BoundCall{HILNode: n, ExprType: exprType, Args: args}
+	if err != nil {
+		return &BoundError{Value: boundCall, NodeType: exprType, Error: err}, nil
+	}
+	return boundCall, nil
 }
 
 // bindConditional binds an HIL conditional expression.

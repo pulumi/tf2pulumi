@@ -400,6 +400,36 @@ func (n *BoundMapProperty) dump(d *dumper) {
 
 func (n *BoundMapProperty) isNode() {}
 
+// BoundError represents a binding error. This is used to preserve bound values in the case
+// of type mismatches and other errors.
+type BoundError struct {
+	// The type of the node.
+	NodeType Type
+	// A bound node (if any) associated with this error
+	Value BoundNode
+	// The binding error
+	Error error
+}
+
+// Type returns the type of the variable access expression.
+func (n *BoundError) Type() Type {
+	return n.NodeType
+}
+
+func (n *BoundError) dump(d *dumper) {
+	d.dump("(error ", fmt.Sprintf("%v", n.Type()))
+	if n.Value != nil {
+		d.indented(func() {
+			d.dump("\n", n.Value)
+		})
+		d.dump("\n", d.indent)
+	}
+	d.dump("\"%q\")", n.Error.Error())
+}
+
+func (n *BoundError) isNode() {}
+func (n *BoundError) isExpr() {}
+
 // DumpBoundNode dumps the string representation of the given bound node to the given writer.
 func DumpBoundNode(w io.Writer, e BoundNode) {
 	e.dump(&dumper{w: w})

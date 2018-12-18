@@ -15,6 +15,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"log"
 	"os"
@@ -38,19 +39,19 @@ func (noCredentials) ForHost(host svchost.Hostname) (auth.HostCredentials, error
 	return nil, nil
 }
 
-func buildGraphs(tree *module.Tree, isRoot bool) ([]*il.Graph, error) {
+func buildGraphs(tree *module.Tree, isRoot, tolerateMissingPlugins bool) ([]*il.Graph, error) {
 	// TODO: move this into the il package and unify modules based on path
 
 	children := []*il.Graph{}
 	for _, c := range tree.Children() {
-		cc, err := buildGraphs(c, false)
+		cc, err := buildGraphs(c, false, tolerateMissingPlugins)
 		if err != nil {
 			return nil, err
 		}
 		children = append(children, cc...)
 	}
 
-	g, err := il.BuildGraph(tree)
+	g, err := il.BuildGraph(tree, tolerateMissingPlugins)
 	if err != nil {
 		return nil, err
 	}
@@ -59,7 +60,13 @@ func buildGraphs(tree *module.Tree, isRoot bool) ([]*il.Graph, error) {
 }
 
 func main() {
-	if len(os.Args) == 2 && os.Args[1] == "version" {
+	tolerateMissingPlugins := flag.Bool("allow-missing-plugins", false,
+		"allows code generation to continue if resource provider plugins are missing")
+
+	flag.Parse()
+
+	args := flag.Args()
+	if len(args) == 1 && args[0] == "version" {
 		fmt.Println(version.Version)
 		return
 	}
@@ -80,7 +87,7 @@ func main() {
 
 	log.Printf("loaded module: %v", mod)
 
-	gs, err := buildGraphs(mod, true)
+	gs, err := buildGraphs(mod, true, *tolerateMissingPlugins)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "could not import Terraform project: %v\n", err)
 		os.Exit(-1)
