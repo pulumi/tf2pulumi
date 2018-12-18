@@ -85,7 +85,7 @@ func (b *propertyBinder) bindCall(n *ast.Call) (BoundExpr, error) {
 		exprType = TypeString
 	case "map":
 		if len(args)%2 != 0 {
-			err = errors.Errorf("the numbner of arguments to \"map\" must be even")
+			err = errors.Errorf("the number of arguments to \"map\" must be even")
 		}
 		exprType = TypeMap
 	case "merge":
