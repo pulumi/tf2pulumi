@@ -31,8 +31,16 @@ import (
 	"github.com/pulumi/tf2pulumi/il"
 )
 
-// Generator generates Typescript code that targets the Pulumi libraries from a Terraform configuration.
-type Generator struct {
+// New creates a new NodeJS code generator.
+func New(projectName string, w io.Writer) gen.Generator {
+	return &generator{
+		ProjectName: projectName,
+		w:           w,
+	}
+}
+
+// generator generates Typescript code that targets the Pulumi libraries from a Terraform configuration.
+type generator struct {
 	// ProjectName is the name of the Pulumi project.
 	ProjectName string
 	// rootPath is the path to the directory that contains the root module.
@@ -47,6 +55,8 @@ type Generator struct {
 	applyArgs []il.BoundExpr
 	// unknownInputs is the set of input variables that may be unknown at runtime.
 	unknownInputs map[*il.VariableNode]struct{}
+	// w is the writer to use for printing the resulting Pulumi code.
+	w io.Writer
 }
 
 // cleanName replaces characters that are not allowed in Typescript identifiers with underscores. No attempt is made to
@@ -90,7 +100,7 @@ func tsName(tfName string, tfSchema *schema.Schema, schemaInfo *tfbridge.SchemaI
 
 // indented bumps the current indentation level, invokes the given function, and then resets the indentation level to
 // its prior value.
-func (g *Generator) indented(f func()) {
+func (g *generator) indented(f func()) {
 	g.indent += "    "
 	f()
 	g.indent = g.indent[:len(g.indent)-4]
@@ -98,7 +108,7 @@ func (g *Generator) indented(f func()) {
 
 // gen generates code for a list of strings and expression trees. The former are written directly to the destination;
 // the latter are recursively generated using the appropriate gen* functions.
-func (g *Generator) gen(w io.Writer, vs ...interface{}) {
+func (g *generator) gen(w io.Writer, vs ...interface{}) {
 	for _, v := range vs {
 		switch v := v.(type) {
 		case string:
@@ -134,7 +144,7 @@ func (g *Generator) gen(w io.Writer, vs ...interface{}) {
 // a FormatFunc that calls the appropriate recursive generation function. This allows for the composition of standard
 // format strings with expression/property code gen (e.g. `g.genf(w, ".apply(__arg0 => %v)", then)`, where `then` is
 // an expression tree).
-func (g *Generator) genf(w io.Writer, format string, args ...interface{}) {
+func (g *generator) genf(w io.Writer, format string, args ...interface{}) {
 	for i := range args {
 		if node, ok := args[i].(il.BoundNode); ok {
 			args[i] = gen.FormatFunc(func(f fmt.State, c rune) { g.gen(f, node) })
@@ -144,7 +154,7 @@ func (g *Generator) genf(w io.Writer, format string, args ...interface{}) {
 }
 
 // genError generates code for a node that represents a binding error.
-func (g *Generator) genError(w io.Writer, v *il.BoundError) {
+func (g *generator) genError(w io.Writer, v *il.BoundError) {
 	g.gen(w, "(() => {\n")
 	g.indented(func() {
 		g.genf(w, "%sthrow \"tf2pulumi error: %v\";\n", g.indent, v.Error.Error())
@@ -153,9 +163,21 @@ func (g *Generator) genError(w io.Writer, v *il.BoundError) {
 	g.gen(w, g.indent, "})()")
 }
 
+// print prints one or more values to the generator's output stream.
+func (g *generator) print(a ...interface{}) {
+	_, err := fmt.Fprint(g.w, a...)
+	contract.IgnoreError(err)
+}
+
+// prinft prints a formatted message to the generator's output stream.
+func (g *generator) printf(format string, a ...interface{}) {
+	_, err := fmt.Fprintf(g.w, format, a...)
+	contract.IgnoreError(err)
+}
+
 // computeProperty generates code for the given property into a string ala fmt.Sprintf. It returns both the generated
 // code and a bool value that indicates whether or not any output-typed values were nested in the property value.
-func (g *Generator) computeProperty(prop il.BoundNode, indent bool, count string) (string, bool, error) {
+func (g *generator) computeProperty(prop il.BoundNode, indent bool, count string) (string, bool, error) {
 	// First:
 	// - retype any possibly-unknown module inputs as the appropriate output types
 	// - discover whether or not the property contains any output-typed expressions
@@ -201,12 +223,12 @@ func (g *Generator) computeProperty(prop il.BoundNode, indent bool, count string
 }
 
 // isRoot returns true if we are generating code for the root module.
-func (g *Generator) isRoot() bool {
+func (g *generator) isRoot() bool {
 	return len(g.module.Tree.Path()) == 0
 }
 
 // GeneratePreamble generates appropriate import statements based on the providers referenced by the set of modules.
-func (g *Generator) GeneratePreamble(modules []*il.Graph) error {
+func (g *generator) GeneratePreamble(modules []*il.Graph) error {
 	// Find the root module and stash its path.
 	for _, m := range modules {
 		if len(m.Tree.Path()) == 0 {
@@ -219,7 +241,7 @@ func (g *Generator) GeneratePreamble(modules []*il.Graph) error {
 	}
 
 	// Emit imports for the various providers
-	fmt.Printf("import * as pulumi from \"@pulumi/pulumi\";\n")
+	g.printf("import * as pulumi from \"@pulumi/pulumi\";\n")
 
 	providers := make(map[string]struct{})
 	for _, m := range modules {
@@ -232,9 +254,9 @@ func (g *Generator) GeneratePreamble(modules []*il.Graph) error {
 		case "archive":
 			// Nothing to do
 		case "http":
-			fmt.Printf("import rpn = require(\"request-promise-native\");\n")
+			g.printf("import rpn = require(\"request-promise-native\");\n")
 		default:
-			fmt.Printf("import * as %s from \"@pulumi/%s\";\n", cleanName(p), p)
+			g.printf("import * as %s from \"@pulumi/%s\";\n", cleanName(p), p)
 		}
 	}
 
@@ -293,19 +315,20 @@ func (g *Generator) GeneratePreamble(modules []*il.Graph) error {
 
 	sort.Strings(imports)
 	for _, line := range imports {
-		fmt.Print(line)
+		g.print(line)
 	}
-	fmt.Printf("\n")
+	g.printf("\n")
 
 	return nil
 }
 
-// BeginModule saves the indicated module in the Generator and emits an appropriate function declaration if the module
+// BeginModule saves the indicated module in the generator and emits an appropriate function declaration if the module
 // is a child module.
-func (g *Generator) BeginModule(m *il.Graph) error {
+func (g *generator) BeginModule(m *il.Graph) error {
 	g.module = m
 	if !g.isRoot() {
-		fmt.Printf("const new_mod_%s = function(mod_name: string, mod_args: pulumi.Inputs) {\n", cleanName(m.Tree.Name()))
+		g.printf("const new_mod_%s = function(mod_name: string, mod_args: pulumi.Inputs) {\n",
+			cleanName(m.Tree.Name()))
 		g.indent += "    "
 
 		// Discover the set of input variables that may have unknown values. This is the complete set of inputs minus
@@ -335,19 +358,19 @@ func (g *Generator) BeginModule(m *il.Graph) error {
 	return nil
 }
 
-// EndModule closes the current module definition if the module is a child module and clears the Generator's module
+// EndModule closes the current module definition if the module is a child module and clears the generator's module
 // field.
-func (g *Generator) EndModule(m *il.Graph) error {
+func (g *generator) EndModule(m *il.Graph) error {
 	if !g.isRoot() {
 		g.indent = g.indent[:len(g.indent)-4]
-		fmt.Printf("};\n")
+		g.printf("};\n")
 	}
 	g.module = nil
 	return nil
 }
 
 // GenerateVariables generates definitions for the set of user variables in the context of the current module.
-func (g *Generator) GenerateVariables(vs []*il.VariableNode) error {
+func (g *generator) GenerateVariables(vs []*il.VariableNode) error {
 	// If there are no variables, we're done.
 	if len(vs) == 0 {
 		return nil
@@ -357,22 +380,22 @@ func (g *Generator) GenerateVariables(vs []*il.VariableNode) error {
 	// a config object and appropriate get/require calls; if we are not, we generate references into the module args.
 	isRoot := g.isRoot()
 	if isRoot {
-		fmt.Printf("const config = new pulumi.Config();\n")
+		g.printf("const config = new pulumi.Config();\n")
 	}
 	for _, v := range vs {
 		name := tsName(v.Config.Name, nil, nil, false)
 		_, isUnknown := g.unknownInputs[v]
 
-		fmt.Printf("%sconst var_%s = ", g.indent, cleanName(v.Config.Name))
+		g.printf("%sconst var_%s = ", g.indent, cleanName(v.Config.Name))
 		if v.DefaultValue == nil {
 			if isRoot {
-				fmt.Printf("config.require(\"%s\")", name)
+				g.printf("config.require(\"%s\")", name)
 			} else {
 				f := "mod_args[\"%s\"]"
 				if isUnknown {
 					f = "pulumi.output(" + f + ")"
 				}
-				fmt.Printf(f, name)
+				g.printf(f, name)
 			}
 		} else {
 			def, _, err := g.computeProperty(v.DefaultValue, false, "")
@@ -388,36 +411,36 @@ func (g *Generator) GenerateVariables(vs []*il.VariableNode) error {
 				case il.TypeNumber:
 					get = "getNumber"
 				}
-				fmt.Printf("config.%v(\"%s\") || %s", get, name, def)
+				g.printf("config.%v(\"%s\") || %s", get, name, def)
 			} else {
 				f := "mod_args[\"%s\"] || %s"
 				if isUnknown {
 					f = "pulumi.output(" + f + ")"
 				}
-				fmt.Printf(f, name, def)
+				g.printf(f, name, def)
 			}
 		}
-		fmt.Printf(";\n")
+		g.printf(";\n")
 	}
-	fmt.Printf("\n")
+	g.printf("\n")
 
 	return nil
 }
 
 // GenerateLocal generates a single local value. These values are generated as local variable definitions.
-func (g *Generator) GenerateLocal(l *il.LocalNode) error {
+func (g *generator) GenerateLocal(l *il.LocalNode) error {
 	value, _, err := g.computeProperty(l.Value, false, "")
 	if err != nil {
 		return err
 	}
 
-	fmt.Printf("%sconst %s = %s;\n", g.indent, localName(l.Config.Name), value)
+	g.printf("%sconst %s = %s;\n", g.indent, localName(l.Config.Name), value)
 	return nil
 }
 
 // GenerateModule generates a single module instantiation. A module instantiation is generated as a call to the
 // appropriate module factory function; the result is assigned to a local variable.
-func (g *Generator) GenerateModule(m *il.ModuleNode) error {
+func (g *generator) GenerateModule(m *il.ModuleNode) error {
 	// generate a call to the module constructor
 	args, _, err := g.computeProperty(m.Properties, false, "")
 	if err != nil {
@@ -425,7 +448,7 @@ func (g *Generator) GenerateModule(m *il.ModuleNode) error {
 	}
 
 	modName := cleanName(m.Config.Name)
-	fmt.Printf("%sconst mod_%s = new_mod_%s(\"%s\", %s);\n", g.indent, modName, modName, modName, args)
+	g.printf("%sconst mod_%s = new_mod_%s(\"%s\", %s);\n", g.indent, modName, modName, modName, args)
 	return nil
 }
 
@@ -433,7 +456,7 @@ func (g *Generator) GenerateModule(m *il.ModuleNode) error {
 // sequence of calls (in the case of a counted resource) to the approriate resource constructor or data source
 // function. Single-instance resources are assigned to a local variable; counted resources are stored in an array-typed
 // local.
-func (g *Generator) GenerateResource(r *il.ResourceNode) error {
+func (g *generator) GenerateResource(r *il.ResourceNode) error {
 	// If this resource's provider is one of the built-ins, perform whatever provider-specific code generation is
 	// required.
 	switch r.Provider.Config.Name {
@@ -510,10 +533,10 @@ func (g *Generator) GenerateResource(r *il.ResourceNode) error {
 				resName = fmt.Sprintf("`${mod_name}_%s`", r.Config.Name)
 			}
 
-			fmt.Printf("%sconst %s = new %s(%s, %s%s);\n", g.indent, name, qualifiedMemberName, resName, inputs, explicitDeps)
+			g.printf("%sconst %s = new %s(%s, %s%s);\n", g.indent, name, qualifiedMemberName, resName, inputs, explicitDeps)
 		} else {
 			// TODO: explicit dependencies
-			fmt.Printf("%sconst %s = pulumi.output(%s(%s));\n", g.indent, name, qualifiedMemberName, inputs)
+			g.printf("%sconst %s = pulumi.output(%s(%s));\n", g.indent, name, qualifiedMemberName, inputs)
 		}
 	} else {
 		// Otherwise we need to Generate multiple resources in a loop.
@@ -531,25 +554,25 @@ func (g *Generator) GenerateResource(r *il.ResourceNode) error {
 			arrElementType = fmt.Sprintf("Output<%s%s.%sResult>", provider, module, strings.ToUpper(memberName))
 		}
 
-		fmt.Printf("%sconst %s: %s[] = [];\n", g.indent, name, arrElementType)
-		fmt.Printf("%sfor (let i = 0; i < %s; i++) {\n", g.indent, count)
+		g.printf("%sconst %s: %s[] = [];\n", g.indent, name, arrElementType)
+		g.printf("%sfor (let i = 0; i < %s; i++) {\n", g.indent, count)
 		g.indented(func() {
 			if r.Config.Mode == config.ManagedResourceMode {
-				fmt.Printf("%s%s.push(new %s(`%s-${i}`, %s%s));\n", g.indent, name, qualifiedMemberName, r.Config.Name,
+				g.printf("%s%s.push(new %s(`%s-${i}`, %s%s));\n", g.indent, name, qualifiedMemberName, r.Config.Name,
 					inputs, explicitDeps)
 			} else {
 				// TODO: explicit dependencies
-				fmt.Printf("%s%s.push(pulumi.output(%s(%s)));\n", g.indent, name, qualifiedMemberName, inputs)
+				g.printf("%s%s.push(pulumi.output(%s(%s)));\n", g.indent, name, qualifiedMemberName, inputs)
 			}
 		})
-		fmt.Printf("%s}\n", g.indent)
+		g.printf("%s}\n", g.indent)
 	}
 
 	return nil
 }
 
 // GenerateOutputs generates the list of Terraform outputs in the context of the current module.
-func (g *Generator) GenerateOutputs(os []*il.OutputNode) error {
+func (g *generator) GenerateOutputs(os []*il.OutputNode) error {
 	// If there are no outputs, we're done.
 	if len(os) == 0 {
 		return nil
@@ -559,9 +582,9 @@ func (g *Generator) GenerateOutputs(os []*il.OutputNode) error {
 	// if we are not, we generate an appropriate return statement with the outputs as properties in a map.
 	isRoot := g.isRoot()
 
-	fmt.Printf("\n")
+	g.printf("\n")
 	if !isRoot {
-		fmt.Printf("%sreturn {\n", g.indent)
+		g.printf("%sreturn {\n", g.indent)
 		g.indent += "    "
 	}
 	for _, o := range os {
@@ -571,14 +594,14 @@ func (g *Generator) GenerateOutputs(os []*il.OutputNode) error {
 		}
 
 		if !isRoot {
-			fmt.Printf("%s%s: %s,\n", g.indent, tsName(o.Config.Name, nil, nil, true), outputs)
+			g.printf("%s%s: %s,\n", g.indent, tsName(o.Config.Name, nil, nil, true), outputs)
 		} else {
-			fmt.Printf("export const %s = %s;\n", tsName(o.Config.Name, nil, nil, false), outputs)
+			g.printf("export const %s = %s;\n", tsName(o.Config.Name, nil, nil, false), outputs)
 		}
 	}
 	if !isRoot {
 		g.indent = g.indent[:len(g.indent)-4]
-		fmt.Printf("%s};\n", g.indent)
+		g.printf("%s};\n", g.indent)
 	}
 	return nil
 }

@@ -26,7 +26,7 @@ import (
 
 // computeHTTPInputs computes the arguments for a call to request-promise-native's single function from the bound input
 // properties of the given http resource.
-func (g *Generator) computeHTTPInputs(r *il.ResourceNode, indent bool, count string) (string, error) {
+func (g *generator) computeHTTPInputs(r *il.ResourceNode, indent bool, count string) (string, error) {
 	urlProperty, ok := r.Properties.Elements["url"]
 	if !ok {
 		return "", errors.Errorf("missing required property \"url\" in resource %s", r.Config.Name)
@@ -55,7 +55,7 @@ func (g *Generator) computeHTTPInputs(r *il.ResourceNode, indent bool, count str
 }
 
 // generateHTTP generates the given http resource as a call to request-promise-native's single exported function.
-func (g *Generator) generateHTTP(r *il.ResourceNode) error {
+func (g *generator) generateHTTP(r *il.ResourceNode) error {
 	contract.Require(r.Provider.Config.Name == "http", "r")
 
 	name := resName(r.Config.Type, r.Config.Name)
@@ -66,7 +66,7 @@ func (g *Generator) generateHTTP(r *il.ResourceNode) error {
 			return err
 		}
 
-		fmt.Printf("const %s = pulumi.output(rpn(%s).promise());\n", name, inputs)
+		g.printf("const %s = pulumi.output(rpn(%s).promise());\n", name, inputs)
 	} else {
 		count, _, err := g.computeProperty(r.Count, false, "")
 		if err != nil {
@@ -77,10 +77,10 @@ func (g *Generator) generateHTTP(r *il.ResourceNode) error {
 			return err
 		}
 
-		fmt.Printf("const %s: pulumi.Output<string>[] = [];\n", name)
-		fmt.Printf("for (let i = 0; i < %s; i++) {\n", count)
-		fmt.Printf("    %s.push(pulumi.output(rpn(%s).promise()));\n", name, inputs)
-		fmt.Printf("}\n")
+		g.printf("const %s: pulumi.Output<string>[] = [];\n", name)
+		g.printf("for (let i = 0; i < %s; i++) {\n", count)
+		g.printf("    %s.push(pulumi.output(rpn(%s).promise()));\n", name, inputs)
+		g.printf("}\n")
 	}
 
 	return nil

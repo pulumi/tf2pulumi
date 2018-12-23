@@ -26,7 +26,7 @@ import (
 
 // computeArchiveInputs computes the inputs for a call to the pulumi.AssetArchive constructor based on the values
 // present in the given resource's bound input properties.
-func (g *Generator) computeArchiveInputs(r *il.ResourceNode, indent bool, count string) (string, error) {
+func (g *generator) computeArchiveInputs(r *il.ResourceNode, indent bool, count string) (string, error) {
 	contract.Require(r.Provider.Config.Name == "archive", "r")
 
 	buf := &bytes.Buffer{}
@@ -99,7 +99,7 @@ func (g *Generator) computeArchiveInputs(r *il.ResourceNode, indent bool, count 
 }
 
 // generateArchive generates a call to the pulumi.AssetArchive constructor for the given archive resource.
-func (g *Generator) generateArchive(r *il.ResourceNode) error {
+func (g *generator) generateArchive(r *il.ResourceNode) error {
 	contract.Require(r.Provider.Config.Name == "archive", "r")
 
 	// TODO: explicit dependencies (or any dependencies at all, really)
@@ -113,7 +113,7 @@ func (g *Generator) generateArchive(r *il.ResourceNode) error {
 		}
 
 		// Generate an asset archive.
-		fmt.Printf("const %s = new pulumi.asset.AssetArchive(%s);\n", name, inputs)
+		g.printf("const %s = new pulumi.asset.AssetArchive(%s);\n", name, inputs)
 	} else {
 		// Otherwise we need to Generate multiple resources in a loop.
 		count, _, err := g.computeProperty(r.Count, false, "")
@@ -125,10 +125,10 @@ func (g *Generator) generateArchive(r *il.ResourceNode) error {
 			return err
 		}
 
-		fmt.Printf("const %s: pulumi.asset.AssetArchive[] = [];\n", name)
-		fmt.Printf("for (let i = 0; i < %s; i++) {\n", count)
-		fmt.Printf("    %s.push(new pulumi.asset.AssetArchive(%s));\n", name, inputs)
-		fmt.Printf("}\n")
+		g.printf("const %s: pulumi.asset.AssetArchive[] = [];\n", name)
+		g.printf("for (let i = 0; i < %s; i++) {\n", count)
+		g.printf("    %s.push(new pulumi.asset.AssetArchive(%s));\n", name, inputs)
+		g.printf("}\n")
 	}
 
 	return nil
