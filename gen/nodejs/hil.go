@@ -33,7 +33,7 @@ import (
 // in order to avoid unexpected issues with operator precedence.
 
 // genArithmetic generates code for the given arithmetic expression.
-func (g *Generator) genArithmetic(w io.Writer, n *il.BoundArithmetic) {
+func (g *generator) genArithmetic(w io.Writer, n *il.BoundArithmetic) {
 	op := ""
 	switch n.HILNode.Op {
 	case ast.ArithmeticOpAdd:
@@ -76,7 +76,7 @@ func (g *Generator) genArithmetic(w io.Writer, n *il.BoundArithmetic) {
 }
 
 // genApplyOutput generates code for a single argument to a `.apply` invocation.
-func (g *Generator) genApplyOutput(w io.Writer, n *il.BoundVariableAccess) {
+func (g *generator) genApplyOutput(w io.Writer, n *il.BoundVariableAccess) {
 	if rv, ok := n.TFVar.(*config.ResourceVariable); ok && rv.Multi && rv.Index == -1 {
 		g.genf(w, "pulumi.all(%v)", n)
 	} else {
@@ -85,7 +85,7 @@ func (g *Generator) genApplyOutput(w io.Writer, n *il.BoundVariableAccess) {
 }
 
 // genApply generates code for a single `.apply` invocation as represented by a call to the `__apply` intrinsic.
-func (g *Generator) genApply(w io.Writer, n *il.BoundCall) {
+func (g *generator) genApply(w io.Writer, n *il.BoundCall) {
 	// Extract the list of outputs and the continuation expression from the `__apply` arguments.
 	g.applyArgs = n.Args[:len(n.Args)-1]
 	then := n.Args[len(n.Args)-1]
@@ -118,7 +118,7 @@ func (g *Generator) genApply(w io.Writer, n *il.BoundCall) {
 }
 
 // genApplyArg generates a single reference to a resolved output value inside the context of a call top `.apply`.
-func (g *Generator) genApplyArg(w io.Writer, index int) {
+func (g *generator) genApplyArg(w io.Writer, index int) {
 	contract.Assert(g.applyArgs != nil)
 
 	// Extract the variable reference.
@@ -164,7 +164,7 @@ func (g *Generator) genApplyArg(w io.Writer, index int) {
 }
 
 // genCoercion generates code for a single call to the __coerce intrinsic that converts an expression between types.
-func (g *Generator) genCoercion(w io.Writer, n il.BoundExpr, toType il.Type) {
+func (g *generator) genCoercion(w io.Writer, n il.BoundExpr, toType il.Type) {
 	switch n.Type() {
 	case il.TypeBool:
 		if toType == il.TypeString {
@@ -205,7 +205,7 @@ func (g *Generator) genCoercion(w io.Writer, n il.BoundExpr, toType il.Type) {
 }
 
 // genCall generates code for a call expression.
-func (g *Generator) genCall(w io.Writer, n *il.BoundCall) {
+func (g *generator) genCall(w io.Writer, n *il.BoundCall) {
 	switch n.HILNode.Func {
 	case "__apply":
 		g.genApply(w, n)
@@ -343,17 +343,17 @@ func (g *Generator) genCall(w io.Writer, n *il.BoundCall) {
 }
 
 // genConditional generates code for a single conditional expression.
-func (g *Generator) genConditional(w io.Writer, n *il.BoundConditional) {
+func (g *generator) genConditional(w io.Writer, n *il.BoundConditional) {
 	g.genf(w, "(%v ? %v : %v)", n.CondExpr, n.TrueExpr, n.FalseExpr)
 }
 
 // genIndex generates code for a single index expression.
-func (g *Generator) genIndex(w io.Writer, n *il.BoundIndex) {
+func (g *generator) genIndex(w io.Writer, n *il.BoundIndex) {
 	g.genf(w, "%v[%v]", n.TargetExpr, n.KeyExpr)
 }
 
 // genLiteral generates code for a single literal expression
-func (g *Generator) genLiteral(w io.Writer, n *il.BoundLiteral) {
+func (g *generator) genLiteral(w io.Writer, n *il.BoundLiteral) {
 	switch n.ExprType {
 	case il.TypeBool:
 		g.genf(w, "%v", n.Value)
@@ -372,7 +372,7 @@ func (g *Generator) genLiteral(w io.Writer, n *il.BoundLiteral) {
 }
 
 // genOutput generates code for a single output expression.
-func (g *Generator) genOutput(w io.Writer, n *il.BoundOutput) {
+func (g *generator) genOutput(w io.Writer, n *il.BoundOutput) {
 	g.gen(w, "`")
 	for _, s := range n.Exprs {
 		if lit, ok := s.(*il.BoundLiteral); ok && lit.ExprType == il.TypeString {
@@ -385,7 +385,7 @@ func (g *Generator) genOutput(w io.Writer, n *il.BoundOutput) {
 }
 
 // genVariableAccess generates code for a single variable access expression.
-func (g *Generator) genVariableAccess(w io.Writer, n *il.BoundVariableAccess) {
+func (g *generator) genVariableAccess(w io.Writer, n *il.BoundVariableAccess) {
 	switch v := n.TFVar.(type) {
 	case *config.CountVariable:
 		g.gen(w, g.countIndex)
