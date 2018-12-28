@@ -1,0 +1,22 @@
+[[constraint]]
+  branch = "master"
+  name = "github.com/pulumi/pulumi"
+
+[[constraint]]
+  branch = "master"
+  name = "github.com/pulumi/pulumi-terraform"
+
+[[constraint]]
+  revision = "ded73eae5db7e7a0ef6f55aace87a2873c5d2b74"
+  name = "github.com/ugorji/go"
+
+[[constraint]]
+  version = "v0.11.11"
+  name = "github.com/hashicorp/terraform"
+
+  [constraint.metadata]
+    govendor-override = true
+    govendor-exclude-prefixes = [
+      "github.com/golang/protobuf",
+      "github.com/mattn/go-isatty",
+    ]
