@@ -54,8 +54,6 @@ func Convert(opts Options) error {
 		return errors.Wrapf(err, "loading module")
 	}
 
-	log.Printf("loaded module: %v", mod)
-
 	gs, err := buildGraphs(mod, true, opts)
 	if err != nil {
 		return errors.Wrapf(err, "importing Terraform project graphs")
