@@ -16,7 +16,6 @@ package convert
 
 import (
 	"io"
-	"log"
 	"os"
 	"path/filepath"
 
