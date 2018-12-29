@@ -169,6 +169,14 @@ func (g *generator) print(a ...interface{}) {
 	contract.IgnoreError(err)
 }
 
+// println prints one or more values to the generator's output stream, followed by a newline.
+func (g *generator) println(a ...interface{}) {
+	_, err := fmt.Fprint(g.w, a...)
+	contract.IgnoreError(err)
+	_, err = fmt.Fprint(g.w, "\n")
+	contract.IgnoreError(err)
+}
+
 // prinft prints a formatted message to the generator's output stream.
 func (g *generator) printf(format string, a ...interface{}) {
 	_, err := fmt.Fprintf(g.w, format, a...)
@@ -240,47 +248,51 @@ func (g *generator) GeneratePreamble(modules []*il.Graph) error {
 		return errors.New("could not determine root module path")
 	}
 
-	// Emit imports for the various providers
-	g.printf("import * as pulumi from \"@pulumi/pulumi\";\n")
+	// Print the @pulumi/pulumi import at the top.
+	g.println(`import * as pulumi from "@pulumi/pulumi";`)
 
-	providers := make(map[string]struct{})
+	// Accumulate other imports for the various providers. Don't emit them yet, as we need to sort them later on.
+	var imports []string
+	providers := make(map[string]bool)
 	for _, m := range modules {
 		for _, p := range m.Providers {
-			providers[p.PluginName] = struct{}{}
-		}
-	}
-	for p := range providers {
-		switch p {
-		case "archive":
-			// Nothing to do
-		case "http":
-			g.printf("import rpn = require(\"request-promise-native\");\n")
-		default:
-			g.printf("import * as %s from \"@pulumi/%s\";\n", cleanName(p), p)
+			name := p.PluginName
+			if !providers[name] {
+				providers[name] = true
+				switch name {
+				case "archive":
+					// Nothing to do
+				case "http":
+					imports = append(imports,
+						`import rpn = require("request-promise-native");`)
+				default:
+					imports = append(imports,
+						fmt.Sprintf(`import * as %s from "@pulumi/%s";`, cleanName(name), name))
+				}
+			}
 		}
 	}
 
-	// Look for optional imports
+	// Look for additional optional imports, also appending them to the list so we can sort them later on.
 	optionals := make(map[string]bool)
-	imports := []string{}
 	findOptionals := func(n il.BoundNode) (il.BoundNode, error) {
 		switch n := n.(type) {
 		case *il.BoundCall:
 			switch n.HILNode.Func {
 			case "file":
 				if !optionals["fs"] {
-					imports = append(imports, "import * as fs from \"fs\";\n")
+					imports = append(imports, `import * as fs from "fs";`)
 					optionals["fs"] = true
 				}
 			case "format":
 				if !optionals["sprintf"] {
-					imports = append(imports, "import sprintf = require(\"sprintf-js\");\n")
+					imports = append(imports, `import sprintf = require("sprintf-js");`)
 					optionals["sprintf"] = true
 				}
 			}
 		case *il.BoundVariableAccess:
 			if v, ok := n.TFVar.(*config.PathVariable); ok && v.Type == config.PathValueCwd && !optionals["process"] {
-				imports = append(imports, "import * as process from \"process\";\n")
+				imports = append(imports, `import * as process from "process";`)
 				optionals["process"] = true
 			}
 		}
@@ -313,9 +325,10 @@ func (g *generator) GeneratePreamble(modules []*il.Graph) error {
 		}
 	}
 
+	// Now sort the imports, so we emit them deterministically, and emit them.
 	sort.Strings(imports)
 	for _, line := range imports {
-		g.print(line)
+		g.println(line)
 	}
 	g.printf("\n")
 
