@@ -26,6 +26,12 @@ import (
 	"github.com/pulumi/pulumi/pkg/testing/integration"
 	"github.com/pulumi/pulumi/pkg/util/contract"
 	"github.com/pulumi/pulumi/pkg/util/fsutil"
+	"github.com/stretchr/testify/assert"
+)
+
+const (
+	programFile  = "index.ts"
+	baselineFile = "index.base.ts"
 )
 
 func generateCode(t *testing.T, program *integration.ProgramTestOptions) {
@@ -45,7 +51,7 @@ func generateCode(t *testing.T, program *integration.ProgramTestOptions) {
 	fmt.Fprintf(stdout, "running `tf2pulumi`...\n")
 
 	// Generate an index.ts file using `tf2pulumi`.
-	indexTS, err := os.Create(filepath.Join(program.Dir, "index.ts"))
+	indexTS, err := os.Create(filepath.Join(program.Dir, programFile))
 	if err != nil {
 		t.Fatalf("failed to create index.ts: %v", err)
 	}
@@ -60,7 +66,7 @@ func generateCode(t *testing.T, program *integration.ProgramTestOptions) {
 	}
 }
 
-func IntegrationTest(t *testing.T, program *integration.ProgramTestOptions) {
+func IntegrationTest(t *testing.T, program *integration.ProgramTestOptions, compile bool) {
 	cwd, err := os.Getwd()
 	if err != nil {
 		t.Fatalf("expected a valid working directory: %v", err)
@@ -79,7 +85,28 @@ func IntegrationTest(t *testing.T, program *integration.ProgramTestOptions) {
 	}
 	program.Dir = targetDir
 
+	// Generate the Pulumi TypeScript program.
 	generateCode(t, program)
 
-	integration.ProgramTest(t, program)
+	// If there is a baseline file, ensure that it matches.
+	baselinePath := filepath.Join(targetDir, baselineFile)
+	baseline, err := ioutil.ReadFile(baselinePath)
+	if err != nil {
+		if !os.IsNotExist(err) {
+			t.Fatalf("failed to read baseline file %v: %v", baselinePath, err)
+		}
+	} else {
+		programPath := filepath.Join(targetDir, programFile)
+		program, err := ioutil.ReadFile(programPath)
+		if err != nil {
+			t.Fatalf("failed to read program file %v: %v", programPath, err)
+		}
+		assert.Equalf(t, string(baseline), string(program),
+			"baseline file %v does not match program file %v", baselinePath, programPath)
+	}
+
+	// Now, if desired, finally ensure that it actually compiles (and anything else the specific test requires).
+	if compile {
+		integration.ProgramTest(t, program)
+	}
 }
