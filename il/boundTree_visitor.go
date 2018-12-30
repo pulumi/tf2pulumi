@@ -15,6 +15,8 @@
 package il
 
 import (
+	"sort"
+
 	"github.com/pkg/errors"
 	"github.com/pulumi/pulumi/pkg/util/contract"
 )
@@ -97,8 +99,15 @@ func visitBoundListProperty(n *BoundListProperty, pre, post BoundNodeVisitor) (B
 }
 
 func visitBoundMapProperty(n *BoundMapProperty, pre, post BoundNodeVisitor) (BoundNode, error) {
-	for k, e := range n.Elements {
-		ee, err := VisitBoundNode(e, pre, post)
+	// Sort the keys to ensure a deterministic visitation order.
+	var keys []string
+	for k := range n.Elements {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+
+	for _, k := range keys {
+		ee, err := VisitBoundNode(n.Elements[k], pre, post)
 		if err != nil {
 			return nil, err
 		}

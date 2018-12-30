@@ -15,6 +15,8 @@
 package il
 
 import (
+	"sort"
+
 	"github.com/hashicorp/hil/ast"
 	"github.com/hashicorp/terraform/config"
 	"github.com/pulumi/pulumi-terraform/pkg/tfbridge"
@@ -183,8 +185,15 @@ func RewriteAssets(n BoundNode) (BoundNode, error) {
 			return n, nil
 		}
 
-		for k, v := range m.Elements {
-			e, ok := v.(BoundExpr)
+		// Sort keys to ensure we visit in a deterministic order.
+		var keys []string
+		for k := range m.Elements {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+
+		for _, k := range keys {
+			e, ok := m.Elements[k].(BoundExpr)
 			if !ok {
 				continue
 			}
