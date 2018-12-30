@@ -171,10 +171,8 @@ func (g *generator) print(a ...interface{}) {
 
 // println prints one or more values to the generator's output stream, followed by a newline.
 func (g *generator) println(a ...interface{}) {
-	_, err := fmt.Fprint(g.w, a...)
-	contract.IgnoreError(err)
-	_, err = fmt.Fprint(g.w, "\n")
-	contract.IgnoreError(err)
+	g.print(a...)
+	g.print("\n")
 }
 
 // prinft prints a formatted message to the generator's output stream.

@@ -23,7 +23,7 @@ import (
 	"github.com/pulumi/tf2pulumi/tests/terraform"
 )
 
-func integrationTest(t *testing.T, program *integration.ProgramTestOptions) {
+func integrationTest(t *testing.T, program *integration.ProgramTestOptions, compile bool) {
 	region := os.Getenv("AWS_REGION")
 	if region == "" {
 		t.Skipf("Skipping test due to missing AWS_REGION environment variable")
@@ -34,43 +34,48 @@ func integrationTest(t *testing.T, program *integration.ProgramTestOptions) {
 	program.Config["aws:region"] = region
 	program.ExpectRefreshChanges = true
 
-	terraform.IntegrationTest(t, program)
+	terraform.IntegrationTest(t, program, compile)
 }
 
 func TestASG(t *testing.T) {
-	integrationTest(t, &integration.ProgramTestOptions{Dir: "asg"})
+	integrationTest(t, &integration.ProgramTestOptions{Dir: "asg"}, true)
 }
 
 func TestCognitoUserPool(t *testing.T) {
-	integrationTest(t, &integration.ProgramTestOptions{Dir: "cognito-user-pool"})
+	integrationTest(t, &integration.ProgramTestOptions{Dir: "cognito-user-pool"}, true)
 }
 
 func TestCount(t *testing.T) {
-	integrationTest(t, &integration.ProgramTestOptions{Dir: "count"})
+	integrationTest(t, &integration.ProgramTestOptions{Dir: "count"}, true)
 }
 
 func TestECSALB(t *testing.T) {
 	t.Skipf("Skipping test due to NYI: call to cidrsubnet")
-	integrationTest(t, &integration.ProgramTestOptions{Dir: "ecs-alb"})
+	integrationTest(t, &integration.ProgramTestOptions{Dir: "ecs-alb"}, true)
 }
 
 func TestEIP(t *testing.T) {
-	integrationTest(t, &integration.ProgramTestOptions{Dir: "eip"})
+	integrationTest(t, &integration.ProgramTestOptions{Dir: "eip"}, true)
 }
 
 func TestELB(t *testing.T) {
-	integrationTest(t, &integration.ProgramTestOptions{Dir: "elb"})
+	integrationTest(t, &integration.ProgramTestOptions{Dir: "elb"}, true)
 }
 
 func TestELB2(t *testing.T) {
-	integrationTest(t, &integration.ProgramTestOptions{Dir: "elb2"})
+	integrationTest(t, &integration.ProgramTestOptions{Dir: "elb2"}, true)
+}
+
+func TestLBListener(t *testing.T) {
+	// Note we don't compile this one, since it contains semantic errors.
+	integrationTest(t, &integration.ProgramTestOptions{Dir: "lb-listener"}, false)
 }
 
 func TestLambda(t *testing.T) {
-	integrationTest(t, &integration.ProgramTestOptions{Dir: "lambda"})
+	integrationTest(t, &integration.ProgramTestOptions{Dir: "lambda"}, true)
 }
 
 func TestNetworking(t *testing.T) {
 	t.Skipf("Skipping test due to NYI: provider instances")
-	integrationTest(t, &integration.ProgramTestOptions{Dir: "networking"})
+	integrationTest(t, &integration.ProgramTestOptions{Dir: "networking"}, true)
 }
