@@ -238,7 +238,8 @@ func (v *VariableNode) sortKey() string {
 // A builder is a temporary structure used to hold the contents of a graph that while it is under construction. The
 // various fields are aligned with their similarly-named peers in Graph.
 type builder struct {
-	tolerateMissingPlugins bool
+	logger                   *log.Logger
+	tolerateMissingProviders bool
 
 	providerInfo ProviderInfoSource
 	modules      map[string]*ModuleNode
@@ -249,9 +250,25 @@ type builder struct {
 	variables    map[string]*VariableNode
 }
 
-func newBuilder(providerInfo ProviderInfoSource, tolerateMissingPlugins bool) *builder {
+func newBuilder(opts *BuildOptions) *builder {
+	tolerateMissingProviders := false
+	if opts != nil {
+		tolerateMissingProviders = opts.AllowMissingProviders
+	}
+
+	providerInfo := PluginProviderInfoSource
+	if opts != nil && opts.ProviderInfoSource != nil {
+		providerInfo = opts.ProviderInfoSource
+	}
+
+	var logger *log.Logger
+	if opts != nil {
+		logger = opts.Logger
+	}
+
 	return &builder{
-		tolerateMissingPlugins: tolerateMissingPlugins,
+		logger:                   logger,
+		tolerateMissingProviders: tolerateMissingProviders,
 
 		providerInfo: providerInfo,
 		modules:      make(map[string]*ModuleNode),
@@ -261,6 +278,16 @@ func newBuilder(providerInfo ProviderInfoSource, tolerateMissingPlugins bool) *b
 		locals:       make(map[string]*LocalNode),
 		variables:    make(map[string]*VariableNode),
 	}
+}
+
+// logf writes a formatted message to the configured logger.
+func (b *builder) logf(format string, arguments ...interface{}) {
+	if b.logger != nil {
+		b.logger.Printf(format, arguments...)
+		return
+	}
+
+	log.Printf(format, arguments...)
 }
 
 // bindProperty binds a paroperty value with the given schemas. If hasCountIndex is true, this property's
@@ -367,7 +394,15 @@ func (b *builder) getProviderInfo(p *ProviderNode) (*tfbridge.ProviderInfo, stri
 		return info, p.Config.Name, nil
 	}
 
-	return b.providerInfo.GetProviderInfo(p.Config.Name)
+	info, err := b.providerInfo.GetProviderInfo(p.Config.Name)
+	if err != nil {
+		return nil, "", err
+	}
+	packageName, ok := pluginNames[p.Config.Name]
+	if !ok {
+		packageName = p.Config.Name
+	}
+	return info, packageName, nil
 }
 
 // buildModule binds the given module node's properties and computes its dependency edges.
@@ -387,13 +422,11 @@ func (b *builder) buildModule(m *ModuleNode) error {
 func (b *builder) buildProvider(p *ProviderNode) error {
 	info, pluginName, err := b.getProviderInfo(p)
 	if err != nil {
-		if !b.tolerateMissingPlugins {
+		if !b.tolerateMissingProviders {
 			return err
 		}
 
-		log.Printf("warning: %v", err)
-		log.Printf("generated code for resources using this provider may be incorrect")
-
+		b.logf("warning: %v\ngenerated code for resources using this provider may be incorrect", err)
 		pluginName = p.Config.Name
 	}
 	p.Info, p.PluginName = info, pluginName
@@ -542,11 +575,22 @@ func (b *builder) buildVariable(v *VariableNode) error {
 	return nil
 }
 
+// BuildOptions defines the set of optional parameters to `BuildGraph`.
+type BuildOptions struct {
+	// ProviderInfoSource allows the caller to override the default source for provider schema information, which
+	// relies on resource provider plugins.
+	ProviderInfoSource ProviderInfoSource
+	// AllowMissingProviders allows binding to succeed even if schema information is not available for a provider.
+	AllowMissingProviders bool
+	// Logger allows the caller to provide a logger for diagnostics. If not provided, the default logger will be used.
+	Logger *log.Logger
+}
+
 // BuildGraph analyzes the various entities present in the given module's configuration and constructs the
 // corresponding dependency graph. Building the graph involves binding each entity's properties (if any) and
 // computing its list of dependency edges.
-func BuildGraph(tree *module.Tree, tolerateMissingPlugins bool) (*Graph, error) {
-	b := newBuilder(PluginProviderInfoSource, tolerateMissingPlugins)
+func BuildGraph(tree *module.Tree, opts *BuildOptions) (*Graph, error) {
+	b := newBuilder(opts)
 
 	conf := tree.Config()
 

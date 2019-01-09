@@ -16,6 +16,7 @@ package convert
 
 import (
 	"io"
+	"log"
 	"os"
 	"path/filepath"
 
@@ -66,12 +67,16 @@ func Convert(opts Options) error {
 }
 
 type Options struct {
-	// AllowMissingPlugins, if true, code-gen continues even if resource provider plugins are missing.
-	AllowMissingPlugins bool
+	// AllowMissingProviders, if true, code-gen continues even if resource providers are missing.
+	AllowMissingProviders bool
 	// Path, when set, overrides the default path (".") to load the source Terraform module from.
 	Path string
 	// Writer can be set to override the default behavior of writing the resulting code to stdout.
 	Writer io.Writer
+	// Optional source for provider schema information.
+	ProviderInfoSource il.ProviderInfoSource
+	// Optional logger for diagnostic information.
+	Logger *log.Logger
 }
 
 type noCredentials struct{}
@@ -92,7 +97,12 @@ func buildGraphs(tree *module.Tree, isRoot bool, opts Options) ([]*il.Graph, err
 		children = append(children, cc...)
 	}
 
-	g, err := il.BuildGraph(tree, opts.AllowMissingPlugins)
+	buildOpts := il.BuildOptions{
+		AllowMissingProviders: opts.AllowMissingProviders,
+		ProviderInfoSource:    opts.ProviderInfoSource,
+		Logger:                opts.Logger,
+	}
+	g, err := il.BuildGraph(tree, &buildOpts)
 	if err != nil {
 		return nil, err
 	}
