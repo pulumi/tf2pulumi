@@ -25,7 +25,7 @@ import (
 
 func main() {
 	var opts convert.Options
-	flag.BoolVar(&opts.AllowMissingPlugins, "allow-missing-plugins", false,
+	flag.BoolVar(&opts.AllowMissingProviders, "allow-missing-plugins", false,
 		"allows code generation to continue if resource provider plugins are missing")
 
 	flag.Parse()
