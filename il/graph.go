@@ -67,6 +67,8 @@ type Node interface {
 	// sortKey returns the key that should be used when sorting this node (e.g. to ensure a stable order for code
 	// generation).
 	sortKey() string
+	// displayName returns the display name of this node
+	displayName() string
 }
 
 // A ModuleNode is the analyzed form of a module instantiation in a Terraform configuration.
@@ -155,6 +157,10 @@ func (m *ModuleNode) sortKey() string {
 	return "m" + m.Config.Name
 }
 
+func (m *ModuleNode) displayName() string {
+	return "module " + m.Config.Name
+}
+
 // Depdendencies returns the list of nodes the provider depends on.
 func (p *ProviderNode) Dependencies() []Node {
 	return p.Deps
@@ -162,6 +168,10 @@ func (p *ProviderNode) Dependencies() []Node {
 
 func (p *ProviderNode) sortKey() string {
 	return "p" + p.Config.Name
+}
+
+func (p *ProviderNode) displayName() string {
+	return "provider " + p.Config.Name
 }
 
 // Depdendencies returns the list of nodes the resource depends on.
@@ -218,6 +228,10 @@ func (r *ResourceNode) sortKey() string {
 	return "r" + r.Config.Id()
 }
 
+func (r *ResourceNode) displayName() string {
+	return "resource " + r.Config.Id()
+}
+
 // Depdendencies returns the list of nodes the output depends on.
 func (o *OutputNode) Dependencies() []Node {
 	return o.Deps
@@ -225,6 +239,10 @@ func (o *OutputNode) Dependencies() []Node {
 
 func (o *OutputNode) sortKey() string {
 	return "o" + o.Config.Name
+}
+
+func (o *OutputNode) displayName() string {
+	return "output " + o.Config.Name
 }
 
 // Depdendencies returns the list of nodes the local value depends on.
@@ -236,6 +254,10 @@ func (l *LocalNode) sortKey() string {
 	return "l" + l.Config.Name
 }
 
+func (l *LocalNode) displayName() string {
+	return "local " + l.Config.Name
+}
+
 // Depdendencies returns the list of nodes the variable depends on. This list is always empty.
 func (v *VariableNode) Dependencies() []Node {
 	return nil
@@ -243,6 +265,10 @@ func (v *VariableNode) Dependencies() []Node {
 
 func (v *VariableNode) sortKey() string {
 	return "v" + v.Config.Name
+}
+
+func (v *VariableNode) displayName() string {
+	return "variable " + v.Config.Name
 }
 
 // A builder is a temporary structure used to hold the contents of a graph that while it is under construction. The
@@ -258,6 +284,9 @@ type builder struct {
 	outputs      map[string]*OutputNode
 	locals       map[string]*LocalNode
 	variables    map[string]*VariableNode
+
+	binding map[Node]bool
+	bound   map[Node]bool
 }
 
 func newBuilder(opts *BuildOptions) *builder {
@@ -287,6 +316,9 @@ func newBuilder(opts *BuildOptions) *builder {
 		outputs:      make(map[string]*OutputNode),
 		locals:       make(map[string]*LocalNode),
 		variables:    make(map[string]*VariableNode),
+
+		binding: make(map[Node]bool),
+		bound:   make(map[Node]bool),
 	}
 }
 
@@ -585,6 +617,38 @@ func (b *builder) buildVariable(v *VariableNode) error {
 	return nil
 }
 
+// ensureBound ensures that the indicated node is bound. If the node is not bound, this method will bind it. If the
+// node is currently being bound, this method will return an error due to the circular reference.
+func (b *builder) ensureBound(n Node) error {
+	// If this node is already bound, we're already done.
+	if b.bound[n] {
+		return nil
+	}
+
+	if b.binding[n] {
+		return errors.Errorf("%v either directly or indirectly refers to itself", n.displayName())
+	}
+	b.binding[n] = true
+
+	var err error
+	switch n := n.(type) {
+	case *ModuleNode:
+		err = b.buildModule(n)
+	case *ProviderNode:
+		err = b.buildProvider(n)
+	case *ResourceNode:
+		err = b.buildResource(n)
+	case *OutputNode:
+		err = b.buildOutput(n)
+	case *LocalNode:
+		err = b.buildLocal(n)
+	case *VariableNode:
+		err = b.buildVariable(n)
+	}
+	b.binding[n], b.bound[n] = false, true
+	return err
+}
+
 // BuildOptions defines the set of optional parameters to `BuildGraph`.
 type BuildOptions struct {
 	// ProviderInfoSource allows the caller to override the default source for provider schema information, which
@@ -626,32 +690,32 @@ func BuildGraph(tree *module.Tree, opts *BuildOptions) (*Graph, error) {
 
 	// Now bind each node's properties and compute any dependency edges.
 	for _, v := range b.variables {
-		if err := b.buildVariable(v); err != nil {
+		if err := b.ensureBound(v); err != nil {
 			return nil, err
 		}
 	}
 	for _, p := range b.providers {
-		if err := b.buildProvider(p); err != nil {
+		if err := b.ensureBound(p); err != nil {
 			return nil, err
 		}
 	}
 	for _, m := range b.modules {
-		if err := b.buildModule(m); err != nil {
+		if err := b.ensureBound(m); err != nil {
 			return nil, err
 		}
 	}
 	for _, l := range b.locals {
-		if err := b.buildLocal(l); err != nil {
+		if err := b.ensureBound(l); err != nil {
 			return nil, err
 		}
 	}
 	for _, r := range b.resources {
-		if err := b.buildResource(r); err != nil {
+		if err := b.ensureBound(r); err != nil {
 			return nil, err
 		}
 	}
 	for _, o := range b.outputs {
-		if err := b.buildOutput(o); err != nil {
+		if err := b.ensureBound(o); err != nil {
 			return nil, err
 		}
 	}

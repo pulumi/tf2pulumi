@@ -12,8 +12,10 @@ build::
 lint::
 	golangci-lint run
 
+test_fast::
+	go test -cover ./il/... ./gen/...
+
 test_all::
-	PATH=$(PULUMI_BIN):$(PATH) go test -v -cover ./il/... ./gen/...
 	PATH=$(PULUMI_BIN):$(PATH) go test -v -cover -timeout 1h ./tests/...
 
 # The travis_* targets are entrypoints for CI.
