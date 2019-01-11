@@ -23,12 +23,10 @@ import (
 
 	"github.com/hashicorp/terraform/config"
 	"github.com/hashicorp/terraform/config/module"
-	_ "github.com/hashicorp/terraform/helper/schema"
-	_ "github.com/mitchellh/mapstructure"
 	"github.com/pkg/errors"
-	"github.com/pulumi/pulumi-terraform/pkg/tfbridge"
 	"github.com/pulumi/pulumi/pkg/util/contract"
-	_ "github.com/ugorji/go/codec"
+
+	"github.com/pulumi/pulumi-terraform/pkg/tfbridge"
 )
 
 // TODO
@@ -178,16 +176,22 @@ func (r *ResourceNode) Schemas() Schemas {
 	case r.Provider == nil || r.Provider.Info == nil:
 		return Schemas{}
 	case r.Config.Mode == config.ManagedResourceMode:
-		resInfo := r.Provider.Info.Resources[r.Config.Type]
+		schemaInfo := &tfbridge.SchemaInfo{}
+		if resInfo, ok := r.Provider.Info.Resources[r.Config.Type]; ok {
+			schemaInfo.Fields = resInfo.Fields
+		}
 		return Schemas{
 			TFRes:  r.Provider.Info.P.ResourcesMap[r.Config.Type],
-			Pulumi: &tfbridge.SchemaInfo{Fields: resInfo.Fields},
+			Pulumi: schemaInfo,
 		}
 	default:
-		dsInfo := r.Provider.Info.DataSources[r.Config.Type]
+		schemaInfo := &tfbridge.SchemaInfo{}
+		if dsInfo, ok := r.Provider.Info.DataSources[r.Config.Type]; ok {
+			schemaInfo.Fields = dsInfo.Fields
+		}
 		return Schemas{
 			TFRes:  r.Provider.Info.P.DataSourcesMap[r.Config.Type],
-			Pulumi: &tfbridge.SchemaInfo{Fields: dsInfo.Fields},
+			Pulumi: schemaInfo,
 		}
 	}
 }
@@ -198,9 +202,15 @@ func (r *ResourceNode) Tok() (string, bool) {
 	case r.Provider == nil || r.Provider.Info == nil:
 		return "", false
 	case r.Config.Mode == config.ManagedResourceMode:
-		return string(r.Provider.Info.Resources[r.Config.Type].Tok), true
+		if resInfo, ok := r.Provider.Info.Resources[r.Config.Type]; ok {
+			return string(resInfo.Tok), true
+		}
+		return "", false
 	default:
-		return string(r.Provider.Info.DataSources[r.Config.Type].Tok), true
+		if dsInfo, ok := r.Provider.Info.DataSources[r.Config.Type]; ok {
+			return string(dsInfo.Tok), true
+		}
+		return "", false
 	}
 }
 
