@@ -236,6 +236,11 @@ func (b *propertyBinder) bindVariableAccess(n *ast.VariableAccess) (BoundExpr, e
 		}
 		ilNode = l
 
+		// Ensure that the referenced local has been bound before attempting to inspect its value.
+		if err := b.builder.ensureBound(l); err != nil {
+			return nil, err
+		}
+
 		exprType = l.Value.Type()
 	case *config.ModuleVariable:
 		// "module."

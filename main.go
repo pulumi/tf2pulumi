@@ -37,7 +37,7 @@ func main() {
 	}
 
 	if err := convert.Convert(opts); err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v", err)
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(-1)
 	}
 }
