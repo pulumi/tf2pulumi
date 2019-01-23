@@ -1644,6 +1644,8 @@
   analyzer-name = "dep"
   analyzer-version = 1
   input-imports = [
+    "github.com/hashicorp/hcl",
+    "github.com/hashicorp/hcl/hcl/ast",
     "github.com/hashicorp/hil",
     "github.com/hashicorp/hil/ast",
     "github.com/hashicorp/terraform/command",

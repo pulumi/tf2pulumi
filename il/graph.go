@@ -62,6 +62,8 @@ type Graph struct {
 // In general, a node's dependencies are the union from its implicit dependencies (i.e. the nodes referenced by the
 // interpolations in its properties, if any) and its explicit dependencies.
 type Node interface {
+	commentable
+
 	// Dependencies returns the list of nodes the node depends on.
 	Dependencies() []Node
 	// sortKey returns the key that should be used when sorting this node (e.g. to ensure a stable order for code
@@ -75,6 +77,8 @@ type Node interface {
 type ModuleNode struct {
 	// Config is the module's raw Terraform configuration.
 	Config *config.Module
+	// Comments is the set of comments associated with this node, if any.
+	Comments *Comments
 	// Deps is the list of the module's dependencies as implied by the nodes referenced by its configuration.
 	Deps []Node
 	// Properties is the bound form of the module's configuration properties.
@@ -85,6 +89,8 @@ type ModuleNode struct {
 type ProviderNode struct {
 	// Config is the provider's raw Terraform configuration.
 	Config *config.ProviderConfig
+	// Comments is the set of comments associated with this node, if any.
+	Comments *Comments
 	// Deps is the list of the provider's dependencies as implied by the nodes referenced by its configuration.
 	Deps []Node
 	// Properties is the bound form of the provider's configuration properties.
@@ -104,6 +110,8 @@ type ProviderNode struct {
 type ResourceNode struct {
 	// Config is the resource's raw Terraform configuration.
 	Config *config.Resource
+	// Comments is the set of comments associated with this node, if any.
+	Comments *Comments
 	// Provider is a reference to the resource's provider. Consumers of this package will never observe a nil value in
 	// this field.
 	Provider *ProviderNode
@@ -122,6 +130,8 @@ type ResourceNode struct {
 type OutputNode struct {
 	// Config is the output's raw Terraform configuration.
 	Config *config.Output
+	// Comments is the set of comments associated with this node, if any.
+	Comments *Comments
 	// Deps is the list of the output's dependencies as implied by the nodes referenced by its configuration.
 	Deps []Node
 	// ExplicitDeps is the list of the output's explicit dependencies. This is a subset of Deps.
@@ -134,6 +144,8 @@ type OutputNode struct {
 type LocalNode struct {
 	// Config is the local value's raw Terraform configuration.
 	Config *config.Local
+	// Comments is the set of comments associated with this node, if any.
+	Comments *Comments
 	// Deps is the list of the local value's dependencies as implied by the nodes referenced by its configuration.
 	Deps []Node
 	// Value is the bound form of the local value's value.
@@ -144,6 +156,8 @@ type LocalNode struct {
 type VariableNode struct {
 	// Config is the variable's raw Terraform configuration.
 	Config *config.Variable
+	// Comments is the set of comments associated with this node, if any.
+	Comments *Comments
 	// DefaultValue is the bound form of the variable's default value (if any).
 	DefaultValue BoundNode
 }
@@ -161,6 +175,10 @@ func (m *ModuleNode) displayName() string {
 	return "module " + m.Config.Name
 }
 
+func (m *ModuleNode) setComments(c *Comments) {
+	m.Comments = c
+}
+
 // Depdendencies returns the list of nodes the provider depends on.
 func (p *ProviderNode) Dependencies() []Node {
 	return p.Deps
@@ -172,6 +190,10 @@ func (p *ProviderNode) sortKey() string {
 
 func (p *ProviderNode) displayName() string {
 	return "provider " + p.Config.Name
+}
+
+func (p *ProviderNode) setComments(c *Comments) {
+	p.Comments = c
 }
 
 // Depdendencies returns the list of nodes the resource depends on.
@@ -232,6 +254,10 @@ func (r *ResourceNode) displayName() string {
 	return "resource " + r.Config.Id()
 }
 
+func (r *ResourceNode) setComments(c *Comments) {
+	r.Comments = c
+}
+
 // Depdendencies returns the list of nodes the output depends on.
 func (o *OutputNode) Dependencies() []Node {
 	return o.Deps
@@ -243,6 +269,10 @@ func (o *OutputNode) sortKey() string {
 
 func (o *OutputNode) displayName() string {
 	return "output " + o.Config.Name
+}
+
+func (o *OutputNode) setComments(c *Comments) {
+	o.Comments = c
 }
 
 // Depdendencies returns the list of nodes the local value depends on.
@@ -258,6 +288,10 @@ func (l *LocalNode) displayName() string {
 	return "local " + l.Config.Name
 }
 
+func (l *LocalNode) setComments(c *Comments) {
+	l.Comments = c
+}
+
 // Depdendencies returns the list of nodes the variable depends on. This list is always empty.
 func (v *VariableNode) Dependencies() []Node {
 	return nil
@@ -269,6 +303,10 @@ func (v *VariableNode) sortKey() string {
 
 func (v *VariableNode) displayName() string {
 	return "variable " + v.Config.Name
+}
+
+func (v *VariableNode) setComments(c *Comments) {
+	v.Comments = c
 }
 
 // A builder is a temporary structure used to hold the contents of a graph that while it is under construction. The
@@ -602,6 +640,8 @@ func (b *builder) buildLocal(l *LocalNode) error {
 		}
 	}
 
+	// TODO: locals with object values end up as single-items lists. Sigh.
+
 	l.Value, l.Deps = value, allDeps
 	return nil
 }
@@ -651,27 +691,8 @@ func (b *builder) ensureBound(n Node) error {
 	return err
 }
 
-// BuildOptions defines the set of optional parameters to `BuildGraph`.
-type BuildOptions struct {
-	// ProviderInfoSource allows the caller to override the default source for provider schema information, which
-	// relies on resource provider plugins.
-	ProviderInfoSource ProviderInfoSource
-	// AllowMissingProviders allows binding to succeed even if schema information is not available for a provider.
-	AllowMissingProviders bool
-	// Logger allows the caller to provide a logger for diagnostics. If not provided, the default logger will be used.
-	Logger *log.Logger
-	// AllowMissingVariables allows binding to succeed even if unknown variables are encountered.
-	AllowMissingVariables bool
-}
-
-// BuildGraph analyzes the various entities present in the given module's configuration and constructs the
-// corresponding dependency graph. Building the graph involves binding each entity's properties (if any) and
-// computing its list of dependency edges.
-func BuildGraph(tree *module.Tree, opts *BuildOptions) (*Graph, error) {
-	b := newBuilder(opts)
-
-	conf := tree.Config()
-
+// buildNodes builds the nodes for the given config.
+func (b *builder) buildNodes(conf *config.Config) error {
 	// Next create our nodes.
 	for _, v := range conf.Variables {
 		b.variables[v.Name] = &VariableNode{Config: v}
@@ -695,33 +716,69 @@ func BuildGraph(tree *module.Tree, opts *BuildOptions) (*Graph, error) {
 	// Now bind each node's properties and compute any dependency edges.
 	for _, v := range b.variables {
 		if err := b.ensureBound(v); err != nil {
-			return nil, err
+			return err
 		}
 	}
 	for _, p := range b.providers {
 		if err := b.ensureBound(p); err != nil {
-			return nil, err
+			return err
 		}
 	}
 	for _, m := range b.modules {
 		if err := b.ensureBound(m); err != nil {
-			return nil, err
+			return err
 		}
 	}
 	for _, l := range b.locals {
 		if err := b.ensureBound(l); err != nil {
-			return nil, err
+			return err
 		}
 	}
 	for _, r := range b.resources {
 		if err := b.ensureBound(r); err != nil {
-			return nil, err
+			return err
 		}
 	}
 	for _, o := range b.outputs {
 		if err := b.ensureBound(o); err != nil {
-			return nil, err
+			return err
 		}
+	}
+
+	return nil
+}
+
+// BuildOptions defines the set of optional parameters to `BuildGraph`.
+type BuildOptions struct {
+	// ProviderInfoSource allows the caller to override the default source for provider schema information, which
+	// relies on resource provider plugins.
+	ProviderInfoSource ProviderInfoSource
+	// AllowMissingProviders allows binding to succeed even if schema information is not available for a provider.
+	AllowMissingProviders bool
+	// Logger allows the caller to provide a logger for diagnostics. If not provided, the default logger will be used.
+	Logger *log.Logger
+	// AllowMissingVariables allows binding to succeed even if unknown variables are encountered.
+	AllowMissingVariables bool
+	// AllowMissingComments allows binding to succeed even if there are errors extracting comments from the source.
+	AllowMissingComments bool
+}
+
+// BuildGraph analyzes the various entities present in the given module's configuration and constructs the
+// corresponding dependency graph. Building the graph involves binding each entity's properties (if any) and
+// computing its list of dependency edges.
+func BuildGraph(tree *module.Tree, opts *BuildOptions) (*Graph, error) {
+	b := newBuilder(opts)
+
+	conf := tree.Config()
+
+	if err := b.buildNodes(conf); err != nil {
+		return nil, err
+	}
+
+	// Attempt to extract comments from the tree's sources and associate them with the appropriate constructs in the
+	// bound graph.
+	if err := b.extractComments(conf); err != nil && !opts.AllowMissingComments {
+		return nil, err
 	}
 
 	// Put the graph together

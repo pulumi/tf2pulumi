@@ -130,10 +130,23 @@ func (d *dumper) dump(vs ...interface{}) {
 	}
 }
 
+// Comments represents the set of comments associated with a node.
+type Comments struct {
+	// Leading is the lines of the comment (sans comment tokens) that precedes a node, if any. Line endings (if any)
+	// are present.
+	Leading []string
+	// Trailing is the lines of the comment (sans comment tokens) that succeeds a node, if any. Line ending (if any)
+	// are present.
+	Trailing []string
+}
+
 // A BoundNode represents a single bound property map, property list, or interpolation expression. Every
 // BoundNode has a Type.
 type BoundNode interface {
+	commentable
+
 	Type() Type
+	Comments() *Comments
 
 	dump(d *dumper)
 	isNode()
@@ -151,6 +164,8 @@ type BoundExpr interface {
 type BoundArithmetic struct {
 	// HILNode is the HIL node associated with this arithmetic expression.
 	HILNode *ast.Arithmetic
+	// Comments is the set of comments associated with this node, if any.
+	NodeComments *Comments
 	// Exprs is the bound list of the arithmetic expression's operands.
 	Exprs []BoundExpr
 }
@@ -158,6 +173,16 @@ type BoundArithmetic struct {
 // Type returns the type of the arithmetic expression, which is always TypeNumber.
 func (n *BoundArithmetic) Type() Type {
 	return TypeNumber
+}
+
+// Comments returns the comments attached to this node, if any.
+func (n *BoundArithmetic) Comments() *Comments {
+	return n.NodeComments
+}
+
+// setComments attaches the given comments to this node.
+func (n *BoundArithmetic) setComments(c *Comments) {
+	n.NodeComments = c
 }
 
 func (n *BoundArithmetic) dump(d *dumper) {
@@ -177,6 +202,8 @@ func (n *BoundArithmetic) isExpr() {}
 type BoundCall struct {
 	// HILNode is the HIL node associated with this call.
 	HILNode *ast.Call
+	// Comments is the set of comments associated with this node, if any.
+	NodeComments *Comments
 	// ExprType is the type of the call expression.
 	ExprType Type
 	// Args is the bound list of the call's arguments.
@@ -186,6 +213,16 @@ type BoundCall struct {
 // Type returns the type of the call expression.
 func (n *BoundCall) Type() Type {
 	return n.ExprType
+}
+
+// Comments returns the comments attached to this node, if any.
+func (n *BoundCall) Comments() *Comments {
+	return n.NodeComments
+}
+
+// setComments attaches the given comments to this node.
+func (n *BoundCall) setComments(c *Comments) {
+	n.NodeComments = c
 }
 
 func (n *BoundCall) dump(d *dumper) {
@@ -205,6 +242,8 @@ func (n *BoundCall) isExpr() {}
 type BoundConditional struct {
 	// HILNode is the HIL node associated with this conditional expression.
 	HILNode *ast.Conditional
+	// Comments is the set of comments associated with this node, if any.
+	NodeComments *Comments
 	// ExprType is the type of the conditional expression.
 	ExprType Type
 	// CondExpr is the bound form of the conditional expression's predicate.
@@ -218,6 +257,16 @@ type BoundConditional struct {
 // Type returns the type of the conditional expression.
 func (n *BoundConditional) Type() Type {
 	return n.ExprType
+}
+
+// Comments returns the comments attached to this node, if any.
+func (n *BoundConditional) Comments() *Comments {
+	return n.NodeComments
+}
+
+// setComments attaches the given comments to this node.
+func (n *BoundConditional) setComments(c *Comments) {
+	n.NodeComments = c
 }
 
 func (n *BoundConditional) dump(d *dumper) {
@@ -237,6 +286,8 @@ func (n *BoundConditional) isExpr() {}
 type BoundIndex struct {
 	// HILNode is the HIL node associated with this index expression.
 	HILNode *ast.Index
+	// Comments is the set of comments associated with this node, if any.
+	NodeComments *Comments
 	// ExprType is the type of the index expression.
 	ExprType Type
 	// TargetExpr is the bound form of the index expression's target (e.g. `foo` in `${foo[bar]}`).
@@ -248,6 +299,16 @@ type BoundIndex struct {
 // Type returns the type of the index expression.
 func (n *BoundIndex) Type() Type {
 	return n.ExprType
+}
+
+// Comments returns the comments attached to this node, if any.
+func (n *BoundIndex) Comments() *Comments {
+	return n.NodeComments
+}
+
+// setComments attaches the given comments to this node.
+func (n *BoundIndex) setComments(c *Comments) {
+	n.NodeComments = c
 }
 
 func (n *BoundIndex) dump(d *dumper) {
@@ -266,6 +327,8 @@ func (n *BoundIndex) isExpr() {}
 type BoundLiteral struct {
 	// ExprType is the type of the literal expression.
 	ExprType Type
+	// Comments is the set of comments associated with this node, if any.
+	NodeComments *Comments
 	// Value is the value of the literal expression. This may be a bool, string, float64, or in the case of the
 	// argument to the __applyArg intrinsic, an int.
 	Value interface{}
@@ -274,6 +337,16 @@ type BoundLiteral struct {
 // Type returns the type of the literal expression.
 func (n *BoundLiteral) Type() Type {
 	return n.ExprType
+}
+
+// Comments returns the comments attached to this node, if any.
+func (n *BoundLiteral) Comments() *Comments {
+	return n.NodeComments
+}
+
+// setComments attaches the given comments to this node.
+func (n *BoundLiteral) setComments(c *Comments) {
+	n.NodeComments = c
 }
 
 func (n *BoundLiteral) dump(d *dumper) {
@@ -292,6 +365,8 @@ func (n *BoundLiteral) isExpr() {}
 type BoundOutput struct {
 	// HILNode is the HIL node associated with this output expression.
 	HILNode *ast.Output
+	// Comments is the set of comments associated with this node, if any.
+	NodeComments *Comments
 	// Exprs is the bound list of the output's operands.
 	Exprs []BoundExpr
 }
@@ -299,6 +374,16 @@ type BoundOutput struct {
 // Type returns the type of the output expression (which is always TypeString).
 func (n *BoundOutput) Type() Type {
 	return TypeString
+}
+
+// Comments returns the comments attached to this node, if any.
+func (n *BoundOutput) Comments() *Comments {
+	return n.NodeComments
+}
+
+// setComments attaches the given comments to this node.
+func (n *BoundOutput) setComments(c *Comments) {
+	n.NodeComments = c
 }
 
 func (n *BoundOutput) dump(d *dumper) {
@@ -318,6 +403,8 @@ func (n *BoundOutput) isExpr() {}
 type BoundVariableAccess struct {
 	// HILNode is the HIL node associated with this variable access expression.
 	HILNode *ast.VariableAccess
+	// Comments is the set of comments associated with this node, if any.
+	NodeComments *Comments
 	// Elements are the path elements that comprise the variable access expression.
 	Elements []string
 	// Schemas are the Terraform and Pulumi schemas associated with the referenced variable.
@@ -335,6 +422,16 @@ func (n *BoundVariableAccess) Type() Type {
 	return n.ExprType
 }
 
+// Comments returns the comments attached to this node, if any.
+func (n *BoundVariableAccess) Comments() *Comments {
+	return n.NodeComments
+}
+
+// setComments attaches the given comments to this node.
+func (n *BoundVariableAccess) setComments(c *Comments) {
+	n.NodeComments = c
+}
+
 func (n *BoundVariableAccess) dump(d *dumper) {
 	d.dump(fmt.Sprintf("(%s %s %T)", n.HILNode.Name, n.Type(), n.TFVar))
 }
@@ -348,6 +445,8 @@ func (n *BoundVariableAccess) IsMissingVariable() bool {
 
 // BoundListProperty is the bound form of an HCL list property. (e.g. `[ foo, bar ]`).
 type BoundListProperty struct {
+	// Comments is the set of comments associated with this node, if any.
+	NodeComments *Comments
 	// Schemas are the Terraform and Pulumi schemas associated with the list.
 	Schemas Schemas
 	// Elements is the bound list of the list's elements.
@@ -357,6 +456,16 @@ type BoundListProperty struct {
 // Type returns the type of the list property (always a list type).
 func (n *BoundListProperty) Type() Type {
 	return n.Schemas.ElemSchemas().Type().ListOf()
+}
+
+// Comments returns the comments attached to this node, if any.
+func (n *BoundListProperty) Comments() *Comments {
+	return n.NodeComments
+}
+
+// setComments attaches the given comments to this node.
+func (n *BoundListProperty) setComments(c *Comments) {
+	n.NodeComments = c
 }
 
 func (n *BoundListProperty) dump(d *dumper) {
@@ -377,6 +486,8 @@ func (n *BoundListProperty) isNode() {}
 
 // BoundMapProperty is the bound form of an HCL map property. (e.g. `{ foo = bar ]`).
 type BoundMapProperty struct {
+	// Comments is the set of comments associated with this node, if any.
+	NodeComments *Comments
 	// Schemas are the Terraform and Pulumi schemas associated with the map.
 	Schemas Schemas
 	// Elements is a map from name to bound value of the map's elements.
@@ -386,6 +497,16 @@ type BoundMapProperty struct {
 // Type returns the type of the map property (always TypeMap).
 func (n *BoundMapProperty) Type() Type {
 	return TypeMap
+}
+
+// Comments returns the comments attached to this node, if any.
+func (n *BoundMapProperty) Comments() *Comments {
+	return n.NodeComments
+}
+
+// setComments attaches the given comments to this node.
+func (n *BoundMapProperty) setComments(c *Comments) {
+	n.NodeComments = c
 }
 
 func (n *BoundMapProperty) dump(d *dumper) {
@@ -409,6 +530,8 @@ func (n *BoundMapProperty) isNode() {}
 type BoundError struct {
 	// The type of the node.
 	NodeType Type
+	// Comments is the set of comments associated with this node, if any.
+	NodeComments *Comments
 	// A bound node (if any) associated with this error
 	Value BoundNode
 	// The binding error
@@ -420,15 +543,25 @@ func (n *BoundError) Type() Type {
 	return n.NodeType
 }
 
+// Comments returns the comments attached to this node, if any.
+func (n *BoundError) Comments() *Comments {
+	return n.NodeComments
+}
+
+// setComments attaches the given comments to this node.
+func (n *BoundError) setComments(c *Comments) {
+	n.NodeComments = c
+}
+
 func (n *BoundError) dump(d *dumper) {
 	d.dump("(error ", fmt.Sprintf("%v", n.Type()))
 	if n.Value != nil {
 		d.indented(func() {
-			d.dump("\n", n.Value)
+			d.dump("\n", d.indent, n.Value)
 		})
 		d.dump("\n", d.indent)
 	}
-	d.dump("\"%q\")", n.Error.Error())
+	d.dump(d.indent, fmt.Sprintf("%q)", n.Error.Error()))
 }
 
 func (n *BoundError) isNode() {}

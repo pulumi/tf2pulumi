@@ -46,11 +46,13 @@ Pulumi TypeScript program that describes the same resource graph.`,
 		"allows code generation to continue if resource provider plugins are missing")
 	flag.BoolVar(&opts.AllowMissingVariables, "allow-missing-variables", false,
 		"allows code generation to continue if the config references missing variables")
+	flag.BoolVar(&opts.AllowMissingComments, "allow-missing-comments", true,
+		"allows code generation to continue if there are errors extracting comments")
 
 	rootCmd.AddCommand(&cobra.Command{
 		Use:   "version",
 		Short: "Print the version number of tf2pulumi",
-		Long:  `All software has versions. This is tf2pulumi's`,
+		Long:  `All software has versions. This is tf2pulumi's.`,
 		Run: func(cmd *cobra.Command, args []string) {
 			fmt.Println(version.Version)
 		},

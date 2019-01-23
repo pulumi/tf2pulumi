@@ -274,6 +274,13 @@ func (g *generator) isRoot() bool {
 	return len(g.module.Tree.Path()) == 0
 }
 
+// genComment generates a comment into the output.
+func (g *generator) genComment(w io.Writer, lines []string) {
+	for _, l := range lines {
+		g.genf(w, "%s//%s\n", g.indent, l)
+	}
+}
+
 // GeneratePreamble generates appropriate import statements based on the providers referenced by the set of modules.
 func (g *generator) GeneratePreamble(modules []*il.Graph) error {
 	// Find the root module and stash its path.
@@ -438,6 +445,10 @@ func (g *generator) GenerateVariables(vs []*il.VariableNode) error {
 		name := tsName(v.Config.Name, nil, nil, false)
 		_, isUnknown := g.unknownInputs[v]
 
+		if v.Comments != nil {
+			g.genComment(g.w, v.Comments.Leading)
+		}
+
 		g.printf("%sconst var_%s = ", g.indent, cleanName(v.Config.Name))
 		if v.DefaultValue == nil {
 			if isRoot {
@@ -486,6 +497,10 @@ func (g *generator) GenerateLocal(l *il.LocalNode) error {
 		return err
 	}
 
+	if l.Comments != nil {
+		g.genComment(g.w, l.Comments.Leading)
+	}
+
 	g.printf("%sconst %s = %s;\n", g.indent, localName(l.Config.Name), value)
 	return nil
 }
@@ -499,6 +514,10 @@ func (g *generator) GenerateModule(m *il.ModuleNode) error {
 		return err
 	}
 
+	if m.Comments != nil {
+		g.genComment(g.w, m.Comments.Leading)
+	}
+
 	modName := cleanName(m.Config.Name)
 	g.printf("%sconst mod_%s = new_mod_%s(\"%s\", %s);\n", g.indent, modName, modName, modName, args)
 	return nil
@@ -509,6 +528,10 @@ func (g *generator) GenerateModule(m *il.ModuleNode) error {
 // function. Single-instance resources are assigned to a local variable; counted resources are stored in an array-typed
 // local.
 func (g *generator) GenerateResource(r *il.ResourceNode) error {
+	if r.Comments != nil {
+		g.genComment(g.w, r.Comments.Leading)
+	}
+
 	// If this resource's provider is one of the built-ins, perform whatever provider-specific code generation is
 	// required.
 	switch r.Provider.Config.Name {
@@ -643,6 +666,10 @@ func (g *generator) GenerateOutputs(os []*il.OutputNode) error {
 		outputs, _, err := g.computeProperty(o.Value, false, "")
 		if err != nil {
 			return err
+		}
+
+		if o.Comments != nil {
+			g.genComment(g.w, o.Comments.Leading)
 		}
 
 		if !isRoot {

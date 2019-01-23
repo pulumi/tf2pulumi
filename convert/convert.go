@@ -80,6 +80,8 @@ type Options struct {
 	ProviderInfoSource il.ProviderInfoSource
 	// Optional logger for diagnostic information.
 	Logger *log.Logger
+	// AllowMissingComments allows binding to succeed even if there are errors extracting comments from the source.
+	AllowMissingComments bool
 }
 
 type noCredentials struct{}
@@ -105,6 +107,7 @@ func buildGraphs(tree *module.Tree, isRoot bool, opts Options) ([]*il.Graph, err
 		AllowMissingVariables: opts.AllowMissingVariables,
 		ProviderInfoSource:    opts.ProviderInfoSource,
 		Logger:                opts.Logger,
+		AllowMissingComments:  opts.AllowMissingComments,
 	}
 	g, err := il.BuildGraph(tree, &buildOpts)
 	if err != nil {
