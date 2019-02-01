@@ -236,8 +236,14 @@ func (g *generator) computeProperty(prop il.BoundNode, indent bool, count string
 	})
 	contract.Assert(err == nil)
 
-	// Next, rewrite assets, insert any necessary coercions, and run the apply transform.
+	// Next, rewrite assets, lower certain constructrs to literals, insert any necessary coercions, and run the apply
+	// transform.
 	p, err := il.RewriteAssets(prop)
+	if err != nil {
+		return "", false, err
+	}
+
+	p, err = g.lowerToLiterals(p)
 	if err != nil {
 		return "", false, err
 	}
