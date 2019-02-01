@@ -31,6 +31,8 @@ func TestLegalIdentifiers(t *testing.T) {
 		{"12/bar\\baz", "_12_bar_baz"},
 		{"foo bar", "foo_bar"},
 		{"foo-bar", "foo_bar"},
+		{".bar", "_bar"},
+		{"1.bar", "_1_bar"},
 	}
 	for _, c := range illegalCases {
 		assert.False(t, isLegalIdentifier(c.original))

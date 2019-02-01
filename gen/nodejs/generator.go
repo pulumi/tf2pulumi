@@ -94,22 +94,18 @@ func isLegalIdentifier(s string) bool {
 // cleanName replaces characters that are not allowed in JavaScript identifiers with underscores. No attempt is made to
 // ensure that the result is unique.
 func cleanName(name string) string {
-	reader, writer := strings.NewReader(name), strings.Builder{}
-
-	// consume the leading character
-	c, _, err := reader.ReadRune()
-	if !isLegalIdentifierStart(c) {
-		writer.WriteRune('_')
-	}
-	for err == nil {
+	var builder strings.Builder
+	for i, c := range name {
 		if !isLegalIdentifierPart(c) {
-			writer.WriteRune('_')
+			builder.WriteRune('_')
 		} else {
-			writer.WriteRune(c)
+			if i == 0 && !isLegalIdentifierStart(c) {
+				builder.WriteRune('_')
+			}
+			builder.WriteRune(c)
 		}
-		c, _, err = reader.ReadRune()
 	}
-	return writer.String()
+	return builder.String()
 }
 
 // localName returns the name for a local value with the given Terraform name.
