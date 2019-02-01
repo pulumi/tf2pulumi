@@ -17,7 +17,6 @@ package nodejs
 import (
 	"fmt"
 	"io"
-	"path/filepath"
 	"strings"
 
 	"github.com/hashicorp/hil/ast"
@@ -352,6 +351,41 @@ func (g *generator) genIndex(w io.Writer, n *il.BoundIndex) {
 	g.genf(w, "%v[%v]", n.TargetExpr, n.KeyExpr)
 }
 
+func (g *generator) genStringLiteral(w io.Writer, v string) {
+	builder := strings.Builder{}
+	if !strings.Contains(v, "\n") {
+		// This string does not contain newlines, so we'll generate a normal string literal. Quotes and backslashes
+		// will be escaped in conformance with ECMA-262 11.8.4 ("String Literals").
+		builder.WriteRune('"')
+		for _, c := range v {
+			if c == '"' || c == '\\' {
+				builder.WriteRune('\\')
+			}
+			builder.WriteRune(c)
+		}
+		builder.WriteRune('"')
+	} else {
+		// This string does contain newlines, so we'll generate a template string literal. "${", backquotes, and
+		// backslashes will be escaped in conformance with ECMA-262 11.8.6 ("Template Literal Lexical Components").
+		runes := []rune(v)
+		builder.WriteRune('`')
+		for i, c := range runes {
+			switch c {
+			case '$':
+				if i < len(runes)-1 && runes[i+1] == '{' {
+					builder.WriteRune('\\')
+				}
+			case '`', '\\':
+				builder.WriteRune('\\')
+			}
+			builder.WriteRune(c)
+		}
+		builder.WriteRune('`')
+	}
+
+	g.genf(w, "%s", builder.String())
+}
+
 // genLiteral generates code for a single literal expression
 func (g *generator) genLiteral(w io.Writer, n *il.BoundLiteral) {
 	switch n.ExprType {
@@ -365,7 +399,7 @@ func (g *generator) genLiteral(w io.Writer, n *il.BoundLiteral) {
 			g.genf(w, "%f", n.Value)
 		}
 	case il.TypeString:
-		g.genf(w, "%q", n.Value)
+		g.genStringLiteral(w, n.Value.(string))
 	default:
 		contract.Failf("unexpected literal type in genLiteral: %v", n.ExprType)
 	}
@@ -401,18 +435,9 @@ func (g *generator) genVariableAccess(w io.Writer, n *il.BoundVariableAccess) {
 		case config.PathValueCwd:
 			g.gen(w, "process.cwd()")
 		case config.PathValueModule:
-			path := g.module.Tree.Config().Dir
-
-			// Attempt to make this path relative to that of the root module.
-			rel, err := filepath.Rel(g.rootPath, path)
-			if err == nil {
-				path = rel
-			}
-
-			g.gen(w, &il.BoundLiteral{ExprType: il.TypeString, Value: path})
+			contract.Failf("modules path references should have been lowered to literals")
 		case config.PathValueRoot:
-			// NOTE: this might not be the most useful or correct value. Might want Node's __directory or similar.
-			g.gen(w, &il.BoundLiteral{ExprType: il.TypeString, Value: "."})
+			contract.Failf("root path references should have been lowered to literals")
 		}
 	case *config.ResourceVariable:
 		// We only generate up to the "output" part of the path here: the apply transform will take care of the rest.

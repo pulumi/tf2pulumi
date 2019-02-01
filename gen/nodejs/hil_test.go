@@ -1,0 +1,33 @@
+package nodejs
+
+import (
+	"strings"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+)
+
+func TestStringLiteral(t *testing.T) {
+	type literalCase struct {
+		input    string
+		expected string
+	}
+
+	cases := []literalCase{
+		{"foobar", `"foobar"`},
+		{`foo"bar`, `"foo\"bar"`},
+		{`foo\bar`, `"foo\\bar"`},
+		{"foo\nbar", "`foo\nbar`"},
+		{"foo\nbar$", "`foo\nbar$`"},
+		{"foo\nbar`", "`foo\nbar\\``"},
+		{"foo\nbar\\", "`foo\nbar\\\\`"},
+		{"foo\nbar${", "`foo\nbar\\${`"},
+	}
+
+	g := &generator{}
+	for _, c := range cases {
+		b := &strings.Builder{}
+		g.genStringLiteral(b, c.input)
+		assert.Equal(t, c.expected, b.String())
+	}
+}
