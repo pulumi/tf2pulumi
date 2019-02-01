@@ -353,15 +353,21 @@ func (g *generator) genIndex(w io.Writer, n *il.BoundIndex) {
 
 func (g *generator) genStringLiteral(w io.Writer, v string) {
 	builder := strings.Builder{}
-	if !strings.Contains(v, "\n") {
-		// This string does not contain newlines, so we'll generate a normal string literal. Quotes and backslashes
-		// will be escaped in conformance with ECMA-262 11.8.4 ("String Literals").
+	newlines := strings.Count(v, "\n")
+	if newlines == 0 || newlines == 1 && (v[0] == '\n' || v[len(v)-1] == '\n') {
+		// This string either does not contain newlines or contains a single leading or trailing newline, so we'll
+		// generate a normal string literal. Quotes, backslashes, and newlines will be escaped in conformance with
+		// ECMA-262 11.8.4 ("String Literals").
 		builder.WriteRune('"')
 		for _, c := range v {
-			if c == '"' || c == '\\' {
-				builder.WriteRune('\\')
+			if c == '\n' {
+				builder.WriteString(`\n`)
+			} else {
+				if c == '"' || c == '\\' {
+					builder.WriteRune('\\')
+				}
+				builder.WriteRune(c)
 			}
-			builder.WriteRune(c)
 		}
 		builder.WriteRune('"')
 	} else {
