@@ -19,6 +19,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/hashicorp/terraform/command"
 	"github.com/hashicorp/terraform/config"
@@ -30,7 +31,17 @@ import (
 
 	"github.com/pulumi/tf2pulumi/gen"
 	"github.com/pulumi/tf2pulumi/gen/nodejs"
+	"github.com/pulumi/tf2pulumi/gen/python"
 	"github.com/pulumi/tf2pulumi/il"
+)
+
+const (
+	LanguageTypescript string = "typescript"
+	LanguagePython     string = "python"
+)
+
+var (
+	ValidLanguages = [...]string{LanguageTypescript, LanguagePython}
 )
 
 // Convert converts a Terraform module at the provided location into a Pulumi module, written to stdout.
@@ -76,7 +87,12 @@ func Convert(opts Options) error {
 		}
 	}
 
-	if err = gen.Generate(gs, nodejs.New("auto", opts.Writer)); err != nil {
+	generator, err := createGenerator("auto", opts)
+	if err != nil {
+		return errors.Wrapf(err, "creating generator")
+	}
+
+	if err = gen.Generate(gs, generator); err != nil {
 		return errors.Wrapf(err, "generating code")
 	}
 
@@ -105,6 +121,8 @@ type Options struct {
 	ProviderInfoSource il.ProviderInfoSource
 	// Optional logger for diagnostic information.
 	Logger *log.Logger
+	// The target language.
+	TargetLanguage string
 }
 
 type noCredentials struct{}
@@ -138,4 +156,16 @@ func buildGraphs(tree *module.Tree, isRoot bool, opts Options) ([]*il.Graph, err
 	}
 
 	return append(children, g), nil
+}
+
+func createGenerator(projectName string, opts Options) (gen.Generator, error) {
+	switch opts.TargetLanguage {
+	case LanguageTypescript:
+		return nodejs.New(projectName, opts.Writer), nil
+	case LanguagePython:
+		return python.New(projectName, opts.Writer), nil
+	default:
+		return nil, errors.Errorf("invalid language '%s', expected one of %s",
+			opts.TargetLanguage, strings.Join(ValidLanguages[:], ", "))
+	}
 }

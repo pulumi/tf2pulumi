@@ -54,7 +54,8 @@ Pulumi TypeScript program that describes the same resource graph.`,
 		"allows code generation to continue if there are errors extracting comments")
 	flag.StringVar(&resourceNameProperty, "filter-resource-names", "",
 		"when set, the property with the given key will be removed from all resources")
-
+	flag.StringVar(&opts.TargetLanguage, "target-language", "typescript",
+		"sets the target language")
 	rootCmd.AddCommand(&cobra.Command{
 		Use:   "version",
 		Short: "Print the version number of tf2pulumi",
