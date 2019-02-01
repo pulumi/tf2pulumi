@@ -1660,6 +1660,7 @@
     "github.com/pulumi/pulumi/pkg/util/contract",
     "github.com/pulumi/pulumi/pkg/util/fsutil",
     "github.com/pulumi/pulumi/pkg/workspace",
+    "github.com/spf13/cobra",
     "github.com/stretchr/testify/assert",
     "github.com/terraform-providers/terraform-provider-archive/archive",
     "github.com/terraform-providers/terraform-provider-http/http",

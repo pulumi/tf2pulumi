@@ -15,9 +15,10 @@
 package main
 
 import (
-	"flag"
 	"fmt"
 	"os"
+
+	"github.com/spf13/cobra"
 
 	"github.com/pulumi/tf2pulumi/convert"
 	"github.com/pulumi/tf2pulumi/version"
@@ -25,20 +26,37 @@ import (
 
 func main() {
 	var opts convert.Options
+
+	rootCmd := &cobra.Command{
+		Use:   "tf2pulumi",
+		Short: "tf2pulumi converts Terraform configuration to a Pulumi TypeScript program",
+		Long: `A converter that takes Terraform configuration as input and produces a
+Pulumi TypeScript program that describes the same resource graph.`,
+
+		SilenceErrors: true,
+		SilenceUsage:  true,
+
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return convert.Convert(opts)
+		},
+	}
+
+	flag := rootCmd.PersistentFlags()
 	flag.BoolVar(&opts.AllowMissingProviders, "allow-missing-plugins", false,
 		"allows code generation to continue if resource provider plugins are missing")
 	flag.BoolVar(&opts.AllowMissingVariables, "allow-missing-variables", false,
 		"allows code generation to continue if the config references missing variables")
 
-	flag.Parse()
+	rootCmd.AddCommand(&cobra.Command{
+		Use:   "version",
+		Short: "Print the version number of tf2pulumi",
+		Long:  `All software has versions. This is tf2pulumi's`,
+		Run: func(cmd *cobra.Command, args []string) {
+			fmt.Println(version.Version)
+		},
+	})
 
-	args := flag.Args()
-	if len(args) == 1 && args[0] == "version" {
-		fmt.Println(version.Version)
-		return
-	}
-
-	if err := convert.Convert(opts); err != nil {
+	if err := rootCmd.Execute(); err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(-1)
 	}
