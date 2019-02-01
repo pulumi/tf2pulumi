@@ -1,4 +1,11 @@
-## v0.4.6 (Unreleased)
+## v0.4.7 (Unreleased)
+
+## v0.4.6 (Released February 1, 2019)
+
+### Improvements
+
+- Added support for the Pulumi f5bigip provider
+- Simplified string literal generation for literals that contain a single leading or trailing newline
 
 ## v0.4.5 (Released February 1, 2019)
 
