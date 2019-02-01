@@ -29,3 +29,12 @@ For contributors we use the standard fork based workflow. Fork this repository, 
 ## Getting Help
 
 We're sure there are rough edges and we appreciate you helping out. If you want to talk with other folks hacking on Pulumi (or members of the Pulumi team!) come hang out `#contribute` channel in the [Pulumi Community Slack](https://slack.pulumi.io/).
+
+## Building Release Artifacts
+
+To build the `.tar.gz` files that make up a tf2pulumi release, run `make release`. This will produce two releasable artifacts:
+
+- tf2pulumi-linux-x64-vX.X.X.tar.gz
+- tf2pulumi-darwin-x64-vX.X.X.tar.gz
+
+These archives can then be uploaded as part of a GitHub Release.

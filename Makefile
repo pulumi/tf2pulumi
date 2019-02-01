@@ -18,6 +18,12 @@ test_fast::
 test_all::
 	PATH=$(PULUMI_BIN):$(PATH) go test -v -cover -timeout 1h ./tests/...
 
+release::
+	GOOS=linux GOARCH=amd64 go build -ldflags "-X github.com/pulumi/tf2pulumi/version.Version=${VERSION}" github.com/pulumi/tf2pulumi
+	tar -c ./tf2pulumi | gzip > tf2pulumi-${VERSION}-linux-x64.tar.gz
+	GOOS=darwin GOARCH=amd64 go build -ldflags "-X github.com/pulumi/tf2pulumi/version.Version=${VERSION}" github.com/pulumi/tf2pulumi
+	tar -c ./tf2pulumi | gzip > tf2pulumi-${VERSION}-darwin-x64.tar.gz
+
 # The travis_* targets are entrypoints for CI.
 .PHONY: travis_cron travis_push travis_pull_request travis_api
 travis_cron: all
