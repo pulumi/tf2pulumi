@@ -274,8 +274,9 @@ func (v *VariableNode) displayName() string {
 // A builder is a temporary structure used to hold the contents of a graph that while it is under construction. The
 // various fields are aligned with their similarly-named peers in Graph.
 type builder struct {
-	logger                   *log.Logger
-	tolerateMissingProviders bool
+	logger                *log.Logger
+	allowMissingProviders bool
+	allowMissingVariables bool
 
 	providerInfo ProviderInfoSource
 	modules      map[string]*ModuleNode
@@ -290,9 +291,9 @@ type builder struct {
 }
 
 func newBuilder(opts *BuildOptions) *builder {
-	tolerateMissingProviders := false
+	allowMissingProviders, allowMissingVariables := false, false
 	if opts != nil {
-		tolerateMissingProviders = opts.AllowMissingProviders
+		allowMissingProviders, allowMissingVariables = opts.AllowMissingProviders, opts.AllowMissingVariables
 	}
 
 	providerInfo := PluginProviderInfoSource
@@ -306,8 +307,9 @@ func newBuilder(opts *BuildOptions) *builder {
 	}
 
 	return &builder{
-		logger:                   logger,
-		tolerateMissingProviders: tolerateMissingProviders,
+		logger:                logger,
+		allowMissingProviders: allowMissingProviders,
+		allowMissingVariables: allowMissingVariables,
 
 		providerInfo: providerInfo,
 		modules:      make(map[string]*ModuleNode),
@@ -464,7 +466,7 @@ func (b *builder) buildModule(m *ModuleNode) error {
 func (b *builder) buildProvider(p *ProviderNode) error {
 	info, pluginName, err := b.getProviderInfo(p)
 	if err != nil {
-		if !b.tolerateMissingProviders {
+		if !b.allowMissingProviders {
 			return err
 		}
 
@@ -658,6 +660,8 @@ type BuildOptions struct {
 	AllowMissingProviders bool
 	// Logger allows the caller to provide a logger for diagnostics. If not provided, the default logger will be used.
 	Logger *log.Logger
+	// AllowMissingVariables allows binding to succeed even if unknown variables are encountered.
+	AllowMissingVariables bool
 }
 
 // BuildGraph analyzes the various entities present in the given module's configuration and constructs the

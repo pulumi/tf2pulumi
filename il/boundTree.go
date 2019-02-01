@@ -342,6 +342,10 @@ func (n *BoundVariableAccess) dump(d *dumper) {
 func (n *BoundVariableAccess) isNode() {}
 func (n *BoundVariableAccess) isExpr() {}
 
+func (n *BoundVariableAccess) IsMissingVariable() bool {
+	return n.ILNode == nil
+}
+
 // BoundListProperty is the bound form of an HCL list property. (e.g. `[ foo, bar ]`).
 type BoundListProperty struct {
 	// Schemas are the Terraform and Pulumi schemas associated with the list.

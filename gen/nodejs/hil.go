@@ -415,17 +415,22 @@ func (g *generator) genVariableAccess(w io.Writer, n *il.BoundVariableAccess) {
 			g.gen(w, &il.BoundLiteral{ExprType: il.TypeString, Value: "."})
 		}
 	case *config.ResourceVariable:
-		r := n.ILNode.(*il.ResourceNode)
-
 		// We only generate up to the "output" part of the path here: the apply transform will take care of the rest.
 		g.gen(w, resName(v.Type, v.Name))
 		if v.Multi && v.Index != -1 {
 			g.genf(w, "[%d]", v.Index)
 		}
 
+		// If this access refers to a missing variable, assume that we are dealing with a managed resource. Otherwise,
+		// check the IL node itself.
+		mode := config.ManagedResourceMode
+		if !n.IsMissingVariable() {
+			mode = n.ILNode.(*il.ResourceNode).Config.Mode
+		}
+
 		// A managed resource is not itself an output: instead, it is a bag of outputs. As such, we must generate the
 		// first portion of this access.
-		if r.Config.Mode == config.ManagedResourceMode && len(n.Elements) > 0 {
+		if mode == config.ManagedResourceMode && len(n.Elements) > 0 {
 			element := n.Elements[0]
 			elementSch := n.Schemas.PropertySchemas(element)
 
