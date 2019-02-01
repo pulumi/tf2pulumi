@@ -41,6 +41,7 @@ var PluginProviderInfoSource = ProviderInfoSource(pluginProviderInfoSource{})
 
 var pluginNames = map[string]string{
 	"azurerm":  "azure",
+	"bigip":    "f5bigip",
 	"google":   "gcp",
 	"template": "terraform-template",
 }
