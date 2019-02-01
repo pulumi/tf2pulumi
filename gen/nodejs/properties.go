@@ -15,6 +15,7 @@
 package nodejs
 
 import (
+	"fmt"
 	"io"
 
 	"github.com/hashicorp/terraform/helper/schema"
@@ -70,6 +71,8 @@ func (g *generator) genMapProperty(w io.Writer, n *il.BoundMapProperty) {
 				propSch, key := n.Schemas.PropertySchemas(k), k
 				if !useExactKeys {
 					key = tsName(k, propSch.TF, propSch.Pulumi, true)
+				} else if !isLegalIdentifier(key) {
+					key = fmt.Sprintf("%q", key)
 				}
 				g.genf(w, "\n%s%s: %v,", g.indent, key, n.Elements[k])
 			}

@@ -20,6 +20,7 @@ import (
 	"io"
 	"sort"
 	"strings"
+	"unicode"
 
 	"github.com/hashicorp/terraform/config"
 	"github.com/hashicorp/terraform/helper/schema"
@@ -59,18 +60,52 @@ type generator struct {
 	w io.Writer
 }
 
-// cleanName replaces characters that are not allowed in Typescript identifiers with underscores. No attempt is made to
+// isLegalIdentifierStart returns true if it is legal for c to be the first character of a JavaScript identifier as per
+// ECMA-262.
+func isLegalIdentifierStart(c rune) bool {
+	return c == '$' || c == '_' ||
+		unicode.In(c, unicode.Lu, unicode.Ll, unicode.Lt, unicode.Lm, unicode.Lo, unicode.Nl)
+}
+
+// isLegalIdentifierPart returns true if it is legal for c to be part of a JavaScript identifier (besides the first
+// character) as per ECMA-262.
+func isLegalIdentifierPart(c rune) bool {
+	return isLegalIdentifierStart(c) || unicode.In(c, unicode.Mn, unicode.Mc, unicode.Nd, unicode.Pc)
+}
+
+// isLegalIdentifier returns true if s is a legal JavaScript identifier as per ECMA-262.
+func isLegalIdentifier(s string) bool {
+	reader := strings.NewReader(s)
+	c, _, _ := reader.ReadRune()
+	if !isLegalIdentifierStart(c) {
+		return false
+	}
+	for {
+		c, _, err := reader.ReadRune()
+		if err != nil {
+			return err == io.EOF
+		}
+		if !isLegalIdentifierPart(c) {
+			return false
+		}
+	}
+}
+
+// cleanName replaces characters that are not allowed in JavaScript identifiers with underscores. No attempt is made to
 // ensure that the result is unique.
 func cleanName(name string) string {
-	if !strings.ContainsAny(name, " -.") {
-		return name
-	}
-	return strings.Map(func(r rune) rune {
-		if r == ' ' || r == '-' || r == '.' {
-			return '_'
+	var builder strings.Builder
+	for i, c := range name {
+		if !isLegalIdentifierPart(c) {
+			builder.WriteRune('_')
+		} else {
+			if i == 0 && !isLegalIdentifierStart(c) {
+				builder.WriteRune('_')
+			}
+			builder.WriteRune(c)
 		}
-		return r
-	}, name)
+	}
+	return builder.String()
 }
 
 // localName returns the name for a local value with the given Terraform name.
@@ -89,9 +124,9 @@ func tsName(tfName string, tfSchema *schema.Schema, schemaInfo *tfbridge.SchemaI
 		return schemaInfo.Name
 	}
 
-	if strings.ContainsAny(tfName, " -.") {
+	if !isLegalIdentifier(tfName) {
 		if isObjectKey {
-			return fmt.Sprintf("\"%s\"", tfName)
+			return fmt.Sprintf("%q", tfName)
 		}
 		return cleanName(tfName)
 	}
