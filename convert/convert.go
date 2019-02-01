@@ -67,8 +67,11 @@ func Convert(opts Options) error {
 }
 
 type Options struct {
-	// AllowMissingProviders, if true, code-gen continues even if resource providers are missing.
+	// AllowMissingProviders, if true, allows code-gen to continue even if resource providers are missing.
 	AllowMissingProviders bool
+	// AllowMissingVariables, if true, allows code-gen to continue even if the input configuration references missing
+	// variables.
+	AllowMissingVariables bool
 	// Path, when set, overrides the default path (".") to load the source Terraform module from.
 	Path string
 	// Writer can be set to override the default behavior of writing the resulting code to stdout.
@@ -99,6 +102,7 @@ func buildGraphs(tree *module.Tree, isRoot bool, opts Options) ([]*il.Graph, err
 
 	buildOpts := il.BuildOptions{
 		AllowMissingProviders: opts.AllowMissingProviders,
+		AllowMissingVariables: opts.AllowMissingVariables,
 		ProviderInfoSource:    opts.ProviderInfoSource,
 		Logger:                opts.Logger,
 	}

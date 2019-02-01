@@ -232,6 +232,13 @@ func (b *propertyBinder) bindVariableAccess(n *ast.VariableAccess) (BoundExpr, e
 		// "local."
 		l, ok := b.builder.locals[v.Name]
 		if !ok {
+			if b.builder.allowMissingVariables {
+				return &BoundVariableAccess{
+					HILNode:  n,
+					ExprType: TypeUnknown,
+					TFVar:    v,
+				}, nil
+			}
 			return nil, errors.Errorf("unknown local %v", v.Name)
 		}
 		ilNode = l
@@ -246,6 +253,13 @@ func (b *propertyBinder) bindVariableAccess(n *ast.VariableAccess) (BoundExpr, e
 		// "module."
 		m, ok := b.builder.modules[v.Name]
 		if !ok {
+			if b.builder.allowMissingVariables {
+				return &BoundVariableAccess{
+					HILNode:  n,
+					ExprType: TypeUnknown.OutputOf(),
+					TFVar:    v,
+				}, nil
+			}
 			return nil, errors.Errorf("unknown module %v", v.Name)
 		}
 		ilNode = m
@@ -257,9 +271,20 @@ func (b *propertyBinder) bindVariableAccess(n *ast.VariableAccess) (BoundExpr, e
 	case *config.ResourceVariable:
 		// default
 
+		// Split the path elements.
+		elements = strings.Split(v.Field, ".")
+
 		// Look up the resource.
 		r, ok := b.builder.resources[v.ResourceId()]
 		if !ok {
+			if b.builder.allowMissingVariables {
+				return &BoundVariableAccess{
+					HILNode:  n,
+					Elements: elements,
+					ExprType: TypeUnknown.OutputOf(),
+					TFVar:    v,
+				}, nil
+			}
 			return nil, errors.Errorf("unknown resource %v", v.ResourceId())
 		}
 		ilNode = r
@@ -273,7 +298,6 @@ func (b *propertyBinder) bindVariableAccess(n *ast.VariableAccess) (BoundExpr, e
 		sch = r.Schemas()
 
 		// Parse the path of the accessed field (name{.property}+).
-		elements = strings.Split(v.Field, ".")
 		elemSch := sch
 		for _, e := range elements {
 			elemSch = elemSch.PropertySchemas(e)
@@ -302,6 +326,13 @@ func (b *propertyBinder) bindVariableAccess(n *ast.VariableAccess) (BoundExpr, e
 		// Look up the variable.
 		vn, ok := b.builder.variables[v.Name]
 		if !ok {
+			if b.builder.allowMissingVariables {
+				return &BoundVariableAccess{
+					HILNode:  n,
+					ExprType: TypeString,
+					TFVar:    v,
+				}, nil
+			}
 			return nil, errors.Errorf("unknown variable %s", v.Name)
 		}
 		ilNode = vn
