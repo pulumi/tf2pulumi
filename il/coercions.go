@@ -12,56 +12,80 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package nodejs
+package il
 
 import (
-	"github.com/hashicorp/hil/ast"
+	"strconv"
 
-	"github.com/pulumi/tf2pulumi/il"
+	"github.com/hashicorp/hil/ast"
 )
 
 // makeCoercion inserts a call to the `__coerce` intrinsic if one is required to convert the given expression to the
-// given type.
-func makeCoercion(n il.BoundNode, toType il.Type) il.BoundNode {
+// given type. If the input node is statically coercable according to the semantics of
+// "github.com/hashicorp/terraform/helper/schema.stringToPrimitive".
+func makeCoercion(n BoundNode, toType Type) BoundNode {
 	// TODO: we really need dynamic coercions for the negative case.
 	from, to := n.Type().ElementType(), toType.ElementType()
 
-	e, ok := n.(il.BoundExpr)
+	e, ok := n.(BoundExpr)
 	if !ok || from == to {
 		return n
 	}
 
 	switch from {
-	case il.TypeBool, il.TypeNumber:
-		if to != il.TypeString {
+	case TypeBool, TypeNumber:
+		if to != TypeString {
 			return n
 		}
-	case il.TypeString:
-		if to != il.TypeBool && to != il.TypeNumber {
+	case TypeString:
+		switch to {
+		case TypeBool:
+			if lit, ok := n.(*BoundLiteral); ok {
+				str := lit.Value.(string)
+				if str == "" {
+					return &BoundLiteral{ExprType: TypeBool, Value: false}
+				}
+				val, err := strconv.ParseBool(str)
+				if err == nil {
+					return &BoundLiteral{ExprType: TypeBool, Value: val}
+				}
+			}
+		case TypeNumber:
+			if lit, ok := n.(*BoundLiteral); ok {
+				str := lit.Value.(string)
+				if str == "" {
+					return &BoundLiteral{ExprType: TypeNumber, Value: 0.0}
+				}
+				val, err := strconv.ParseFloat(str, 64)
+				if err == nil {
+					return &BoundLiteral{ExprType: TypeNumber, Value: val}
+				}
+			}
+		default:
 			return n
 		}
 	default:
 		return n
 	}
 
-	return &il.BoundCall{
+	return &BoundCall{
 		HILNode:  &ast.Call{Func: "__coerce"},
 		ExprType: toType,
-		Args:     []il.BoundExpr{e},
+		Args:     []BoundExpr{e},
 	}
 }
 
-// addCoercions inserts calls to the `__coerce` intrinsic in cases where a list or map element's type disagrees with
+// AddCoercions inserts calls to the `__coerce` intrinsic in cases where a list or map element's type disagrees with
 // the element type present in the list or map's schema.
-func addCoercions(prop il.BoundNode) (il.BoundNode, error) {
-	rewriter := func(n il.BoundNode) (il.BoundNode, error) {
+func AddCoercions(prop BoundNode) (BoundNode, error) {
+	rewriter := func(n BoundNode) (BoundNode, error) {
 		switch n := n.(type) {
-		case *il.BoundListProperty:
+		case *BoundListProperty:
 			elemType := n.Schemas.ElemSchemas().Type()
 			for i := range n.Elements {
 				n.Elements[i] = makeCoercion(n.Elements[i], elemType)
 			}
-		case *il.BoundMapProperty:
+		case *BoundMapProperty:
 			for k := range n.Elements {
 				n.Elements[k] = makeCoercion(n.Elements[k], n.Schemas.PropertySchemas(k).Type())
 			}
@@ -69,5 +93,5 @@ func addCoercions(prop il.BoundNode) (il.BoundNode, error) {
 		return n, nil
 	}
 
-	return il.VisitBoundNode(prop, il.IdentityVisitor, rewriter)
+	return VisitBoundNode(prop, IdentityVisitor, rewriter)
 }

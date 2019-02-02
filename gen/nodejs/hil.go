@@ -17,8 +17,6 @@ package nodejs
 import (
 	"fmt"
 	"io"
-	"regexp"
-	"strconv"
 	"strings"
 
 	"github.com/hashicorp/hil/ast"
@@ -164,27 +162,6 @@ func (g *generator) genApplyArg(w io.Writer, index int) {
 	}
 }
 
-// numberParseFloatRegex matches an ECMA-262 StrDecimalLiteral (see Section 7.1.3.1, "ToNumber Applied to the String
-// Type").
-var numberParseFloatRegex = regexp.MustCompile(
-	`^[+-]?(([0-9]+\.[0-9]*([eE][+-]?[0-9]+)?)|(\.[0-9]+([eE][+-]?[0-9]+)?)|([0-9]+([eE][+-]?[0-9]+)?))`)
-
-// numberParseFloat implements string -> number conversion with behavior that is similar (but probably not identical)
-// to JavaScript's Number.parseFloat as specified by ECMA-262 (see Section 18.2.4, "parseFloat (string)").
-func numberParseFloat(v string) (float64, bool) {
-	str := numberParseFloatRegex.FindString(v)
-	if str == "" {
-		return 0, false
-	}
-
-	f, err := strconv.ParseFloat(str, 64)
-	if err != nil {
-		return 0, false
-	}
-
-	return f, true
-}
-
 // genCoercion generates code for a single call to the __coerce intrinsic that converts an expression between types.
 func (g *generator) genCoercion(w io.Writer, n il.BoundExpr, toType il.Type) {
 	switch n.Type() {
@@ -209,22 +186,10 @@ func (g *generator) genCoercion(w io.Writer, n il.BoundExpr, toType il.Type) {
 	case il.TypeString:
 		switch toType {
 		case il.TypeBool:
-			if lit, ok := n.(*il.BoundLiteral); ok {
-				g.genf(w, "%v", lit.Value.(string) == "true")
-			} else {
-				g.genf(w, "(%v === \"true\")", n)
-			}
+			g.genf(w, "(%v === \"true\")", n)
 			return
 		case il.TypeNumber:
-			if lit, ok := n.(*il.BoundLiteral); ok {
-				if f, ok := numberParseFloat(lit.Value.(string)); ok {
-					g.genLiteral(w, &il.BoundLiteral{ExprType: il.TypeNumber, Value: f})
-				} else {
-					g.genf(w, "NaN")
-				}
-			} else {
-				g.genf(w, "Number.parseFloat(%v)", n)
-			}
+			g.genf(w, "Number.parseFloat(%v)", n)
 			return
 		}
 	}
