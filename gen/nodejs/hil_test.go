@@ -1,7 +1,7 @@
 package nodejs
 
 import (
-	"strings"
+	"bytes"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -29,8 +29,8 @@ func TestStringLiteral(t *testing.T) {
 
 	g := &generator{}
 	for _, c := range cases {
-		b := &strings.Builder{}
-		g.genStringLiteral(b, c.input)
+		var b bytes.Buffer
+		g.genStringLiteral(&b, c.input)
 		assert.Equal(t, c.expected, b.String())
 	}
 }

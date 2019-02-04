@@ -186,11 +186,7 @@ func (g *generator) genCoercion(w io.Writer, n il.BoundExpr, toType il.Type) {
 	case il.TypeString:
 		switch toType {
 		case il.TypeBool:
-			if lit, ok := n.(*il.BoundLiteral); ok {
-				g.genf(w, "%v", lit.Value.(string) == "true")
-			} else {
-				g.genf(w, "(%v === \"true\")", n)
-			}
+			g.genf(w, "(%v === \"true\")", n)
 			return
 		case il.TypeNumber:
 			g.genf(w, "Number.parseFloat(%v)", n)
@@ -402,7 +398,7 @@ func (g *generator) genLiteral(w io.Writer, n *il.BoundLiteral) {
 		if float64(int64(f)) == f {
 			g.genf(w, "%d", int64(f))
 		} else {
-			g.genf(w, "%f", n.Value)
+			g.genf(w, "%g", n.Value)
 		}
 	case il.TypeString:
 		g.genStringLiteral(w, n.Value.(string))

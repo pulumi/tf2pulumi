@@ -248,7 +248,7 @@ func (g *generator) computeProperty(prop il.BoundNode, indent bool, count string
 		return "", false, err
 	}
 
-	p, err = addCoercions(p)
+	p, err = il.AddCoercions(p)
 	if err != nil {
 		return "", false, err
 	}
