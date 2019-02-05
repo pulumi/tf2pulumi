@@ -30,6 +30,8 @@ func (g *generator) genListProperty(w io.Writer, n *il.BoundListProperty) {
 	case 0:
 		g.gen(w, "[]")
 	case 1:
+		// We can ignore comments in this case: the comment extractor will never associate comments with a
+		// single-element list.
 		v := n.Elements[0]
 		if v.Type().IsList() {
 			// TF flattens list elements that are themselves lists into the parent list.
@@ -44,6 +46,10 @@ func (g *generator) genListProperty(w io.Writer, n *il.BoundListProperty) {
 		g.gen(w, "[")
 		g.indented(func() {
 			for _, v := range n.Elements {
+				g.genf(w, "\n")
+				g.genLeadingComment(w, v.Comments())
+				g.genf(w, "%s", g.indent)
+
 				// TF flattens list elements that are themselves lists into the parent list.
 				//
 				// TODO: if there is a list element that is dynamically a list, that also needs to be flattened. This is
@@ -51,7 +57,9 @@ func (g *generator) genListProperty(w io.Writer, n *il.BoundListProperty) {
 				if v.Type().IsList() {
 					g.gen(w, "...")
 				}
-				g.genf(w, "\n%s%v,", g.indent, v)
+				g.genf(w, "%v,", v)
+
+				g.genTrailingComment(w, v.Comments())
 			}
 		})
 		g.gen(w, "\n", g.indent, "]")
@@ -68,13 +76,20 @@ func (g *generator) genMapProperty(w io.Writer, n *il.BoundMapProperty) {
 		g.gen(w, "{")
 		g.indented(func() {
 			for _, k := range gen.SortedKeys(n.Elements) {
+				v := n.Elements[k]
+
+				g.genf(w, "\n")
+				g.genLeadingComment(w, v.Comments())
+
 				propSch, key := n.Schemas.PropertySchemas(k), k
 				if !useExactKeys {
 					key = tsName(k, propSch.TF, propSch.Pulumi, true)
 				} else if !isLegalIdentifier(key) {
 					key = fmt.Sprintf("%q", key)
 				}
-				g.genf(w, "\n%s%s: %v,", g.indent, key, n.Elements[k])
+				g.genf(w, "%s%s: %v,", g.indent, key, v)
+
+				g.genTrailingComment(w, v.Comments())
 			}
 		})
 		g.gen(w, "\n", g.indent, "}")
