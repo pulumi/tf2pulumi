@@ -15,6 +15,10 @@ func assertLeading(t *testing.T, c *Comments, expected ...string) {
 	assert.Equal(t, expected, c.Leading)
 }
 
+func assertTrailing(t *testing.T, c *Comments, expected ...string) {
+	assert.Equal(t, expected, c.Trailing)
+}
+
 func TestExtractComments(t *testing.T) {
 	const hclText = `
 # Accept the AWS region as input.
@@ -23,7 +27,9 @@ variable "aws_region" {
 	default = "us-west-2"
 }
 
-# Specify provider details
+/*
+Specify provider details
+*/
 provider "aws" {
 	# Pull the region from a variable
     region = "${var.aws_region}"
@@ -33,8 +39,8 @@ provider "aws" {
 #
 # Note that the VPC has been tagged appropriately.
 resource "aws_vpc" "default" {
-    cidr_block = "10.0.0.0/16"
-	enable_dns_hostnames = true
+    cidr_block = "10.0.0.0/16"  # Just one CIDR block
+	enable_dns_hostnames = true # Definitely want DNS hostnames.
 
 	# The tag collection for this VPC.
 	tags {
@@ -49,6 +55,9 @@ locals {
 		# The ID
 		id = "${aws_vpc.default.id}"
 	}
+
+	# The region, again
+	region = "${var.aws_region}" // why not
 }
 
 // Create a security group.
@@ -70,7 +79,7 @@ resource "aws_security_group" "default" {
 	ingress {
 		from_port   = 80
 		to_port     = 80
-		protocol    = "tcp"
+		protocol    = "tcp" /* HTTP is TCP-only */
 		cidr_blocks = ["0.0.0.0/0"]
 	}
 
@@ -78,15 +87,19 @@ resource "aws_security_group" "default" {
 	egress {
 		from_port   = 0
 		to_port     = 0
-		protocol    = "-1"
+		protocol    = "-1" // All
 		cidr_blocks = ["0.0.0.0/0"]
 	}
 }
 
-# Output the SG name.
+/**
+ * Output the SG name.
+ *
+ * We pull the name from the default SG.
+ */
 output "security_group_name" {
-	# Take the value from the default SG.
-	value = "${aws_security_group.default.name}"
+	/* Take the value from the default SG. */
+	value = "${aws_security_group.default.name}" # Neat!
 }
 `
 
@@ -124,7 +137,7 @@ output "security_group_name" {
 	assertLeading(t, v.DefaultValue.Comments(), " Default to us-west-2")
 
 	p := b.providers["aws"]
-	assertLeading(t, p.Comments, " Specify provider details")
+	assertLeading(t, p.Comments, "Specify provider details")
 	assertLeading(t, p.Properties.Elements["region"].Comments(), " Pull the region from a variable")
 
 	l := b.locals["vpc"]
@@ -132,8 +145,14 @@ output "security_group_name" {
 	lval := l.Value.(*BoundListProperty).Elements[0].(*BoundMapProperty)
 	assertLeading(t, lval.Elements["id"].Comments(), " The ID")
 
+	l = b.locals["region"]
+	assertLeading(t, l.Comments, " The region, again")
+	assertTrailing(t, l.Comments, " why not")
+
 	vpc := b.resources["aws_vpc.default"]
 	assertLeading(t, vpc.Comments, " Create a VPC.", "", " Note that the VPC has been tagged appropriately.")
+	assertTrailing(t, vpc.Properties.Elements["cidr_block"].Comments(), " Just one CIDR block")
+	assertTrailing(t, vpc.Properties.Elements["enable_dns_hostnames"].Comments(), " Definitely want DNS hostnames.")
 	tagsProp := vpc.Properties.Elements["tags"].(*BoundMapProperty)
 	assertLeading(t, tagsProp.Comments(), " The tag collection for this VPC.")
 	assertLeading(t, tagsProp.Elements["Name"].Comments(), " Ensure that we tag this VPC with a Name.")
@@ -144,11 +163,16 @@ output "security_group_name" {
 	sshAccess := ingressList.Elements[0].(*BoundMapProperty)
 	assertLeading(t, sshAccess.Comments(), " SSH access from anywhere")
 	assertLeading(t, sshAccess.Elements["cidr_blocks"].Comments(), ` "0.0.0.0/0" is anywhere`)
-	assertLeading(t, ingressList.Elements[1].Comments(), " HTTP access from anywhere")
+	httpAccess := ingressList.Elements[1].(*BoundMapProperty)
+	assertLeading(t, httpAccess.Comments(), " HTTP access from anywhere")
+	assertTrailing(t, httpAccess.Elements["protocol"].Comments(), " HTTP is TCP-only")
 	egressList := sg.Properties.Elements["egress"].(*BoundListProperty)
 	assertLeading(t, egressList.Comments(), " outbound internet access")
+	outboundAccess := egressList.Elements[0].(*BoundMapProperty)
+	assertTrailing(t, outboundAccess.Elements["protocol"].Comments(), " All")
 
 	out := b.outputs["security_group_name"]
-	assertLeading(t, out.Comments, " Output the SG name.")
+	assertLeading(t, out.Comments, " Output the SG name.", "", " We pull the name from the default SG.")
 	assertLeading(t, out.Value.Comments(), " Take the value from the default SG.")
+	assertTrailing(t, out.Value.Comments(), " Neat!")
 }

@@ -274,10 +274,29 @@ func (g *generator) isRoot() bool {
 	return len(g.module.Tree.Path()) == 0
 }
 
-// genComment generates a comment into the output.
-func (g *generator) genComment(w io.Writer, lines []string) {
-	for _, l := range lines {
+// genLeadingComment generates a leading comment into the output.
+func (g *generator) genLeadingComment(w io.Writer, comments *il.Comments) {
+	if comments == nil {
+		return
+	}
+	for _, l := range comments.Leading {
 		g.genf(w, "%s//%s\n", g.indent, l)
+	}
+}
+
+// genTrailing comment generates a trailing comment into the output.
+func (g *generator) genTrailingComment(w io.Writer, comments *il.Comments) {
+	if comments == nil {
+		return
+	}
+
+	// If this is a single-line comment, generate it as-is. Otherwise, add a line break and generate it as a block.
+	if len(comments.Trailing) == 1 {
+		g.genf(w, " //%s", comments.Trailing[0])
+	} else {
+		for _, l := range comments.Trailing {
+			g.genf(w, "\n%s//%s", g.indent, l)
+		}
 	}
 }
 
@@ -445,9 +464,7 @@ func (g *generator) GenerateVariables(vs []*il.VariableNode) error {
 		name := tsName(v.Config.Name, nil, nil, false)
 		_, isUnknown := g.unknownInputs[v]
 
-		if v.Comments != nil {
-			g.genComment(g.w, v.Comments.Leading)
-		}
+		g.genLeadingComment(g.w, v.Comments)
 
 		g.printf("%sconst var_%s = ", g.indent, cleanName(v.Config.Name))
 		if v.DefaultValue == nil {
@@ -483,7 +500,10 @@ func (g *generator) GenerateVariables(vs []*il.VariableNode) error {
 				g.printf(f, name, def)
 			}
 		}
-		g.printf(";\n")
+		g.printf(";")
+
+		g.genTrailingComment(g.w, v.Comments)
+		g.printf("\n")
 	}
 	g.printf("\n")
 
@@ -497,11 +517,11 @@ func (g *generator) GenerateLocal(l *il.LocalNode) error {
 		return err
 	}
 
-	if l.Comments != nil {
-		g.genComment(g.w, l.Comments.Leading)
-	}
+	g.genLeadingComment(g.w, l.Comments)
+	g.printf("%sconst %s = %s;", g.indent, localName(l.Config.Name), value)
+	g.genTrailingComment(g.w, l.Comments)
+	g.print("\n")
 
-	g.printf("%sconst %s = %s;\n", g.indent, localName(l.Config.Name), value)
 	return nil
 }
 
@@ -514,33 +534,17 @@ func (g *generator) GenerateModule(m *il.ModuleNode) error {
 		return err
 	}
 
-	if m.Comments != nil {
-		g.genComment(g.w, m.Comments.Leading)
-	}
-
 	modName := cleanName(m.Config.Name)
-	g.printf("%sconst mod_%s = new_mod_%s(\"%s\", %s);\n", g.indent, modName, modName, modName, args)
+	g.genLeadingComment(g.w, m.Comments)
+	g.printf("%sconst mod_%s = new_mod_%s(\"%s\", %s);", g.indent, modName, modName, modName, args)
+	g.genTrailingComment(g.w, m.Comments)
+	g.print("\n")
+
 	return nil
 }
 
-// GenerateResource generates a single resource instantiation. Each resource instantiation is generated as a call or
-// sequence of calls (in the case of a counted resource) to the approriate resource constructor or data source
-// function. Single-instance resources are assigned to a local variable; counted resources are stored in an array-typed
-// local.
-func (g *generator) GenerateResource(r *il.ResourceNode) error {
-	if r.Comments != nil {
-		g.genComment(g.w, r.Comments.Leading)
-	}
-
-	// If this resource's provider is one of the built-ins, perform whatever provider-specific code generation is
-	// required.
-	switch r.Provider.Config.Name {
-	case "archive":
-		return g.generateArchive(r)
-	case "http":
-		return g.generateHTTP(r)
-	}
-
+// generateResource handles the generation of instantiations of non-builtin resources.
+func (g *generator) generateResource(r *il.ResourceNode) error {
 	// Compute the resource type from the Terraform type.
 	underscore := strings.IndexRune(r.Config.Type, '_')
 	if underscore == -1 {
@@ -608,10 +612,10 @@ func (g *generator) GenerateResource(r *il.ResourceNode) error {
 				resName = fmt.Sprintf("`${mod_name}_%s`", r.Config.Name)
 			}
 
-			g.printf("%sconst %s = new %s(%s, %s%s);\n", g.indent, name, qualifiedMemberName, resName, inputs, explicitDeps)
+			g.printf("%sconst %s = new %s(%s, %s%s);", g.indent, name, qualifiedMemberName, resName, inputs, explicitDeps)
 		} else {
 			// TODO: explicit dependencies
-			g.printf("%sconst %s = pulumi.output(%s(%s));\n", g.indent, name, qualifiedMemberName, inputs)
+			g.printf("%sconst %s = pulumi.output(%s(%s));", g.indent, name, qualifiedMemberName, inputs)
 		}
 	} else {
 		// Otherwise we need to Generate multiple resources in a loop.
@@ -640,9 +644,36 @@ func (g *generator) GenerateResource(r *il.ResourceNode) error {
 				g.printf("%s%s.push(pulumi.output(%s(%s)));\n", g.indent, name, qualifiedMemberName, inputs)
 			}
 		})
-		g.printf("%s}\n", g.indent)
+		g.printf("%s}", g.indent)
 	}
 
+	return nil
+}
+
+// GenerateResource generates a single resource instantiation. Each resource instantiation is generated as a call or
+// sequence of calls (in the case of a counted resource) to the approriate resource constructor or data source
+// function. Single-instance resources are assigned to a local variable; counted resources are stored in an array-typed
+// local.
+func (g *generator) GenerateResource(r *il.ResourceNode) error {
+	g.genLeadingComment(g.w, r.Comments)
+
+	// If this resource's provider is one of the built-ins, perform whatever provider-specific code generation is
+	// required.
+	var err error
+	switch r.Provider.Config.Name {
+	case "archive":
+		err = g.generateArchive(r)
+	case "http":
+		err = g.generateHTTP(r)
+	default:
+		err = g.generateResource(r)
+	}
+	if err != nil {
+		return err
+	}
+
+	g.genTrailingComment(g.w, r.Comments)
+	g.print("\n")
 	return nil
 }
 
@@ -668,15 +699,27 @@ func (g *generator) GenerateOutputs(os []*il.OutputNode) error {
 			return err
 		}
 
+		// We combine the leading and trailing comments for the output itself and its value.
+
+		comments := &il.Comments{}
 		if o.Comments != nil {
-			g.genComment(g.w, o.Comments.Leading)
+			comments.Leading, comments.Trailing = o.Comments.Leading, o.Comments.Trailing
+		}
+		if vc := o.Value.Comments(); vc != nil {
+			comments.Leading = append(comments.Leading, vc.Leading...)
+			comments.Trailing = append(comments.Trailing, vc.Trailing...)
 		}
 
+		g.genLeadingComment(g.w, comments)
+
 		if !isRoot {
-			g.printf("%s%s: %s,\n", g.indent, tsName(o.Config.Name, nil, nil, true), outputs)
+			g.printf("%s%s: %s,", g.indent, tsName(o.Config.Name, nil, nil, true), outputs)
 		} else {
-			g.printf("export const %s = %s;\n", tsName(o.Config.Name, nil, nil, false), outputs)
+			g.printf("export const %s = %s;", tsName(o.Config.Name, nil, nil, false), outputs)
 		}
+
+		g.genTrailingComment(g.w, comments)
+		g.print("\n")
 	}
 	if !isRoot {
 		g.indent = g.indent[:len(g.indent)-4]

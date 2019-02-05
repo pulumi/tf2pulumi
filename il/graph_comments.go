@@ -3,11 +3,13 @@ package il
 import (
 	"io/ioutil"
 	"path"
+	"regexp"
 	"strings"
 
 	"github.com/hashicorp/hcl"
 	"github.com/hashicorp/hcl/hcl/ast"
 	"github.com/hashicorp/terraform/config"
+	"github.com/pulumi/pulumi/pkg/util/contract"
 )
 
 // commentable is an interface shared by the IL's top-level nodes (e.g. ResourceNode, OutputNode) and its bound
@@ -270,20 +272,99 @@ func extractComment(g *ast.CommentGroup) []string {
 		return nil
 	}
 
+	// An ast.CommentGroup is composed of a list of adjacent comments in the order in which they appeared in the
+	// source.
+	//
+	// Each comment may be either a line comment or a block comment. Line comments start with either '#' or '//' and
+	// terminate with an EOL. Block comments begin with a '/*' and terminate with a '*/'. All comment tokens are
+	// preserved in the comment text.
+	//
+	// To make life easier for the code generators, comments are pre-processed to remove comment markers. For line
+	// comments, this process is trivial. For block comments, things are a bit more involved.
+
 	var lines []string
 	for _, c := range g.List {
-		// Strip leading comment tokens.
 		comment := c.Text
+		// Process this comment's lines and strip leading comment tokens.
+
 		switch {
 		case comment[0] == '#':
-			comment = comment[1:]
+			lines = append(lines, comment[1:])
 		case comment[0:2] == "//":
-			comment = comment[2:]
-		case comment[0:2] == "/*":
-			// This is more complex, stripping these characters can often lead to strange alignment, and these comments
-			// are relatively rare, so we leave them as-is.
+			lines = append(lines, comment[2:])
+		default:
+			lines = append(lines, processBlockComment(comment)...)
 		}
-		lines = append(lines, strings.Split(comment, "\n")...)
 	}
+	return lines
+}
+
+var blockStartPat = regexp.MustCompile(`^/\*+`)
+var blockEndPat = regexp.MustCompile(`[[:space:]]*\*+/$`)
+var blockPrefixPat = regexp.MustCompile(`^[[:space:]]*\*`)
+
+func processBlockComment(text string) []string {
+	lines := strings.Split(text, "\n")
+
+	// We will always trim the following:
+	// - '^/\*+' from the first line
+	// - a trailing '[[:space:]]\*+/$' from the last line
+
+	// In addition, we will trim '^[[:space:]]*\*' from the second through last lines iff all lines in that set share
+	// a prefix that matches that pattern.
+
+	prefix := ""
+	for i, l := range lines[1:] {
+		m := blockPrefixPat.FindString(l)
+		if i == 0 {
+			prefix = m
+		} else if m != prefix {
+			prefix = ""
+			break
+		}
+	}
+
+	for i, l := range lines {
+		switch i {
+		case 0:
+			start := blockStartPat.FindString(l)
+			contract.Assert(start != "")
+			l = l[len(start):]
+
+			// If this is a single-line block comment, trim the end pattern as well.
+			if len(lines) == 1 {
+				contract.Assert(prefix == "")
+
+				end := blockEndPat.FindString(l)
+				contract.Assert(end != "")
+				l = l[:len(l)-len(end)]
+			}
+		case len(lines) - 1:
+			// The prefix we're trimming may overlap with the end pattern we're trimming. In this case, trim the entire
+			// line.
+			if len(l)-len(prefix) == 1 {
+				l = ""
+			} else {
+				l = l[len(prefix):]
+				end := blockEndPat.FindString(l)
+				contract.Assert(end != "")
+				l = l[:len(l)-len(end)]
+			}
+		default:
+			// Trim the prefix.
+			l = l[len(prefix):]
+		}
+
+		lines[i] = l
+	}
+
+	// If the first or last line is empty, drop it.
+	if lines[0] == "" {
+		lines = lines[1:]
+	}
+	if len(lines) > 0 && lines[len(lines)-1] == "" {
+		lines = lines[:len(lines)-1]
+	}
+
 	return lines
 }

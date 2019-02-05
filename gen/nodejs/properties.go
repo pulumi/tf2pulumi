@@ -47,9 +47,7 @@ func (g *generator) genListProperty(w io.Writer, n *il.BoundListProperty) {
 		g.indented(func() {
 			for _, v := range n.Elements {
 				g.genf(w, "\n")
-				if v.Comments() != nil {
-					g.genComment(w, v.Comments().Leading)
-				}
+				g.genLeadingComment(w, v.Comments())
 				g.genf(w, "%s", g.indent)
 
 				// TF flattens list elements that are themselves lists into the parent list.
@@ -60,6 +58,8 @@ func (g *generator) genListProperty(w io.Writer, n *il.BoundListProperty) {
 					g.gen(w, "...")
 				}
 				g.genf(w, "%v,", v)
+
+				g.genTrailingComment(w, v.Comments())
 			}
 		})
 		g.gen(w, "\n", g.indent, "]")
@@ -79,9 +79,7 @@ func (g *generator) genMapProperty(w io.Writer, n *il.BoundMapProperty) {
 				v := n.Elements[k]
 
 				g.genf(w, "\n")
-				if v.Comments() != nil {
-					g.genComment(w, v.Comments().Leading)
-				}
+				g.genLeadingComment(w, v.Comments())
 
 				propSch, key := n.Schemas.PropertySchemas(k), k
 				if !useExactKeys {
@@ -90,6 +88,8 @@ func (g *generator) genMapProperty(w io.Writer, n *il.BoundMapProperty) {
 					key = fmt.Sprintf("%q", key)
 				}
 				g.genf(w, "%s%s: %v,", g.indent, key, v)
+
+				g.genTrailingComment(w, v.Comments())
 			}
 		})
 		g.gen(w, "\n", g.indent, "}")

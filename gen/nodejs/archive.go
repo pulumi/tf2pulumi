@@ -113,7 +113,7 @@ func (g *generator) generateArchive(r *il.ResourceNode) error {
 		}
 
 		// Generate an asset archive.
-		g.printf("const %s = new pulumi.asset.AssetArchive(%s);\n", name, inputs)
+		g.printf("const %s = new pulumi.asset.AssetArchive(%s);", name, inputs)
 	} else {
 		// Otherwise we need to Generate multiple resources in a loop.
 		count, _, err := g.computeProperty(r.Count, false, "")
@@ -128,7 +128,7 @@ func (g *generator) generateArchive(r *il.ResourceNode) error {
 		g.printf("const %s: pulumi.asset.AssetArchive[] = [];\n", name)
 		g.printf("for (let i = 0; i < %s; i++) {\n", count)
 		g.printf("    %s.push(new pulumi.asset.AssetArchive(%s));\n", name, inputs)
-		g.printf("}\n")
+		g.printf("}")
 	}
 
 	return nil
