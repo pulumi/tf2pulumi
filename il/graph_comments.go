@@ -1,3 +1,17 @@
+// Copyright 2016-2018, Pulumi Corporation.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package il
 
 import (
@@ -79,6 +93,7 @@ func (b *builder) extractFileComments(path string) error {
 func (b *builder) extractHCLComments(f *ast.File) {
 	root, ok := f.Node.(*ast.ObjectList)
 	if !ok {
+		b.logf("unexpected type for HCL root node '%T'; skipping file...", f.Node)
 		return
 	}
 
@@ -100,6 +115,8 @@ func (b *builder) extractHCLComments(f *ast.File) {
 				for _, ln := range object.List.Items {
 					b.extractLocalComments(ln)
 				}
+			} else {
+				b.logf("unexpected locals type '%T'; skipping node...", n.Val)
 			}
 		case "output":
 			b.extractOutputComments(n)
@@ -275,18 +292,15 @@ func extractComment(g *ast.CommentGroup) []string {
 	// An ast.CommentGroup is composed of a list of adjacent comments in the order in which they appeared in the
 	// source.
 	//
-	// Each comment may be either a line comment or a block comment. Line comments start with either '#' or '//' and
-	// terminate with an EOL. Block comments begin with a '/*' and terminate with a '*/'. All comment tokens are
-	// preserved in the comment text.
+	// Each HCL comment may be either a line comment or a block comment. Line comments start with '#' or '//' and
+	// terminate with an EOL. Block comments begin with a '/*' and terminate with a '*/'. All comment delimiters are
+	// preserved in the HCL comment text.
 	//
-	// To make life easier for the code generators, comments are pre-processed to remove comment markers. For line
-	// comments, this process is trivial. For block comments, things are a bit more involved.
-
+	// To make life easier for the code generators, HCL comments are pre-processed to remove comment delimiters. For
+	// line comments, this process is trivial. For block comments, things are a bit more involved.
 	var lines []string
 	for _, c := range g.List {
 		comment := c.Text
-		// Process this comment's lines and strip leading comment tokens.
-
 		switch {
 		case comment[0] == '#':
 			lines = append(lines, comment[1:])
@@ -299,10 +313,25 @@ func extractComment(g *ast.CommentGroup) []string {
 	return lines
 }
 
+// These regexes are used by processBlockComment. The first matches a block comment start, the second a block comment
+// end, and the third a block comment line prefix.
 var blockStartPat = regexp.MustCompile(`^/\*+`)
 var blockEndPat = regexp.MustCompile(`[[:space:]]*\*+/$`)
 var blockPrefixPat = regexp.MustCompile(`^[[:space:]]*\*`)
 
+// processBlockComment splits a block comment into mutiple lines, removes comment delimiters, and attempts to remove
+// common comment prefixes from interior lines. For example, the following HCL block comment:
+//
+//     /**
+//      * This is a block comment!
+//      *
+//      * It has multiple lines.
+//      */
+//
+// becomes this set of lines:
+//
+//     []string{" This is a block comment!", "", " It has multiple lines."}
+//
 func processBlockComment(text string) []string {
 	lines := strings.Split(text, "\n")
 
