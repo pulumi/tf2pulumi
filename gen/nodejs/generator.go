@@ -56,6 +56,8 @@ type generator struct {
 	applyArgs []il.BoundExpr
 	// unknownInputs is the set of input variables that may be unknown at runtime.
 	unknownInputs map[*il.VariableNode]struct{}
+	// nameTable is a mapping from top-level nodes to names.
+	nameTable map[il.Node]string
 	// w is the writer to use for printing the resulting Pulumi code.
 	w io.Writer
 }
@@ -108,16 +110,6 @@ func cleanName(name string) string {
 	return builder.String()
 }
 
-// localName returns the name for a local value with the given Terraform name.
-func localName(name string) string {
-	return "local_" + cleanName(name)
-}
-
-// resName returns the name for a resource instantiation with the given Terraform type and name.
-func resName(typ, name string) string {
-	return cleanName(fmt.Sprintf("%s_%s", typ, name))
-}
-
 // tsName returns the Pulumi name for the property with the given Terraform name and schemas.
 func tsName(tfName string, tfSchema *schema.Schema, schemaInfo *tfbridge.SchemaInfo, isObjectKey bool) string {
 	if schemaInfo != nil && schemaInfo.Name != "" {
@@ -131,6 +123,12 @@ func tsName(tfName string, tfSchema *schema.Schema, schemaInfo *tfbridge.SchemaI
 		return cleanName(tfName)
 	}
 	return tfbridge.TerraformToPulumiName(tfName, tfSchema, false)
+}
+
+func (g *generator) nodeName(n il.Node) string {
+	name, ok := g.nameTable[n]
+	contract.Assert(ok)
+	return name
 }
 
 // indented bumps the current indentation level, invokes the given function, and then resets the indentation level to
@@ -433,6 +431,9 @@ func (g *generator) BeginModule(m *il.Graph) error {
 			}
 		}
 	}
+
+	// Compute unambiguous names for this module's top-level nodes.
+	g.nameTable = assignNames(m, g.isRoot())
 	return nil
 }
 
@@ -461,21 +462,21 @@ func (g *generator) GenerateVariables(vs []*il.VariableNode) error {
 		g.printf("const config = new pulumi.Config();\n")
 	}
 	for _, v := range vs {
-		name := tsName(v.Config.Name, nil, nil, false)
+		configName := tsName(v.Config.Name, nil, nil, false)
 		_, isUnknown := g.unknownInputs[v]
 
 		g.genLeadingComment(g.w, v.Comments)
 
-		g.printf("%sconst var_%s = ", g.indent, cleanName(v.Config.Name))
+		g.printf("%sconst %s = ", g.indent, g.nodeName(v))
 		if v.DefaultValue == nil {
 			if isRoot {
-				g.printf("config.require(\"%s\")", name)
+				g.printf("config.require(\"%s\")", configName)
 			} else {
 				f := "mod_args[\"%s\"]"
 				if isUnknown {
 					f = "pulumi.output(" + f + ")"
 				}
-				g.printf(f, name)
+				g.printf(f, configName)
 			}
 		} else {
 			def, _, err := g.computeProperty(v.DefaultValue, false, "")
@@ -491,13 +492,13 @@ func (g *generator) GenerateVariables(vs []*il.VariableNode) error {
 				case il.TypeNumber:
 					get = "getNumber"
 				}
-				g.printf("config.%v(\"%s\") || %s", get, name, def)
+				g.printf("config.%v(\"%s\") || %s", get, configName, def)
 			} else {
 				f := "mod_args[\"%s\"] || %s"
 				if isUnknown {
 					f = "pulumi.output(" + f + ")"
 				}
-				g.printf(f, name, def)
+				g.printf(f, configName, def)
 			}
 		}
 		g.printf(";")
@@ -518,7 +519,7 @@ func (g *generator) GenerateLocal(l *il.LocalNode) error {
 	}
 
 	g.genLeadingComment(g.w, l.Comments)
-	g.printf("%sconst %s = %s;", g.indent, localName(l.Config.Name), value)
+	g.printf("%sconst %s = %s;", g.indent, g.nodeName(l), value)
 	g.genTrailingComment(g.w, l.Comments)
 	g.print("\n")
 
@@ -534,21 +535,21 @@ func (g *generator) GenerateModule(m *il.ModuleNode) error {
 		return err
 	}
 
-	modName := cleanName(m.Config.Name)
+	instanceName, modName := g.nodeName(m), cleanName(m.Config.Name)
 	g.genLeadingComment(g.w, m.Comments)
-	g.printf("%sconst mod_%s = new_mod_%s(\"%s\", %s);", g.indent, modName, modName, modName, args)
+	g.printf("%sconst %s = new_mod_%s(\"%s\", %s);", g.indent, instanceName, modName, instanceName, args)
 	g.genTrailingComment(g.w, m.Comments)
 	g.print("\n")
 
 	return nil
 }
 
-// generateResource handles the generation of instantiations of non-builtin resources.
-func (g *generator) generateResource(r *il.ResourceNode) error {
+// resourceTypeName computes the NodeJS package, module, and type name for the given resource.
+func resourceTypeName(r *il.ResourceNode) (string, string, string, error) {
 	// Compute the resource type from the Terraform type.
 	underscore := strings.IndexRune(r.Config.Type, '_')
 	if underscore == -1 {
-		return errors.New("NYI: single-resource providers")
+		return "", "", "", errors.New("NYI: single-resource providers")
 	}
 	provider, resourceType := cleanName(r.Provider.PluginName), r.Config.Type[underscore+1:]
 
@@ -560,7 +561,7 @@ func (g *generator) generateResource(r *il.ResourceNode) error {
 	if tok, ok := r.Tok(); ok {
 		components := strings.Split(tok, ":")
 		if len(components) != 3 {
-			return errors.Errorf("unexpected resource token format %s", tok)
+			return "", "", "", errors.Errorf("unexpected resource token format %s", tok)
 		}
 
 		mod, typ := components[1], components[2]
@@ -570,10 +571,23 @@ func (g *generator) generateResource(r *il.ResourceNode) error {
 			slash = len(mod)
 		}
 
-		module, memberName = "."+mod[:slash], typ
-		if module == ".index" {
+		module, memberName = mod[:slash], typ
+		if module == "index" {
 			module = ""
 		}
+	}
+
+	return provider, module, memberName, nil
+}
+
+// generateResource handles the generation of instantiations of non-builtin resources.
+func (g *generator) generateResource(r *il.ResourceNode) error {
+	provider, module, memberName, err := resourceTypeName(r)
+	if err != nil {
+		return err
+	}
+	if module != "" {
+		module = "." + module
 	}
 
 	// Build the list of explicit deps, if any.
@@ -589,13 +603,13 @@ func (g *generator) generateResource(r *il.ResourceNode) error {
 			if depRes.Count != nil {
 				fmt.Fprintf(buf, "...")
 			}
-			fmt.Fprintf(buf, "%s", resName(depRes.Config.Type, depRes.Config.Name))
+			fmt.Fprintf(buf, "%s", g.nodeName(depRes))
 		}
 		fmt.Fprintf(buf, "]}")
 		explicitDeps = buf.String()
 	}
 
-	name := resName(r.Config.Type, r.Config.Name)
+	name := g.nodeName(r)
 	qualifiedMemberName := fmt.Sprintf("%s%s.%s", provider, module, memberName)
 	if r.Count == nil {
 		// If count is nil, this is a single-instance resource.
@@ -713,9 +727,9 @@ func (g *generator) GenerateOutputs(os []*il.OutputNode) error {
 		g.genLeadingComment(g.w, comments)
 
 		if !isRoot {
-			g.printf("%s%s: %s,", g.indent, tsName(o.Config.Name, nil, nil, true), outputs)
+			g.printf("%s%s: %s,", g.indent, g.nodeName(o), outputs)
 		} else {
-			g.printf("export const %s = %s;", tsName(o.Config.Name, nil, nil, false), outputs)
+			g.printf("export const %s = %s;", g.nodeName(o), outputs)
 		}
 
 		g.genTrailingComment(g.w, comments)

@@ -426,9 +426,18 @@ func (g *generator) genVariableAccess(w io.Writer, n *il.BoundVariableAccess) {
 	case *config.CountVariable:
 		g.gen(w, g.countIndex)
 	case *config.LocalVariable:
-		g.gen(w, localName(v.Name))
+		if n.IsMissingVariable() {
+			g.gen(w, "local_", cleanName(v.Name))
+		} else {
+			g.gen(w, g.nodeName(n.ILNode))
+		}
 	case *config.ModuleVariable:
-		g.genf(w, "mod_%s", cleanName(v.Name))
+		if n.IsMissingVariable() {
+			g.gen(w, "mod_", cleanName(v.Name))
+		} else {
+			g.gen(w, g.nodeName(n.ILNode))
+		}
+
 		for _, e := range strings.Split(v.Field, ".") {
 			g.genf(w, ".%s", tfbridge.TerraformToPulumiName(e, nil, false))
 		}
@@ -442,17 +451,18 @@ func (g *generator) genVariableAccess(w io.Writer, n *il.BoundVariableAccess) {
 			contract.Failf("root path references should have been lowered to literals")
 		}
 	case *config.ResourceVariable:
-		// We only generate up to the "output" part of the path here: the apply transform will take care of the rest.
-		g.gen(w, resName(v.Type, v.Name))
-		if v.Multi && v.Index != -1 {
-			g.genf(w, "[%d]", v.Index)
-		}
-
-		// If this access refers to a missing variable, assume that we are dealing with a managed resource. Otherwise,
-		// check the IL node itself.
-		mode := config.ManagedResourceMode
+		// If this access refers to a missing variable, assume that we are dealing with a managed resource and
+		// manufacture a name. Otherwise, refer to the IL node itself.
+		mode, name := config.ManagedResourceMode, cleanName(v.Type+"_"+v.Name)
 		if !n.IsMissingVariable() {
 			mode = n.ILNode.(*il.ResourceNode).Config.Mode
+			name = g.nodeName(n.ILNode)
+		}
+
+		// We only generate up to the "output" part of the path here: the apply transform will take care of the rest.
+		g.gen(w, name)
+		if v.Multi && v.Index != -1 {
+			g.genf(w, "[%d]", v.Index)
 		}
 
 		// A managed resource is not itself an output: instead, it is a bag of outputs. As such, we must generate the
@@ -472,7 +482,11 @@ func (g *generator) genVariableAccess(w io.Writer, n *il.BoundVariableAccess) {
 			}
 		}
 	case *config.UserVariable:
-		g.gen(w, "var_", cleanName(v.Name))
+		if n.IsMissingVariable() {
+			g.gen(w, "var_", cleanName(v.Name))
+		} else {
+			g.gen(w, g.nodeName(n.ILNode))
+		}
 	default:
 		contract.Failf("unexpected TF var type in genVariableAccess: %T", n.TFVar)
 	}

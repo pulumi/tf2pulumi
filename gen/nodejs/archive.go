@@ -104,7 +104,7 @@ func (g *generator) generateArchive(r *il.ResourceNode) error {
 
 	// TODO: explicit dependencies (or any dependencies at all, really)
 
-	name := resName(r.Config.Type, r.Config.Name)
+	name := g.nodeName(r)
 
 	if r.Count == nil {
 		inputs, err := g.computeArchiveInputs(r, false, "")

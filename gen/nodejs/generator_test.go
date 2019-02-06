@@ -190,12 +190,12 @@ import * as aws from "@pulumi/aws";
 
 const config = new pulumi.Config();
 // Accept the AWS region as input.
-const var_aws_region = config.get("awsRegion") || "us-west-2";
+const awsRegion = config.get("awsRegion") || "us-west-2";
 
 // Create a security group.
 //
 // This group should allow SSH and HTTP access.
-const aws_security_group_default = new aws.ec2.SecurityGroup("default", {
+const defaultSecurityGroup = new aws.ec2.SecurityGroup("default", {
     // outbound internet access
     egress: [{
         cidrBlocks: ["0.0.0.0/0"],
@@ -225,7 +225,7 @@ const aws_security_group_default = new aws.ec2.SecurityGroup("default", {
 // Create a VPC.
 //
 // Note that the VPC has been tagged appropriately.
-const aws_vpc_default = new aws.ec2.Vpc("default", {
+const defaultVpc = new aws.ec2.Vpc("default", {
     cidrBlock: "10.0.0.0/16", // Just one CIDR block
     enableDnsHostnames: true, // Definitely want DNS hostnames.
     // The tag collection for this VPC.
@@ -235,18 +235,18 @@ const aws_vpc_default = new aws.ec2.Vpc("default", {
     },
 });
 // The region, again
-const local_region = var_aws_region; // why not
+const region = awsRegion; // why not
 // The VPC details
-const local_vpc = [{
+const vpc = [{
     // The ID
-    id: aws_vpc_default.id,
+    id: defaultVpc.id,
 }];
 
 // Output the SG name.
 //
 // We pull the name from the default SG.
 // Take the value from the default SG.
-export const securityGroupName = aws_security_group_default.name; // Neat!
+export const securityGroupName = defaultSecurityGroup.name; // Neat!
 `
 
 	dir, err := ioutil.TempDir("", "")
