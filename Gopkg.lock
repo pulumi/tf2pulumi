@@ -1658,6 +1658,7 @@
     "github.com/pkg/errors",
     "github.com/pulumi/pulumi-terraform/pkg/tfbridge",
     "github.com/pulumi/pulumi/pkg/testing/integration",
+    "github.com/pulumi/pulumi/pkg/tokens",
     "github.com/pulumi/pulumi/pkg/util/buildutil",
     "github.com/pulumi/pulumi/pkg/util/contract",
     "github.com/pulumi/pulumi/pkg/util/fsutil",
