@@ -20,6 +20,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/hashicorp/terraform/config"
 	"github.com/pulumi/pulumi/pkg/util/contract"
 	"github.com/pulumi/tf2pulumi/gen"
 	"github.com/pulumi/tf2pulumi/il"
@@ -156,6 +157,11 @@ func (nt *nameTable) disambiguateResourceName(n *il.ResourceNode) string {
 		return cleanName(n.Config.Type + "_" + n.Config.Name)
 	}
 	packageName, moduleName = title(packageName), title(moduleName)
+
+	// If we're dealing with a data source, strip any leading "get" from the typeName.
+	if n.Config.Mode == config.DataResourceMode && strings.HasPrefix(typeName, "get") {
+		typeName = typeName[len("get"):]
+	}
 
 	// First attempt to disambiguate by appending the NodeJS resource type.
 	root := name

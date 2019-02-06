@@ -64,6 +64,11 @@ func resources(toks []string) map[string]*il.ResourceNode {
 		components := strings.Split(tok, "::")
 		typ, name := tokens.Type(components[0]), components[1]
 
+		mode := config.ManagedResourceMode
+		if strings.HasPrefix(string(typ.Name()), "get") {
+			mode = config.DataResourceMode
+		}
+
 		tfType := string(typ.Package()) + "_" +
 			tfbridge.PulumiToTerraformName(string(typ.Module().Name())+string(typ.Name()), nil)
 
@@ -74,6 +79,9 @@ func resources(toks []string) map[string]*il.ResourceNode {
 				Resources: map[string]*tfbridge.ResourceInfo{
 					tfType: &tfbridge.ResourceInfo{Tok: typ},
 				},
+				DataSources: map[string]*tfbridge.DataSourceInfo{
+					tfType: &tfbridge.DataSourceInfo{Tok: tokens.ModuleMember(typ)},
+				},
 			},
 		}
 
@@ -81,6 +89,7 @@ func resources(toks []string) map[string]*il.ResourceNode {
 			Config: &config.Resource{
 				Name: name,
 				Type: tfType,
+				Mode: mode,
 			},
 			Provider: provider,
 		}
@@ -120,6 +129,7 @@ func TestAssignNames(t *testing.T) {
 			"aws:ec2:Instance::i",
 			"aws:lightsail:Instance::main",
 			"gcp:compute:Instance::main",
+			"aws:ec2:getInstances::main",
 		}),
 	}
 
@@ -149,4 +159,5 @@ func TestAssignNames(t *testing.T) {
 	assert.Equal(t, "awsEc2Instance", names[g.Resources["aws:ec2:Instance::i"]])
 	assert.Equal(t, "mainInstance", names[g.Resources["aws:lightsail:Instance::main"]])
 	assert.Equal(t, "mainComputeInstance", names[g.Resources["gcp:compute:Instance::main"]])
+	assert.Equal(t, "mainInstances", names[g.Resources["aws:ec2:getInstances::main"]])
 }
