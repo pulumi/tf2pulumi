@@ -106,6 +106,7 @@ func TestAssignNames(t *testing.T) {
 			"region",
 			"name",
 			"instance",
+			"default_vpc",
 		}),
 		Modules: modules([]string{
 			"module",
@@ -113,7 +114,7 @@ func TestAssignNames(t *testing.T) {
 			"ec2",
 		}),
 		Resources: resources([]string{
-			"aws:ec2:Vpc::default_vpc",
+			"aws:ec2:Vpc::cluster_vpc",
 			"aws:ec2:Vpc::default",
 			"aws:ec2:Instance::default",
 			"aws:ec2:Instance::i",
@@ -136,12 +137,13 @@ func TestAssignNames(t *testing.T) {
 	assert.Equal(t, "region", names[g.Variables["region"]])
 	assert.Equal(t, "nameInput", names[g.Variables["name"]])
 	assert.Equal(t, "instance", names[g.Variables["instance"]])
+	assert.Equal(t, "defaultVpc", names[g.Variables["default_vpc"]])
 
 	assert.Equal(t, "module", names[g.Modules["module"]])
 	assert.Equal(t, "nameInstance", names[g.Modules["name"]])
 	assert.Equal(t, "ec2Instance", names[g.Modules["ec2"]])
 
-	assert.Equal(t, "defaultVpc", names[g.Resources["aws:ec2:Vpc::default_vpc"]])
+	assert.Equal(t, "clusterVpc", names[g.Resources["aws:ec2:Vpc::cluster_vpc"]])
 	assert.Equal(t, "defaultEc2Vpc", names[g.Resources["aws:ec2:Vpc::default"]])
 	assert.Equal(t, "defaultInstance", names[g.Resources["aws:ec2:Instance::default"]])
 	assert.Equal(t, "awsEc2Instance", names[g.Resources["aws:ec2:Instance::i"]])

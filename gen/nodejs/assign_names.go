@@ -21,6 +21,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/pulumi/pulumi/pkg/util/contract"
+	"github.com/pulumi/tf2pulumi/gen"
 	"github.com/pulumi/tf2pulumi/il"
 )
 
@@ -188,8 +189,8 @@ func assignNames(g *il.Graph, isRootModule bool) map[il.Node]string {
 
 	// Assign output names first: given a conflict between nodes, we always want the output node (if any) to win so
 	// that output names are predictable and as consistent with their TF names as is possible.
-	for _, n := range g.Outputs {
-		nt.assignOutput(n)
+	for _, k := range gen.SortedKeys(g.Outputs) {
+		nt.assignOutput(g.Outputs[k])
 	}
 
 	// Next, record all other nodes in the following order:
@@ -198,20 +199,21 @@ func assignNames(g *il.Graph, isRootModule bool) map[il.Node]string {
 	// 3. Modules
 	// 4. Resources
 	// Providers should be handled before resources once first-class providers are supported (#11).
-	for _, n := range g.Locals {
-		nt.assignLocal(n)
+	for _, k := range gen.SortedKeys(g.Locals) {
+		nt.assignLocal(g.Locals[k])
 	}
-	for _, n := range g.Variables {
-		nt.assignVariable(n)
+	for _, k := range gen.SortedKeys(g.Variables) {
+		nt.assignVariable(g.Variables[k])
 	}
-	for _, n := range g.Modules {
-		nt.assignModule(n)
+	for _, k := range gen.SortedKeys(g.Modules) {
+		nt.assignModule(g.Modules[k])
 	}
 
 	// We handle resources in two passes: in the first pass, we decide which names are ambiguous, and in the second pass
 	// we assign names. We do this so that we can apply disambiguation more uniformly across resource names.
 	resourceGroups := make(map[string][]*il.ResourceNode)
-	for _, n := range g.Resources {
+	for _, k := range gen.SortedKeys(g.Resources) {
+		n := g.Resources[k]
 		name, _ := nt.tsName(n.Config.Name)
 		resourceGroups[name] = append(resourceGroups[name], n)
 	}
