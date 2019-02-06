@@ -58,7 +58,7 @@ func (g *generator) computeHTTPInputs(r *il.ResourceNode, indent bool, count str
 func (g *generator) generateHTTP(r *il.ResourceNode) error {
 	contract.Require(r.Provider.Config.Name == "http", "r")
 
-	name := resName(r.Config.Type, r.Config.Name)
+	name := g.nodeName(r)
 
 	if r.Count == nil {
 		inputs, err := g.computeHTTPInputs(r, false, "")
