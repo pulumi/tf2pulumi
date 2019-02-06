@@ -110,12 +110,16 @@ func TestAssignNames(t *testing.T) {
 			"vpc",
 			"name",
 			"ec2",
+			"local",
+			"localInput",
+			"localInput1",
 		}),
 		Variables: variables([]string{
 			"region",
 			"name",
 			"instance",
 			"default_vpc",
+			"local",
 		}),
 		Modules: modules([]string{
 			"module",
@@ -143,11 +147,15 @@ func TestAssignNames(t *testing.T) {
 	assert.Equal(t, "vpc", names[g.Locals["vpc"]])
 	assert.Equal(t, "myName", names[g.Locals["name"]])
 	assert.Equal(t, "ec2", names[g.Locals["ec2"]])
+	assert.Equal(t, "local", names[g.Locals["local"]])
+	assert.Equal(t, "localInput", names[g.Locals["localInput"]])
+	assert.Equal(t, "localInput1", names[g.Locals["localInput1"]])
 
 	assert.Equal(t, "region", names[g.Variables["region"]])
 	assert.Equal(t, "nameInput", names[g.Variables["name"]])
 	assert.Equal(t, "instance", names[g.Variables["instance"]])
 	assert.Equal(t, "defaultVpc", names[g.Variables["default_vpc"]])
+	assert.Equal(t, "localInput2", names[g.Variables["local"]])
 
 	assert.Equal(t, "module", names[g.Modules["module"]])
 	assert.Equal(t, "nameInstance", names[g.Modules["name"]])

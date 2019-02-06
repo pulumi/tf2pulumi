@@ -82,7 +82,7 @@ func (nt *nameTable) tsName(name string) (string, bool) {
 // disambiguate ensures that the given name is unambiguous by appending an integer starting with 1 if necessary.
 func (nt *nameTable) disambiguate(name string) string {
 	root := name
-	for i := 1; nt.assigned[name]; {
+	for i := 1; nt.assigned[name]; i++ {
 		name = fmt.Sprintf("%s%d", root, i)
 	}
 	return name
