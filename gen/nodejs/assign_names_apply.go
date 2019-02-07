@@ -124,7 +124,7 @@ func (g *generator) assignApplyArgNames(applyArgs []il.BoundExpr, then il.BoundE
 		}
 		return n, nil
 	})
-	contract.Assert(err == nil)
+	contract.AssertNoError(err)
 
 	argNames := make([]string, len(applyArgs))
 	for i, arg := range applyArgs {
