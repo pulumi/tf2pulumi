@@ -88,11 +88,12 @@ func (g *generator) genApply(w io.Writer, n *il.BoundCall) {
 	// Extract the list of outputs and the continuation expression from the `__apply` arguments.
 	g.applyArgs = n.Args[:len(n.Args)-1]
 	then := n.Args[len(n.Args)-1]
+	g.applyArgNames = g.assignApplyArgNames(g.applyArgs, then)
 
 	if len(g.applyArgs) == 1 {
 		// If we only have a single output, just generate a normal `.apply`.
 		g.genApplyOutput(w, g.applyArgs[0].(*il.BoundVariableAccess))
-		g.genf(w, ".apply(__arg0 => %v)", then)
+		g.genf(w, ".apply(%s => %v)", g.applyArgNames[0], then)
 	} else {
 		// Otherwise, generate a call to `pulumi.all([]).apply()`.
 		g.gen(w, "pulumi.all([")
@@ -107,7 +108,7 @@ func (g *generator) genApply(w io.Writer, n *il.BoundCall) {
 			if i > 0 {
 				g.gen(w, ", ")
 			}
-			g.genf(w, "__arg%d", i)
+			g.genf(w, "%s", g.applyArgNames[i])
 		}
 		g.gen(w, "]) => ", then, ")")
 	}
@@ -124,7 +125,7 @@ func (g *generator) genApplyArg(w io.Writer, index int) {
 	v := g.applyArgs[index].(*il.BoundVariableAccess)
 
 	// Generate a reference to the parameter.
-	g.genf(w, "__arg%d", index)
+	g.gen(w, g.applyArgNames[index])
 
 	// Generate any nested path.
 	if rv, ok := v.TFVar.(*config.ResourceVariable); ok {
@@ -423,21 +424,11 @@ func (g *generator) genOutput(w io.Writer, n *il.BoundOutput) {
 // genVariableAccess generates code for a single variable access expression.
 func (g *generator) genVariableAccess(w io.Writer, n *il.BoundVariableAccess) {
 	switch v := n.TFVar.(type) {
-	case *config.CountVariable:
-		g.gen(w, g.countIndex)
-	case *config.LocalVariable:
-		if n.IsMissingVariable() {
-			g.gen(w, "local_", cleanName(v.Name))
-		} else {
-			g.gen(w, g.nodeName(n.ILNode))
-		}
-	case *config.ModuleVariable:
-		if n.IsMissingVariable() {
-			g.gen(w, "mod_", cleanName(v.Name))
-		} else {
-			g.gen(w, g.nodeName(n.ILNode))
-		}
+	case *config.CountVariable, *config.LocalVariable, *config.UserVariable:
+		g.gen(w, g.variableName(n))
 
+	case *config.ModuleVariable:
+		g.gen(w, g.variableName(n))
 		for _, e := range strings.Split(v.Field, ".") {
 			g.genf(w, ".%s", tfbridge.TerraformToPulumiName(e, nil, false))
 		}
@@ -451,23 +442,15 @@ func (g *generator) genVariableAccess(w io.Writer, n *il.BoundVariableAccess) {
 			contract.Failf("root path references should have been lowered to literals")
 		}
 	case *config.ResourceVariable:
-		// If this access refers to a missing variable, assume that we are dealing with a managed resource and
-		// manufacture a name. Otherwise, refer to the IL node itself.
-		mode, name := config.ManagedResourceMode, cleanName(v.Type+"_"+v.Name)
-		if !n.IsMissingVariable() {
-			mode = n.ILNode.(*il.ResourceNode).Config.Mode
-			name = g.nodeName(n.ILNode)
-		}
-
 		// We only generate up to the "output" part of the path here: the apply transform will take care of the rest.
-		g.gen(w, name)
+		g.gen(w, g.variableName(n))
 		if v.Multi && v.Index != -1 {
 			g.genf(w, "[%d]", v.Index)
 		}
 
 		// A managed resource is not itself an output: instead, it is a bag of outputs. As such, we must generate the
 		// first portion of this access.
-		if mode == config.ManagedResourceMode && len(n.Elements) > 0 {
+		if g.resourceMode(n) == config.ManagedResourceMode && len(n.Elements) > 0 {
 			element := n.Elements[0]
 			elementSch := n.Schemas.PropertySchemas(element)
 
@@ -480,12 +463,6 @@ func (g *generator) genVariableAccess(w io.Writer, n *il.BoundVariableAccess) {
 			if isSplat {
 				g.gen(w, ")")
 			}
-		}
-	case *config.UserVariable:
-		if n.IsMissingVariable() {
-			g.gen(w, "var_", cleanName(v.Name))
-		} else {
-			g.gen(w, g.nodeName(n.ILNode))
 		}
 	default:
 		contract.Failf("unexpected TF var type in genVariableAccess: %T", n.TFVar)

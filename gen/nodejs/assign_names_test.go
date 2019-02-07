@@ -18,9 +18,11 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/hashicorp/hil/ast"
 	"github.com/hashicorp/terraform/config"
 	"github.com/pulumi/pulumi-terraform/pkg/tfbridge"
 	"github.com/pulumi/pulumi/pkg/tokens"
+	"github.com/pulumi/pulumi/pkg/util/contract"
 	"github.com/pulumi/tf2pulumi/il"
 	"github.com/stretchr/testify/assert"
 )
@@ -168,4 +170,95 @@ func TestAssignNames(t *testing.T) {
 	assert.Equal(t, "mainInstance", names[g.Resources["aws:lightsail:Instance::main"]])
 	assert.Equal(t, "mainComputeInstance", names[g.Resources["gcp:compute:Instance::main"]])
 	assert.Equal(t, "mainInstances", names[g.Resources["aws:ec2:getInstances::main"]])
+}
+
+func boundRef(v string, typ il.Type, node il.Node) *il.BoundVariableAccess {
+	tfVar, err := config.NewInterpolatedVariable(v)
+	contract.Assert(err == nil)
+
+	switch tfVar := tfVar.(type) {
+	case *config.ResourceVariable:
+		return &il.BoundVariableAccess{
+			Elements: strings.Split(tfVar.Field, "."),
+			ExprType: typ,
+			TFVar:    tfVar,
+			ILNode:   node,
+		}
+	default:
+		return &il.BoundVariableAccess{
+			ExprType: typ,
+			TFVar:    tfVar,
+			ILNode:   node,
+		}
+	}
+}
+
+func applyArgRef(arg il.BoundExpr, index int) *il.BoundCall {
+	return &il.BoundCall{
+		HILNode:  &ast.Call{Func: "__applyArg"},
+		ExprType: arg.Type().ElementType(),
+		Args:     []il.BoundExpr{&il.BoundLiteral{ExprType: il.TypeNumber, Value: index}},
+	}
+}
+
+func TestAssignApplyNames(t *testing.T) {
+	m := &il.Graph{
+		Locals: locals([]string{
+			"vpc",
+			"name",
+		}),
+		Variables: variables([]string{
+			"region",
+			"name",
+		}),
+		Modules: modules([]string{
+			"vpc",
+			"module",
+			"name",
+		}),
+		Resources: resources([]string{
+			"aws:ec2:Vpc::default",
+			"aws:ec2:Instance::default",
+			"aws:ec2:getInstances::main",
+		}),
+	}
+
+	g := &generator{nameTable: assignNames(m, true)}
+
+	args := []il.BoundExpr{
+		boundRef("local.name", il.TypeString.OutputOf(), m.Locals["name"]),
+		boundRef("var.name", il.TypeString.OutputOf(), m.Variables["name"]),
+		boundRef("var.region", il.TypeString.OutputOf(), m.Variables["region"]),
+		boundRef("module.vpc.foo", il.TypeString.OutputOf(), m.Modules["vpc"]),
+		boundRef("module.vpc.foo", il.TypeString.OutputOf(), m.Modules["vpc"]),
+		boundRef("module.vpc.bar.foo", il.TypeString.OutputOf(), m.Modules["vpc"]),
+		boundRef("aws_ec2_vpc.default.name", il.TypeString.OutputOf(), m.Resources["aws:ec2:Vpc::default"]),
+		boundRef("aws_ec2_instances.main.*.name", il.TypeString.OutputOf(), m.Resources["aws:ec2:getInstances::main"]),
+		boundRef("aws_ec2_instance.default.vpc", il.TypeString.OutputOf(), m.Resources["aws:ec2:Instance::default"]),
+		boundRef("aws_ec2_instance.default.vpc", il.TypeString.OutputOf(), m.Resources["aws:ec2:Instance::default"]),
+		boundRef("aws_ec2_instance.default.vpc.x", il.TypeString.OutputOf(), m.Resources["aws:ec2:Instance::default"]),
+		boundRef("aws_ec2_instance.default.x.vpc", il.TypeString.OutputOf(), m.Resources["aws:ec2:Instance::default"]),
+	}
+	then := &il.BoundOutput{
+		Exprs: []il.BoundExpr{
+			boundRef("local.vpc", il.TypeString, m.Locals["vpc"]),
+		},
+	}
+	for i, arg := range args {
+		then.Exprs = append(then.Exprs, applyArgRef(arg, i))
+	}
+
+	names := g.assignApplyArgNames(args, then)
+	assert.Equal(t, "name", names[0])
+	assert.Equal(t, "nameInput", names[1])
+	assert.Equal(t, "region", names[2])
+	assert.Equal(t, "vpcInstanceFoo", names[3])
+	assert.Equal(t, "vpcInstanceFoo1", names[4])
+	assert.Equal(t, "bar", names[5])
+	assert.Equal(t, "defaultVpcName", names[6])
+	assert.Equal(t, "main", names[7])
+	assert.Equal(t, "defaultInstanceVpc", names[8])
+	assert.Equal(t, "defaultInstanceVpc1", names[9])
+	assert.Equal(t, "defaultInstanceVpc2", names[10])
+	assert.Equal(t, "x", names[11])
 }

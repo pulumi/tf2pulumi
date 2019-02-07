@@ -54,6 +54,8 @@ type generator struct {
 	countIndex string
 	// applyArgs is the list of currently in-scope apply arguments.
 	applyArgs []il.BoundExpr
+	// applyArgNames is the list of names for the currently in-scope apply arguments.
+	applyArgNames []string
 	// unknownInputs is the set of input variables that may be unknown at runtime.
 	unknownInputs map[*il.VariableNode]struct{}
 	// nameTable is a mapping from top-level nodes to names.
@@ -129,6 +131,42 @@ func (g *generator) nodeName(n il.Node) string {
 	name, ok := g.nameTable[n]
 	contract.Assert(ok)
 	return name
+}
+
+func (g *generator) variableName(n *il.BoundVariableAccess) string {
+	if n.ILNode != nil {
+		return g.nodeName(n.ILNode)
+	}
+
+	switch v := n.TFVar.(type) {
+	case *config.CountVariable:
+		return g.countIndex
+	case *config.LocalVariable:
+		return "local_" + cleanName(v.Name)
+	case *config.ModuleVariable:
+		return "mod_" + cleanName(v.Name)
+	case *config.PathVariable:
+		// Path variables are not assigned names.
+		return ""
+	case *config.ResourceVariable:
+		return cleanName(v.Type + "_" + v.Name)
+	case *config.UserVariable:
+		return "var_" + cleanName(v.Name)
+	default:
+		contract.Failf("unexpected TF var type in variableName: %T", v)
+		return ""
+	}
+}
+
+func (g *generator) resourceMode(n *il.BoundVariableAccess) config.ResourceMode {
+	contract.Assert(n.TFVar.(*config.ResourceVariable) != nil)
+
+	// If this access refers to a missing variable, assume that we are dealing with a managed resource.
+	if n.IsMissingVariable() {
+		return config.ManagedResourceMode
+	}
+
+	return n.ILNode.(*il.ResourceNode).Config.Mode
 }
 
 // indented bumps the current indentation level, invokes the given function, and then resets the indentation level to
