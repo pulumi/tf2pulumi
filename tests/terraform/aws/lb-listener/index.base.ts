@@ -11,11 +11,11 @@ const frontEndListener = new aws.elasticloadbalancingv2.Listener("front_end", {
         throw "tf2pulumi error: aws_lb_listener.front_end.default_action: expected at most one item in list, got 2";
         return [
             {
-                authenticateCognito: {
+                authenticateCognito: [{
                     userPoolArn: poolArn,
                     userPoolClientId: id,
                     userPoolDomain: domain,
-                },
+                }],
                 type: "authenticate-cognito",
             },
             {
