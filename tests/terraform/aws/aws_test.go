@@ -38,44 +38,44 @@ func integrationTest(t *testing.T, program *integration.ProgramTestOptions, comp
 }
 
 func TestASG(t *testing.T) {
-	integrationTest(t, &integration.ProgramTestOptions{Dir: "asg"}, true)
+	integrationTest(t, &integration.ProgramTestOptions{Dir: "asg"}, "name", true)
 }
 
 func TestCognitoUserPool(t *testing.T) {
-	integrationTest(t, &integration.ProgramTestOptions{Dir: "cognito-user-pool"}, true)
+	integrationTest(t, &integration.ProgramTestOptions{Dir: "cognito-user-pool"}, "name", true)
 }
 
 func TestCount(t *testing.T) {
-	integrationTest(t, &integration.ProgramTestOptions{Dir: "count"}, true)
+	integrationTest(t, &integration.ProgramTestOptions{Dir: "count"}, "name", true)
 }
 
 func TestECSALB(t *testing.T) {
 	t.Skipf("Skipping test due to NYI: call to cidrsubnet")
-	integrationTest(t, &integration.ProgramTestOptions{Dir: "ecs-alb"}, true)
+	integrationTest(t, &integration.ProgramTestOptions{Dir: "ecs-alb"}, "name", true)
 }
 
 func TestEIP(t *testing.T) {
-	integrationTest(t, &integration.ProgramTestOptions{Dir: "eip"}, true)
+	integrationTest(t, &integration.ProgramTestOptions{Dir: "eip"}, "name", true)
 }
 
 func TestELB(t *testing.T) {
-	integrationTest(t, &integration.ProgramTestOptions{Dir: "elb"}, true)
+	integrationTest(t, &integration.ProgramTestOptions{Dir: "elb"}, "name", true)
 }
 
 func TestELB2(t *testing.T) {
-	integrationTest(t, &integration.ProgramTestOptions{Dir: "elb2"}, true)
+	integrationTest(t, &integration.ProgramTestOptions{Dir: "elb2"}, "name", true)
 }
 
 func TestLBListener(t *testing.T) {
 	// Note we don't compile this one, since it contains semantic errors.
-	integrationTest(t, &integration.ProgramTestOptions{Dir: "lb-listener"}, false)
+	integrationTest(t, &integration.ProgramTestOptions{Dir: "lb-listener"}, "name", false)
 }
 
 func TestLambda(t *testing.T) {
-	integrationTest(t, &integration.ProgramTestOptions{Dir: "lambda"}, true)
+	integrationTest(t, &integration.ProgramTestOptions{Dir: "lambda"}, "name", true)
 }
 
 func TestNetworking(t *testing.T) {
 	t.Skipf("Skipping test due to NYI: provider instances")
-	integrationTest(t, &integration.ProgramTestOptions{Dir: "networking"}, true)
+	integrationTest(t, &integration.ProgramTestOptions{Dir: "networking"}, "name", true)
 }

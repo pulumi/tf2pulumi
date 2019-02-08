@@ -59,6 +59,20 @@ func Convert(opts Options) error {
 		return errors.Wrapf(err, "importing Terraform project graphs")
 	}
 
+	// Filter resource name properties if requested.
+	if opts.FilterResourceNames {
+		if opts.ResourceNameProperty == "" {
+			return errors.New("ResourceNameProperty must not be empty if FilterResourceNames is true")
+		}
+		for _, g := range gs {
+			for _, r := range g.Resources {
+				il.FilterProperties(r, func(key string, _ il.BoundNode) bool {
+					return key != opts.ResourceNameProperty
+				})
+			}
+		}
+	}
+
 	if err = gen.Generate(gs, nodejs.New("auto", opts.Writer)); err != nil {
 		return errors.Wrapf(err, "generating code")
 	}
@@ -72,6 +86,14 @@ type Options struct {
 	// AllowMissingVariables, if true, allows code-gen to continue even if the input configuration references missing
 	// variables.
 	AllowMissingVariables bool
+	// AllowMissingComments allows binding to succeed even if there are errors extracting comments from the source.
+	AllowMissingComments bool
+	// FilterResourceNames, if true, removes the property indicated by ResourceNameProperty from all resources in the
+	// graph.
+	FilterResourceNames bool
+	// ResourceNameProperty sets the key of the resource name property that will be removed if FilterResourceNames is
+	// true.
+	ResourceNameProperty string
 	// Path, when set, overrides the default path (".") to load the source Terraform module from.
 	Path string
 	// Writer can be set to override the default behavior of writing the resulting code to stdout.
@@ -80,8 +102,6 @@ type Options struct {
 	ProviderInfoSource il.ProviderInfoSource
 	// Optional logger for diagnostic information.
 	Logger *log.Logger
-	// AllowMissingComments allows binding to succeed even if there are errors extracting comments from the source.
-	AllowMissingComments bool
 }
 
 type noCredentials struct{}
@@ -105,9 +125,9 @@ func buildGraphs(tree *module.Tree, isRoot bool, opts Options) ([]*il.Graph, err
 	buildOpts := il.BuildOptions{
 		AllowMissingProviders: opts.AllowMissingProviders,
 		AllowMissingVariables: opts.AllowMissingVariables,
+		AllowMissingComments:  opts.AllowMissingComments,
 		ProviderInfoSource:    opts.ProviderInfoSource,
 		Logger:                opts.Logger,
-		AllowMissingComments:  opts.AllowMissingComments,
 	}
 	g, err := il.BuildGraph(tree, &buildOpts)
 	if err != nil {

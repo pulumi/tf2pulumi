@@ -1,8 +1,3 @@
-# NOTE: we do not specify names for any of the test resources in order to improve the reliability of our CI jobs
-# in the face of parallelism and leftover resources. Explicitly naming these resources can cause conflicts
-# between jobs that run concurrently or jobs that fail to clean up their resources. Pulumi will auto-name these
-# for us.
-
 # Specify the provider and access details
 provider "aws" {
   region = "${var.aws_region}"
@@ -47,7 +42,7 @@ resource "aws_route_table_association" "a" {
 ### Compute
 
 resource "aws_autoscaling_group" "app" {
-  # name                 = "tf-test-asg"
+  name                 = "tf-test-asg"
   vpc_zone_identifier  = ["${aws_subnet.main.*.id}"]
   min_size             = "${var.asg_min}"
   max_size             = "${var.asg_max}"

@@ -1,8 +1,3 @@
-# NOTE: we do not specify names for any of the test resources in order to improve the reliability of our CI jobs
-# in the face of parallelism and leftover resources. Explicitly naming these resources can cause conflicts
-# between jobs that run concurrently or jobs that fail to clean up their resources. Pulumi will auto-name these
-# for us.
-
 # Specify the provider and access details
 provider "aws" {
   region = "${var.aws_region}"
@@ -31,7 +26,7 @@ data "aws_iam_policy_document" "policy" {
 }
 
 resource "aws_iam_role" "iam_for_lambda" {
-  # name               = "iam_for_lambda"
+  name               = "iam_for_lambda"
   assume_role_policy = "${data.aws_iam_policy_document.policy.json}"
 }
 

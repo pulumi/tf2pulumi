@@ -1,8 +1,3 @@
-# NOTE: we do not specify names for any of the test resources in order to improve the reliability of our CI jobs
-# in the face of parallelism and leftover resources. Explicitly naming these resources can cause conflicts
-# between jobs that run concurrently or jobs that fail to clean up their resources. Pulumi will auto-name these
-# for us.
-
 # Specify the provider and access details
 provider "aws" {
   region = "${var.aws_region}"
@@ -56,7 +51,7 @@ resource "aws_route_table_association" "a" {
 # Our default security group to access
 # the instances over SSH and HTTP
 resource "aws_security_group" "default" {
-  # name        = "instance_sg"
+  name        = "instance_sg"
   description = "Used in the terraform"
   vpc_id      = "${aws_vpc.default.id}"
 
@@ -88,7 +83,7 @@ resource "aws_security_group" "default" {
 # Our elb security group to access
 # the ELB over HTTP
 resource "aws_security_group" "elb" {
-  # name        = "elb_sg"
+  name        = "elb_sg"
   description = "Used in the terraform"
 
   vpc_id = "${aws_vpc.default.id}"
@@ -114,7 +109,7 @@ resource "aws_security_group" "elb" {
 }
 
 resource "aws_elb" "web" {
-  # name = "example-elb"
+  name = "example-elb"
 
   # The same availability zone as our instance
   subnets = ["${aws_subnet.tf_test_subnet.id}"]
@@ -146,7 +141,7 @@ resource "aws_elb" "web" {
 }
 
 resource "aws_lb_cookie_stickiness_policy" "default" {
-  # name                     = "lbpolicy"
+  name                     = "lbpolicy"
   load_balancer            = "${aws_elb.web.id}"
   lb_port                  = 80
   cookie_expiration_period = 600

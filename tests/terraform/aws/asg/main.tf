@@ -1,15 +1,10 @@
-# NOTE: we do not specify names for any of the test resources in order to improve the reliability of our CI jobs
-# in the face of parallelism and leftover resources. Explicitly naming these resources can cause conflicts
-# between jobs that run concurrently or jobs that fail to clean up their resources. Pulumi will auto-name these
-# for us.
-
 # Specify the provider and access details
 provider "aws" {
   region = "${var.aws_region}"
 }
 
 resource "aws_elb" "web-elb" {
-  # name = "terraform-example-elb"
+  name = "terraform-example-elb"
 
   # The same availability zone as our instances
   availability_zones = ["${split(",", var.availability_zones)}"]
@@ -32,7 +27,7 @@ resource "aws_elb" "web-elb" {
 
 resource "aws_autoscaling_group" "web-asg" {
   availability_zones   = ["${split(",", var.availability_zones)}"]
-  # name                 = "terraform-example-asg"
+  name                 = "terraform-example-asg"
   max_size             = "${var.asg_max}"
   min_size             = "${var.asg_min}"
   desired_capacity     = "${var.asg_desired}"
@@ -49,7 +44,7 @@ resource "aws_autoscaling_group" "web-asg" {
 }
 
 resource "aws_launch_configuration" "web-lc" {
-  # name          = "terraform-example-lc"
+  name          = "terraform-example-lc"
   image_id      = "${lookup(var.aws_amis, var.aws_region)}"
   instance_type = "${var.instance_type}"
 
@@ -61,7 +56,7 @@ resource "aws_launch_configuration" "web-lc" {
 # Our default security group to access
 # the instances over SSH and HTTP
 resource "aws_security_group" "default" {
-  # name        = "terraform_example_sg"
+  name        = "terraform_example_sg"
   description = "Used in the terraform"
 
   # SSH access from anywhere
