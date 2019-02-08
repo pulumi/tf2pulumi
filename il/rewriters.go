@@ -238,3 +238,13 @@ func RewriteAssets(n BoundNode) (BoundNode, error) {
 
 	return VisitBoundNode(n, IdentityVisitor, rewriter)
 }
+
+// FilterProperties removes any properties at the root of the given resource for which the given filter fucntion
+// returns false.
+func FilterProperties(r *ResourceNode, filter func(key string, property BoundNode) bool) {
+	for key, prop := range r.Properties.Elements {
+		if !filter(key, prop) {
+			delete(r.Properties.Elements, key)
+		}
+	}
+}

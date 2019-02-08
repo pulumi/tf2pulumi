@@ -26,6 +26,7 @@ import (
 
 func main() {
 	var opts convert.Options
+	resourceNameProperty := ""
 
 	rootCmd := &cobra.Command{
 		Use:   "tf2pulumi",
@@ -37,6 +38,9 @@ Pulumi TypeScript program that describes the same resource graph.`,
 		SilenceUsage:  true,
 
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if resourceNameProperty != "" {
+				opts.FilterResourceNames, opts.ResourceNameProperty = true, resourceNameProperty
+			}
 			return convert.Convert(opts)
 		},
 	}
@@ -48,6 +52,8 @@ Pulumi TypeScript program that describes the same resource graph.`,
 		"allows code generation to continue if the config references missing variables")
 	flag.BoolVar(&opts.AllowMissingComments, "allow-missing-comments", true,
 		"allows code generation to continue if there are errors extracting comments")
+	flag.StringVar(&resourceNameProperty, "filter-resource-names", "",
+		"when set, the property with the given key will be removed from all resources")
 
 	rootCmd.AddCommand(&cobra.Command{
 		Use:   "version",

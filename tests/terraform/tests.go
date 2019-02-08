@@ -34,7 +34,7 @@ const (
 	baselineFile = "index.base.ts"
 )
 
-func generateCode(t *testing.T, program *integration.ProgramTestOptions) {
+func generateCode(t *testing.T, program *integration.ProgramTestOptions, filterName string) {
 	stdout := program.Stdout
 	if stdout == nil {
 		stdout = os.Stdout
@@ -57,8 +57,13 @@ func generateCode(t *testing.T, program *integration.ProgramTestOptions) {
 	}
 	defer contract.IgnoreClose(indexTS)
 
+	var args []string
+	if filterName != "" {
+		args = append(args, "--filter-resource-names="+filterName)
+	}
+
 	var stderr bytes.Buffer
-	cmd = exec.Command("tf2pulumi")
+	cmd = exec.Command("tf2pulumi", args...)
 	cmd.Dir = program.Dir
 	cmd.Stdout, cmd.Stderr = indexTS, &stderr
 	if err = cmd.Run(); err != nil {
@@ -66,7 +71,7 @@ func generateCode(t *testing.T, program *integration.ProgramTestOptions) {
 	}
 }
 
-func IntegrationTest(t *testing.T, program *integration.ProgramTestOptions, compile bool) {
+func IntegrationTest(t *testing.T, program *integration.ProgramTestOptions, filterName string, compile bool) {
 	cwd, err := os.Getwd()
 	if err != nil {
 		t.Fatalf("expected a valid working directory: %v", err)
@@ -86,7 +91,7 @@ func IntegrationTest(t *testing.T, program *integration.ProgramTestOptions, comp
 	program.Dir = targetDir
 
 	// Generate the Pulumi TypeScript program.
-	generateCode(t, program)
+	generateCode(t, program, filterName)
 
 	// If there is a baseline file, ensure that it matches.
 	baselinePath := filepath.Join(targetDir, baselineFile)

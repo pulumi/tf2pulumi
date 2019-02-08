@@ -1,8 +1,3 @@
-# NOTE: we do not specify names for any of the test resources in order to improve the reliability of our CI jobs
-# in the face of parallelism and leftover resources. Explicitly naming these resources can cause conflicts
-# between jobs that run concurrently or jobs that fail to clean up their resources. Pulumi will auto-name these
-# for us.
-
 # Specify the provider and access details
 provider "aws" {
   region = "${var.aws_region}"
@@ -16,7 +11,7 @@ resource "aws_eip" "default" {
 # Our default security group to access
 # the instances over SSH and HTTP
 resource "aws_security_group" "default" {
-  # name        = "eip_example"
+  name        = "eip_example"
   description = "Used in the terraform"
 
   # SSH access from anywhere

@@ -34,7 +34,7 @@ func integrationTest(t *testing.T, program *integration.ProgramTestOptions, comp
 	program.Config["aws:region"] = region
 	program.ExpectRefreshChanges = true
 
-	terraform.IntegrationTest(t, program, compile)
+	terraform.IntegrationTest(t, program, "name", compile)
 }
 
 func TestASG(t *testing.T) {
