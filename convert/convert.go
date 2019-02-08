@@ -21,6 +21,7 @@ import (
 	"path/filepath"
 
 	"github.com/hashicorp/terraform/command"
+	"github.com/hashicorp/terraform/config"
 	"github.com/hashicorp/terraform/config/module"
 	"github.com/hashicorp/terraform/svchost"
 	"github.com/hashicorp/terraform/svchost/auth"
@@ -66,9 +67,11 @@ func Convert(opts Options) error {
 		}
 		for _, g := range gs {
 			for _, r := range g.Resources {
-				il.FilterProperties(r, func(key string, _ il.BoundNode) bool {
-					return key != opts.ResourceNameProperty
-				})
+				if r.Config.Mode == config.ManagedResourceMode {
+					il.FilterProperties(r, func(key string, _ il.BoundNode) bool {
+						return key != opts.ResourceNameProperty
+					})
+				}
 			}
 		}
 	}
