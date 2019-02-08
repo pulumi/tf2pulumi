@@ -91,7 +91,7 @@ func IntegrationTest(t *testing.T, program *integration.ProgramTestOptions, filt
 	program.Dir = targetDir
 
 	// Generate the Pulumi TypeScript program.
-	generateCode(t, program)
+	generateCode(t, program, filterName)
 
 	// If there is a baseline file, ensure that it matches.
 	baselinePath := filepath.Join(targetDir, baselineFile)

@@ -135,11 +135,10 @@ func (g *generator) genApplyArg(w io.Writer, index int) {
 			g.gen(w, ".map(v => v")
 		}
 
-		r := v.ILNode.(*il.ResourceNode)
 		sch, elements := v.Schemas, v.Elements
-		if r.Config.Mode == config.ManagedResourceMode {
+		if g.resourceMode(v) == config.ManagedResourceMode {
 			sch, elements = sch.PropertySchemas(elements[0]), elements[1:]
-		} else if r.Provider.Config.Name == "http" {
+		} else if r, ok := v.ILNode.(*il.ResourceNode); ok && r.Provider.Config.Name == "http" {
 			elements = nil
 		}
 		for _, e := range elements {
