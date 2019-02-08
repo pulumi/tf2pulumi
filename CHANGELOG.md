@@ -1,4 +1,16 @@
-## v0.4.7 (Unreleased)
+## v0.4.8 (Unreleased)
+
+## v0.4.7 (Released February 8, 2019)
+
+### Improvements
+
+- String literals are now statically coerced to numbers and booleans where possible (tf2pulumi#57)
+- Comments are now extracted from HCL and generated into the output program. This is a best-effort process, so some
+  comments may be omitted (tf2pulumi#59).
+- For NodeJS, names for top-level variables and apply arguments are now more idiomatic (and generally easier to
+  read) (tf2pulumi#60, tf2pulumi#65)
+- Name properties can now be optionally filtered from the generated source in order to take advantage of the Pulumi
+  auto-naming capabilities.
 
 ## v0.4.6 (Released February 1, 2019)
 
