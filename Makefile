@@ -2,6 +2,7 @@ PROJECT_NAME := Terraform -> Pulumi converter
 include build/common.mk
 
 VERSION := $(shell scripts/get-version)
+TESTPARALLELISM := 1
 
 # NOTE: Since the plugin is published using the nodejs style semver version
 # We set the PLUGIN_VERSION to be the same as the version we use when building
