@@ -3,6 +3,7 @@
 - Allow references to `terraform.workspace` (tf2pulumi#68)
 - Allow normal references to counted resources. Terraform allows this when a resource's count evaluates to 1, so 
   we code generate this as a reference to the first resource in the counted resource's list.
+- Data sources with inputs that are outputs of other resources and data sources are now generated correctly.
 
 ## v0.4.7 (Released February 8, 2019)
 

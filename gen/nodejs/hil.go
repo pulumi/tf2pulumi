@@ -213,14 +213,7 @@ func (g *generator) genCall(w io.Writer, n *il.BoundCall) {
 	case "__coerce":
 		g.genCoercion(w, n.Args[0], n.Type())
 	case "__dataSource":
-		g.gen(w, n.Args[0].(*il.BoundLiteral).Value, "(")
-		for i, v := range n.Args[1:] {
-			if i > 0 {
-				g.gen(w, ", ")
-			}
-			g.gen(w, v)
-		}
-		g.gen(w, ")")
+		g.genf(w, "%s(%s)", n.Args[0].(*il.BoundLiteral).Value, n.Args[1])
 	case "__getStack":
 		g.genf(w, "pulumi.getStack()")
 	case "base64decode":
