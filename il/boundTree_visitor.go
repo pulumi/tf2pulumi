@@ -129,6 +129,15 @@ func visitBoundOutput(n *BoundOutput, pre, post BoundNodeVisitor) (BoundNode, er
 	return post(n)
 }
 
+func visitBoundPropertyExpr(n *BoundPropertyExpr, pre, post BoundNodeVisitor) (BoundNode, error) {
+	value, err := VisitBoundNode(n.Value, pre, post)
+	if err != nil {
+		return nil, err
+	}
+	n.Value = value
+	return post(n)
+}
+
 func visitBoundExprs(ns []BoundExpr, pre, post BoundNodeVisitor) ([]BoundExpr, error) {
 	nils := 0
 	for i, e := range ns {
@@ -216,6 +225,8 @@ func VisitBoundNode(n BoundNode, pre, post BoundNodeVisitor) (BoundNode, error) 
 		return visitBoundMapProperty(n, pre, post)
 	case *BoundOutput:
 		return visitBoundOutput(n, pre, post)
+	case *BoundPropertyExpr:
+		return visitBoundPropertyExpr(n, pre, post)
 	case *BoundVariableAccess:
 		return post(n)
 	default:
