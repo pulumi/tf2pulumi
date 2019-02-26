@@ -2,6 +2,7 @@ PROJECT_NAME := Terraform -> Pulumi converter
 include build/common.mk
 
 VERSION := $(shell scripts/get-version)
+TESTPARALLELISM := 1
 
 # NOTE: Since the plugin is published using the nodejs style semver version
 # We set the PLUGIN_VERSION to be the same as the version we use when building
@@ -13,11 +14,11 @@ lint::
 	golangci-lint run
 
 test_fast::
-	go test -short -cover ./il/... ./gen/...
+	$(GO_TEST_FAST) ./il/... ./gen/...
 
 test_all::
-	go test -cover ./il/... ./gen/...
-	PATH=$(PULUMI_BIN):$(PATH) go test -v -cover -timeout 1h ./tests/...
+	$(GO_TEST) ./il/... ./gen/...
+	$(GO_TEST) ./tests/...
 
 release::
 	GOOS=linux GOARCH=amd64 go build -ldflags "-X github.com/pulumi/tf2pulumi/version.Version=${VERSION}" github.com/pulumi/tf2pulumi
