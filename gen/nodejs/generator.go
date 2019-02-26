@@ -22,6 +22,7 @@ import (
 	"strings"
 	"unicode"
 
+	"github.com/hashicorp/hil/ast"
 	"github.com/hashicorp/terraform/config"
 	"github.com/hashicorp/terraform/helper/schema"
 	"github.com/pkg/errors"
@@ -197,6 +198,8 @@ func (g *generator) gen(w io.Writer, vs ...interface{}) {
 			g.genLiteral(w, v)
 		case *il.BoundOutput:
 			g.genOutput(w, v)
+		case *il.BoundPropertyExpr:
+			g.gen(w, v.Value)
 		case *il.BoundVariableAccess:
 			g.genVariableAccess(w, v)
 		case *il.BoundListProperty:
@@ -649,9 +652,30 @@ func (g *generator) generateResource(r *il.ResourceNode) error {
 
 	name := g.nodeName(r)
 	qualifiedMemberName := fmt.Sprintf("%s%s.%s", provider, module, memberName)
+
+	// Because data sources are treated as normal function calls, we treat them a little bit differently by first
+	// rewriting them into calls to the `__dataSource` intrinsic.
+	properties := il.BoundNode(r.Properties)
+	if r.Config.Mode != config.ManagedResourceMode {
+		properties = &il.BoundCall{
+			HILNode:  &ast.Call{Func: "__dataSource"},
+			ExprType: il.TypeUnknown,
+			Args: []il.BoundExpr{
+				&il.BoundLiteral{
+					ExprType: il.TypeString,
+					Value:    qualifiedMemberName,
+				},
+				&il.BoundPropertyExpr{
+					NodeType: il.TypeMap,
+					Value:    r.Properties,
+				},
+			},
+		}
+	}
+
 	if r.Count == nil {
 		// If count is nil, this is a single-instance resource.
-		inputs, _, err := g.computeProperty(r.Properties, false, "")
+		inputs, transformed, err := g.computeProperty(properties, false, "")
 		if err != nil {
 			return err
 		}
@@ -667,7 +691,15 @@ func (g *generator) generateResource(r *il.ResourceNode) error {
 			g.printf("%sconst %s = new %s(%s, %s%s);", g.indent, name, qualifiedMemberName, resName, inputs, explicitDeps)
 		} else {
 			// TODO: explicit dependencies
-			g.printf("%sconst %s = pulumi.output(%s(%s));", g.indent, name, qualifiedMemberName, inputs)
+
+			// If the input properties did not contain any outputs, then we need to wrap the result in a call to pulumi.output.
+			// Otherwise, we are okay as-is.
+			fmtstr := "%sconst %s = pulumi.output(%s);"
+			if transformed {
+				fmtstr = "%sconst %s = %s;"
+			}
+
+			g.printf(fmtstr, g.indent, name, inputs)
 		}
 	} else {
 		// Otherwise we need to Generate multiple resources in a loop.
@@ -675,7 +707,7 @@ func (g *generator) generateResource(r *il.ResourceNode) error {
 		if err != nil {
 			return err
 		}
-		inputs, _, err := g.computeProperty(r.Properties, true, "i")
+		inputs, transformed, err := g.computeProperty(properties, true, "i")
 		if err != nil {
 			return err
 		}
@@ -693,7 +725,15 @@ func (g *generator) generateResource(r *il.ResourceNode) error {
 					inputs, explicitDeps)
 			} else {
 				// TODO: explicit dependencies
-				g.printf("%s%s.push(pulumi.output(%s(%s)));\n", g.indent, name, qualifiedMemberName, inputs)
+
+				// If the input properties did not contain any outputs, then we need to wrap the result in a call to pulumi.output.
+				// Otherwise, we are okay as-is.
+				fmtstr := "%s%s.push(pulumi.output(%s));\n"
+				if transformed {
+					fmtstr = "%s%s.push(%s);\n"
+				}
+
+				g.printf(fmtstr, g.indent, name, qualifiedMemberName, inputs)
 			}
 		})
 		g.printf("%s}", g.indent)
