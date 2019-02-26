@@ -87,7 +87,7 @@ func Convert(opts Options) error {
 		}
 	}
 
-	generator, err := createGenerator("auto", opts)
+	generator, err := newGenerator("auto", opts)
 	if err != nil {
 		return errors.Wrapf(err, "creating generator")
 	}
@@ -158,7 +158,7 @@ func buildGraphs(tree *module.Tree, isRoot bool, opts Options) ([]*il.Graph, err
 	return append(children, g), nil
 }
 
-func createGenerator(projectName string, opts Options) (gen.Generator, error) {
+func newGenerator(projectName string, opts Options) (gen.Generator, error) {
 	switch opts.TargetLanguage {
 	case LanguageTypescript:
 		return nodejs.New(projectName, opts.Writer), nil
