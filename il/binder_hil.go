@@ -290,7 +290,7 @@ func (b *propertyBinder) bindVariableAccess(n *ast.VariableAccess) (BoundExpr, e
 		ilNode = r
 
 		// Ensure that the resource has a provider.
-		if err := b.builder.ensureProvider(r); err != nil {
+		if err := b.builder.ensureBound(r); err != nil {
 			return nil, err
 		}
 
@@ -301,6 +301,22 @@ func (b *propertyBinder) bindVariableAccess(n *ast.VariableAccess) (BoundExpr, e
 		elemSch := sch
 		for _, e := range elements {
 			elemSch = elemSch.PropertySchemas(e)
+		}
+
+		// If this access refers to a counted resource but is not itself a splat or an index, treat it as if it is
+		// accessing the first resource. This is roughly consistent with TF, which allows the following:
+		//
+		//     resource "foo_resource" "foo" {
+		//         count = "${cond} ? 0 : 1"
+		//     }
+		//
+		//     resource "bar_resource" "bar" {
+		//         foo_name = "${foo_resource.foo.name}"
+		//     }
+		//
+		// Note that this only works in TF when the target's count is exactly 1.
+		if r.Count != nil && !v.Multi {
+			v.Multi, v.Index = true, 0
 		}
 
 		// Handle multi-references (splats and indexes).
@@ -315,8 +331,14 @@ func (b *propertyBinder) bindVariableAccess(n *ast.VariableAccess) (BoundExpr, e
 		// "[^.]\+"
 		return nil, errors.New("NYI: simple variables")
 	case *config.TerraformVariable:
-		// "terraform."
-		return nil, errors.New("NYI: terraform variables")
+		if v.Field != "workspace" {
+			return nil, errors.Errorf("unsupported key 'terraform.%s'", v.Field)
+		}
+		return &BoundCall{
+			HILNode:  &ast.Call{Func: "__getStack"},
+			ExprType: TypeString,
+			Args:     nil,
+		}, nil
 	case *config.UserVariable:
 		// "var."
 		if v.Elem != "" {
