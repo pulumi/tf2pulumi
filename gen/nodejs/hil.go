@@ -212,6 +212,8 @@ func (g *generator) genCall(w io.Writer, n *il.BoundCall) {
 		g.genf(w, "new pulumi.asset.FileAsset(%v)", n.Args[0])
 	case "__coerce":
 		g.genCoercion(w, n.Args[0], n.Type())
+	case "__getStack":
+		g.genf(w, "pulumi.getStack()")
 	case "base64decode":
 		g.genf(w, "Buffer.from(%v, \"base64\").toString()", n.Args[0])
 	case "base64encode":
