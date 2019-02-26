@@ -1,4 +1,8 @@
-## v0.4.8 (Unreleased)
+## v0.4.9 (Unreleased)
+
+## v0.4.8 (Released February 26, 2019)
+
+## Improvements
 
 - Allow references to `terraform.workspace` (tf2pulumi#68)
 - Allow normal references to counted resources. Terraform allows this when a resource's count evaluates to 1, so 
