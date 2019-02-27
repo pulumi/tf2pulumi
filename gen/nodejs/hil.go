@@ -87,7 +87,7 @@ func (g *generator) genApplyOutput(w io.Writer, n *il.BoundVariableAccess) {
 func (g *generator) genApply(w io.Writer, n *il.BoundCall) {
 	// Extract the list of outputs and the continuation expression from the `__apply` arguments.
 	applyArgs, then := il.ParseApplyCall(n)
-	g.applyArgs, g.applyArgNames = applyArgs, g.assignApplyArgNames(g.applyArgs, then)
+	g.applyArgs, g.applyArgNames = applyArgs, g.assignApplyArgNames(applyArgs, then)
 
 	if len(g.applyArgs) == 1 {
 		// If we only have a single output, just generate a normal `.apply`.
