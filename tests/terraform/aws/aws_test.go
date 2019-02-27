@@ -15,64 +15,82 @@
 package main
 
 import (
+	"os"
 	"testing"
 
 	"github.com/pulumi/tf2pulumi/tests/terraform"
 )
 
+// RequireAWSRegion reads an AWS region from the `AWS_REGION` environment variable and sets the value of the
+// `aws:region` Pulumi config key to the contents of the environment variable. If the environment variable is not set,
+// the test is skipped.
+func RequireAWSRegion() terraform.TestOptionsFunc {
+	return func(t *testing.T, test *terraform.Test) {
+		region := os.Getenv("AWS_REGION")
+		if region == "" {
+			t.Skipf("Skipping test due to missing AWS_REGION environment variable")
+		}
+		if test.RunOptions.Config == nil {
+			test.RunOptions.Config = make(map[string]string)
+		}
+		test.RunOptions.Config["aws:region"] = region
+	}
+}
+
 func TestASG(t *testing.T) {
 	terraform.RunTest(t, "asg",
 		terraform.SkipPython(),
-		terraform.RequireAWSRegion(),
+		RequireAWSRegion(),
 	)
 }
 
 func TestCognitoUserPool(t *testing.T) {
 	terraform.RunTest(t, "cognito-user-pool",
 		terraform.SkipPython(),
-		terraform.RequireAWSRegion(),
+		RequireAWSRegion(),
 	)
 }
 
 func TestCount(t *testing.T) {
 	terraform.RunTest(t, "count",
 		terraform.SkipPython(),
-		terraform.RequireAWSRegion(),
+		RequireAWSRegion(),
 	)
 }
 
 func TestECSALB(t *testing.T) {
+	t.Skipf("Skipping test due to NYI: call to cidersubnet")
 	terraform.RunTest(t, "ecs-alb",
-		terraform.Skip("Skipping test due to NYI: call to cidersubnet"),
-		terraform.RequireAWSRegion(),
+		terraform.SkipPython(),
+		RequireAWSRegion(),
 	)
 }
 
 func TestEIP(t *testing.T) {
 	terraform.RunTest(t, "eip",
 		terraform.SkipPython(),
-		terraform.RequireAWSRegion(),
+		RequireAWSRegion(),
 	)
 }
 
 func TestELB(t *testing.T) {
 	terraform.RunTest(t, "elb",
 		terraform.SkipPython(),
-		terraform.RequireAWSRegion(),
+		RequireAWSRegion(),
 	)
 }
 
 func TestELB2(t *testing.T) {
 	terraform.RunTest(t, "elb2",
 		terraform.SkipPython(),
-		terraform.RequireAWSRegion(),
+		RequireAWSRegion(),
 	)
 }
 
 func TestLBListener(t *testing.T) {
 	terraform.RunTest(t, "lb-listener",
 		terraform.SkipPython(),
-		terraform.RequireAWSRegion(),
+		RequireAWSRegion(),
 		// Note we don't compile this one, since it contains semantic errors.
 		terraform.Compile(false),
 	)
@@ -81,13 +99,14 @@ func TestLBListener(t *testing.T) {
 func TestLambda(t *testing.T) {
 	terraform.RunTest(t, "lambda",
 		terraform.SkipPython(),
-		terraform.RequireAWSRegion(),
+		RequireAWSRegion(),
 	)
 }
 
 func TestNetworking(t *testing.T) {
+	t.Skipf("Skipping test due to NYI: provider instances")
 	terraform.RunTest(t, "networking",
-		terraform.Skip("Skipping test due to NYI: provider instances"),
-		terraform.RequireAWSRegion(),
+		terraform.SkipPython(),
+		RequireAWSRegion(),
 	)
 }

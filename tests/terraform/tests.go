@@ -260,22 +260,6 @@ func FilterName(value string) TestOptionsFunc {
 	return func(_ *testing.T, test *Test) { test.Options.FilterName = value }
 }
 
-// RequireAWSRegion reads an AWS region from the `AWS_REGION` environment variable and sets the value of the
-// `aws:region` Pulumi config key to the contents of the environment variable. If the environment variable is not set,
-// the test is skipped.
-func RequireAWSRegion() TestOptionsFunc {
-	return func(t *testing.T, test *Test) {
-		region := os.Getenv("AWS_REGION")
-		if region == "" {
-			t.Skipf("Skipping test due to missing AWS_REGION environment variable")
-		}
-		if test.RunOptions.Config == nil {
-			test.RunOptions.Config = make(map[string]string)
-		}
-		test.RunOptions.Config["aws:region"] = region
-	}
-}
-
 // Skip skips the test for the given reason.
 func Skip(reason string) TestOptionsFunc {
 	return func(_ *testing.T, test *Test) { test.Options.Skip = reason }
