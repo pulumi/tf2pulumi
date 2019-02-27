@@ -22,7 +22,6 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/hashicorp/hil/ast"
 	"github.com/hashicorp/terraform/config"
 	"github.com/hashicorp/terraform/helper/schema"
 	"github.com/pkg/errors"
@@ -54,7 +53,7 @@ type generator struct {
 	// countIndex is the name (if any) of the currently in-scope count variable.
 	countIndex string
 	// applyArgs is the list of currently in-scope apply arguments.
-	applyArgs []il.BoundExpr
+	applyArgs []*il.BoundVariableAccess
 	// applyArgNames is the list of names for the currently in-scope apply arguments.
 	applyArgNames []string
 	// unknownInputs is the set of input variables that may be unknown at runtime.
@@ -657,20 +656,7 @@ func (g *generator) generateResource(r *il.ResourceNode) error {
 	// rewriting them into calls to the `__dataSource` intrinsic.
 	properties := il.BoundNode(r.Properties)
 	if r.Config.Mode != config.ManagedResourceMode {
-		properties = &il.BoundCall{
-			HILNode:  &ast.Call{Func: "__dataSource"},
-			ExprType: il.TypeUnknown,
-			Args: []il.BoundExpr{
-				&il.BoundLiteral{
-					ExprType: il.TypeString,
-					Value:    qualifiedMemberName,
-				},
-				&il.BoundPropertyExpr{
-					NodeType: il.TypeMap,
-					Value:    r.Properties,
-				},
-			},
-		}
+		properties = newDataSourceCall(qualifiedMemberName, properties)
 	}
 
 	if r.Count == nil {
@@ -693,7 +679,8 @@ func (g *generator) generateResource(r *il.ResourceNode) error {
 			// TODO: explicit dependencies
 
 			// If the input properties did not contain any outputs, then we need to wrap the result in a call to pulumi.output.
-			// Otherwise, we are okay as-is.
+			// Otherwise, we are okay as-is: the apply rewrite perfomed by computeProperty will have ensured that the result
+			// is output-typed.
 			fmtstr := "%sconst %s = pulumi.output(%s);"
 			if transformed {
 				fmtstr = "%sconst %s = %s;"
@@ -726,8 +713,9 @@ func (g *generator) generateResource(r *il.ResourceNode) error {
 			} else {
 				// TODO: explicit dependencies
 
-				// If the input properties did not contain any outputs, then we need to wrap the result in a call to pulumi.output.
-				// Otherwise, we are okay as-is.
+				// If the input properties did not contain any outputs, then we need to wrap the result in a call to
+				// pulumi.output. Otherwise, we are okay as-is: the apply rewrite perfomed by computeProperty will hav
+				// ensured that the result is output-typed.
 				fmtstr := "%s%s.push(pulumi.output(%s));\n"
 				if transformed {
 					fmtstr = "%s%s.push(%s);\n"

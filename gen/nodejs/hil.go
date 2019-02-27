@@ -86,13 +86,12 @@ func (g *generator) genApplyOutput(w io.Writer, n *il.BoundVariableAccess) {
 // genApply generates code for a single `.apply` invocation as represented by a call to the `__apply` intrinsic.
 func (g *generator) genApply(w io.Writer, n *il.BoundCall) {
 	// Extract the list of outputs and the continuation expression from the `__apply` arguments.
-	g.applyArgs = n.Args[:len(n.Args)-1]
-	then := n.Args[len(n.Args)-1]
-	g.applyArgNames = g.assignApplyArgNames(g.applyArgs, then)
+	applyArgs, then := il.ParseApplyCall(n)
+	g.applyArgs, g.applyArgNames = applyArgs, g.assignApplyArgNames(g.applyArgs, then)
 
 	if len(g.applyArgs) == 1 {
 		// If we only have a single output, just generate a normal `.apply`.
-		g.genApplyOutput(w, g.applyArgs[0].(*il.BoundVariableAccess))
+		g.genApplyOutput(w, g.applyArgs[0])
 		g.genf(w, ".apply(%s => %v)", g.applyArgNames[0], then)
 	} else {
 		// Otherwise, generate a call to `pulumi.all([]).apply()`.
@@ -101,7 +100,7 @@ func (g *generator) genApply(w io.Writer, n *il.BoundCall) {
 			if i > 0 {
 				g.gen(w, ", ")
 			}
-			g.genApplyOutput(w, o.(*il.BoundVariableAccess))
+			g.genApplyOutput(w, o)
 		}
 		g.gen(w, "]).apply(([")
 		for i := range g.applyArgs {
@@ -122,7 +121,7 @@ func (g *generator) genApplyArg(w io.Writer, index int) {
 	contract.Assert(g.applyArgs != nil)
 
 	// Extract the variable reference.
-	v := g.applyArgs[index].(*il.BoundVariableAccess)
+	v := g.applyArgs[index]
 
 	// Generate a reference to the parameter.
 	g.gen(w, g.applyArgNames[index])
@@ -202,20 +201,22 @@ func (g *generator) genCoercion(w io.Writer, n il.BoundExpr, toType il.Type) {
 // genCall generates code for a call expression.
 func (g *generator) genCall(w io.Writer, n *il.BoundCall) {
 	switch n.HILNode.Func {
-	case "__apply":
+	case il.IntrinsicApply:
 		g.genApply(w, n)
-	case "__applyArg":
-		g.genApplyArg(w, n.Args[0].(*il.BoundLiteral).Value.(int))
-	case "__archive":
-		g.genf(w, "new pulumi.asset.FileArchive(%v)", n.Args[0])
-	case "__asset":
-		g.genf(w, "new pulumi.asset.FileAsset(%v)", n.Args[0])
-	case "__coerce":
-		g.genCoercion(w, n.Args[0], n.Type())
-	case "__dataSource":
-		g.genf(w, "%s(%s)", n.Args[0].(*il.BoundLiteral).Value, n.Args[1])
-	case "__getStack":
+	case il.IntrinsicApplyArg:
+		g.genApplyArg(w, il.ParseApplyArgCall(n))
+	case il.IntrinsicArchive:
+		g.genf(w, "new pulumi.asset.FileArchive(%v)", il.ParseArchiveCall(n))
+	case il.IntrinsicAsset:
+		g.genf(w, "new pulumi.asset.FileAsset(%v)", il.ParseAssetCall(n))
+	case il.IntrinsicCoerce:
+		value, toType := il.ParseCoerceCall(n)
+		g.genCoercion(w, value, toType)
+	case il.IntrinsicGetStack:
 		g.genf(w, "pulumi.getStack()")
+	case intrinsicDataSource:
+		function, inputs := parseDataSourceCall(n)
+		g.genf(w, "%s(%s)", function, inputs)
 	case "base64decode":
 		g.genf(w, "Buffer.from(%v, \"base64\").toString()", n.Args[0])
 	case "base64encode":

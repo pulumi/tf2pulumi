@@ -16,8 +16,6 @@ package il
 
 import (
 	"strconv"
-
-	"github.com/hashicorp/hil/ast"
 )
 
 // makeCoercion inserts a call to the `__coerce` intrinsic if one is required to convert the given expression to the
@@ -68,11 +66,7 @@ func makeCoercion(n BoundNode, toType Type) BoundNode {
 		return n
 	}
 
-	return &BoundCall{
-		HILNode:  &ast.Call{Func: "__coerce"},
-		ExprType: toType,
-		Args:     []BoundExpr{e},
-	}
+	return NewCoerceCall(e, toType)
 }
 
 // AddCoercions inserts calls to the `__coerce` intrinsic in cases where a list or map element's type disagrees with

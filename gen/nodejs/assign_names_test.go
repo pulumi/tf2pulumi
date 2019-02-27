@@ -225,7 +225,7 @@ func TestAssignApplyNames(t *testing.T) {
 
 	g := &generator{nameTable: assignNames(m, true)}
 
-	args := []il.BoundExpr{
+	args := []*il.BoundVariableAccess{
 		boundRef("local.name", il.TypeString.OutputOf(), m.Locals["name"]),
 		boundRef("var.name", il.TypeString.OutputOf(), m.Variables["name"]),
 		boundRef("var.region", il.TypeString.OutputOf(), m.Variables["region"]),
