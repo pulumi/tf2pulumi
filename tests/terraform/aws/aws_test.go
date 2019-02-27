@@ -15,67 +15,79 @@
 package main
 
 import (
-	"os"
 	"testing"
-
-	"github.com/pulumi/pulumi/pkg/testing/integration"
 
 	"github.com/pulumi/tf2pulumi/tests/terraform"
 )
 
-func integrationTest(t *testing.T, program *integration.ProgramTestOptions, compile bool) {
-	region := os.Getenv("AWS_REGION")
-	if region == "" {
-		t.Skipf("Skipping test due to missing AWS_REGION environment variable")
-	}
-	if program.Config == nil {
-		program.Config = make(map[string]string)
-	}
-	program.Config["aws:region"] = region
-	program.ExpectRefreshChanges = true
-
-	terraform.IntegrationTest(t, program, "name", compile)
-}
-
 func TestASG(t *testing.T) {
-	integrationTest(t, &integration.ProgramTestOptions{Dir: "asg"}, true)
+	terraform.RunTest(t, "asg",
+		terraform.SkipPython(),
+		terraform.RequireAWSRegion(),
+	)
 }
 
 func TestCognitoUserPool(t *testing.T) {
-	integrationTest(t, &integration.ProgramTestOptions{Dir: "cognito-user-pool"}, true)
+	terraform.RunTest(t, "cognito-user-pool",
+		terraform.SkipPython(),
+		terraform.RequireAWSRegion(),
+	)
 }
 
 func TestCount(t *testing.T) {
-	integrationTest(t, &integration.ProgramTestOptions{Dir: "count"}, true)
+	terraform.RunTest(t, "count",
+		terraform.SkipPython(),
+		terraform.RequireAWSRegion(),
+	)
 }
 
 func TestECSALB(t *testing.T) {
-	t.Skipf("Skipping test due to NYI: call to cidrsubnet")
-	integrationTest(t, &integration.ProgramTestOptions{Dir: "ecs-alb"}, true)
+	terraform.RunTest(t, "ecs-alb",
+		terraform.Skip("Skipping test due to NYI: call to cidersubnet"),
+		terraform.RequireAWSRegion(),
+	)
 }
 
 func TestEIP(t *testing.T) {
-	integrationTest(t, &integration.ProgramTestOptions{Dir: "eip"}, true)
+	terraform.RunTest(t, "eip",
+		terraform.SkipPython(),
+		terraform.RequireAWSRegion(),
+	)
 }
 
 func TestELB(t *testing.T) {
-	integrationTest(t, &integration.ProgramTestOptions{Dir: "elb"}, true)
+	terraform.RunTest(t, "elb",
+		terraform.SkipPython(),
+		terraform.RequireAWSRegion(),
+	)
 }
 
 func TestELB2(t *testing.T) {
-	integrationTest(t, &integration.ProgramTestOptions{Dir: "elb2"}, true)
+	terraform.RunTest(t, "elb2",
+		terraform.SkipPython(),
+		terraform.RequireAWSRegion(),
+	)
 }
 
 func TestLBListener(t *testing.T) {
-	// Note we don't compile this one, since it contains semantic errors.
-	integrationTest(t, &integration.ProgramTestOptions{Dir: "lb-listener"}, false)
+	terraform.RunTest(t, "lb-listener",
+		terraform.SkipPython(),
+		terraform.RequireAWSRegion(),
+		// Note we don't compile this one, since it contains semantic errors.
+		terraform.Compile(false),
+	)
 }
 
 func TestLambda(t *testing.T) {
-	integrationTest(t, &integration.ProgramTestOptions{Dir: "lambda"}, true)
+	terraform.RunTest(t, "lambda",
+		terraform.SkipPython(),
+		terraform.RequireAWSRegion(),
+	)
 }
 
 func TestNetworking(t *testing.T) {
-	t.Skipf("Skipping test due to NYI: provider instances")
-	integrationTest(t, &integration.ProgramTestOptions{Dir: "networking"}, true)
+	terraform.RunTest(t, "networking",
+		terraform.Skip("Skipping test due to NYI: provider instances"),
+		terraform.RequireAWSRegion(),
+	)
 }
