@@ -334,11 +334,7 @@ func (b *propertyBinder) bindVariableAccess(n *ast.VariableAccess) (BoundExpr, e
 		if v.Field != "workspace" {
 			return nil, errors.Errorf("unsupported key 'terraform.%s'", v.Field)
 		}
-		return &BoundCall{
-			HILNode:  &ast.Call{Func: "__getStack"},
-			ExprType: TypeString,
-			Args:     nil,
-		}, nil
+		return NewGetStackCall(), nil
 	case *config.UserVariable:
 		// "var."
 		if v.Elem != "" {

@@ -102,7 +102,7 @@ func (nt *applyNameTable) disambiguateArgName(n *il.BoundVariableAccess, bestNam
 	}
 }
 
-func (g *generator) assignApplyArgNames(applyArgs []il.BoundExpr, then il.BoundExpr) []string {
+func (g *generator) assignApplyArgNames(applyArgs []*il.BoundVariableAccess, then il.BoundExpr) []string {
 	nt := &applyNameTable{
 		g:          g,
 		assigned:   make(map[string]bool),
@@ -128,13 +128,13 @@ func (g *generator) assignApplyArgNames(applyArgs []il.BoundExpr, then il.BoundE
 
 	argNames := make([]string, len(applyArgs))
 	for i, arg := range applyArgs {
-		bestName := nt.bestArgName(arg.(*il.BoundVariableAccess))
+		bestName := nt.bestArgName(arg)
 		argNames[i], nt.nameCounts[bestName] = bestName, nt.nameCounts[bestName]+1
 	}
 
 	for i, argName := range argNames {
 		if nt.nameCounts[argName] > 1 {
-			argName = nt.disambiguateArgName(applyArgs[i].(*il.BoundVariableAccess), argName)
+			argName = nt.disambiguateArgName(applyArgs[i], argName)
 			if nt.nameCounts[argName] == 0 {
 				nt.nameCounts[argName] = 1
 			}

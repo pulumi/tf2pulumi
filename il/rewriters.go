@@ -17,7 +17,6 @@ package il
 import (
 	"sort"
 
-	"github.com/hashicorp/hil/ast"
 	"github.com/hashicorp/terraform/config"
 	"github.com/pulumi/pulumi-terraform/pkg/tfbridge"
 	"github.com/pulumi/pulumi/pkg/util/contract"
@@ -27,7 +26,7 @@ import (
 // __apply intrinsic and replacing the output properties with appropriate calls to the __applyArg intrinsic.
 type applyRewriter struct {
 	root      BoundExpr
-	applyArgs []BoundExpr
+	applyArgs []*BoundVariableAccess
 }
 
 // rewriteBoundVariableAccess replaces a single access to an ouptut-typed BoundVariableAccess with a call to the
@@ -44,11 +43,7 @@ func (r *applyRewriter) rewriteBoundVariableAccess(n *BoundVariableAccess) (Boun
 	idx := len(r.applyArgs)
 	r.applyArgs = append(r.applyArgs, n)
 
-	return &BoundCall{
-		HILNode:  &ast.Call{Func: "__applyArg"},
-		ExprType: n.Type().ElementType(),
-		Args:     []BoundExpr{&BoundLiteral{ExprType: TypeNumber, Value: idx}},
-	}, nil
+	return NewApplyArgCall(idx, n.Type().ElementType()), nil
 }
 
 // rewriteRoot replaces the root node in a bound expression with a call to the __apply intrinsic if necessary.
@@ -61,13 +56,7 @@ func (r *applyRewriter) rewriteRoot(n BoundExpr) (BoundNode, error) {
 		return n, nil
 	}
 
-	r.applyArgs = append(r.applyArgs, n)
-
-	return &BoundCall{
-		HILNode:  &ast.Call{Func: "__apply"},
-		ExprType: TypeUnknown.OutputOf(),
-		Args:     r.applyArgs,
-	}, nil
+	return NewApplyCall(r.applyArgs, n), nil
 }
 
 // rewriteNode performs the apply rewrite on a single node, delegating to type-specific functions as necessary.
@@ -202,7 +191,6 @@ func RewriteAssets(n BoundNode) (BoundNode, error) {
 			if elemSch.Pulumi == nil || elemSch.Pulumi.Asset == nil {
 				continue
 			}
-
 			asset := elemSch.Pulumi.Asset
 
 			// If the argument to this parameter is an archive resource, strip the field off of the variable access and
@@ -216,16 +204,13 @@ func RewriteAssets(n BoundNode) (BoundNode, error) {
 			}
 
 			if !isArchiveResource {
-				builtin := "__asset"
+				var call BoundExpr
 				if asset.Kind == tfbridge.FileArchive || asset.Kind == tfbridge.BytesArchive {
-					builtin = "__archive"
+					call = NewArchiveCall(e)
+				} else {
+					call = NewAssetCall(e)
 				}
-
-				m.Elements[k] = &BoundCall{
-					HILNode:  &ast.Call{Func: builtin},
-					ExprType: TypeUnknown,
-					Args:     []BoundExpr{e},
-				}
+				m.Elements[k] = call
 			}
 
 			if asset.HashField != "" {
