@@ -15,6 +15,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"os"
 
@@ -26,7 +27,7 @@ import (
 
 func main() {
 	var opts convert.Options
-	resourceNameProperty := ""
+	resourceNameProperty, filterAutoNames := "", false
 
 	rootCmd := &cobra.Command{
 		Use:   "tf2pulumi",
@@ -38,9 +39,14 @@ Pulumi TypeScript program that describes the same resource graph.`,
 		SilenceUsage:  true,
 
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if resourceNameProperty != "" {
-				opts.FilterResourceNames, opts.ResourceNameProperty = true, resourceNameProperty
+			if resourceNameProperty != "" && filterAutoNames {
+				return errors.New(
+					"exactly one of --filter-resource-names or --filter-auto-names may be specified")
 			}
+
+			opts.FilterResourceNames = resourceNameProperty != "" || filterAutoNames
+			opts.ResourceNameProperty = resourceNameProperty
+
 			return convert.Convert(opts)
 		},
 	}
@@ -54,6 +60,8 @@ Pulumi TypeScript program that describes the same resource graph.`,
 		"allows code generation to continue if there are errors extracting comments")
 	flag.StringVar(&resourceNameProperty, "filter-resource-names", "",
 		"when set, the property with the given key will be removed from all resources")
+	flag.BoolVar(&filterAutoNames, "filter-auto-names", false,
+		"when set, properties that are auto-generated names will be removed from all resources")
 	flag.StringVar(&opts.TargetLanguage, "target-language", "typescript",
 		"sets the target language")
 	rootCmd.AddCommand(&cobra.Command{

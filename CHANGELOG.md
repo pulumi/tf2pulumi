@@ -1,5 +1,11 @@
 ## v0.4.9 (Unreleased)
 
+## Improvements
+
+- Auto-named properties can now be optionally filtered from the generated source using schema information. This gives
+  better results than the previous filtering, which sometimes removed properties that overlapped with auto-named
+  properties but were not themselves auto-names.
+
 ## v0.4.8 (Released February 26, 2019)
 
 ## Improvements
