@@ -73,13 +73,15 @@ func Convert(opts Options) error {
 
 	// Filter resource name properties if requested.
 	if opts.FilterResourceNames {
-		if opts.ResourceNameProperty == "" {
-			return errors.New("ResourceNameProperty must not be empty if FilterResourceNames is true")
-		}
+		filterAutoNames := opts.ResourceNameProperty == ""
 		for _, g := range gs {
 			for _, r := range g.Resources {
 				if r.Config.Mode == config.ManagedResourceMode {
 					il.FilterProperties(r, func(key string, _ il.BoundNode) bool {
+						if filterAutoNames {
+							sch := r.Schemas().PropertySchemas(key).Pulumi
+							return sch == nil || sch.Default == nil || !sch.Default.AutoNamed
+						}
 						return key != opts.ResourceNameProperty
 					})
 				}
