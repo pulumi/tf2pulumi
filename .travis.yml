@@ -18,6 +18,7 @@ install:
     - pulumi plugin install resource azure 0.15.2
     - pulumi plugin install resource gcp 0.15.1
     - pulumi plugin install resource terraform-template 0.15.0
+    - pulumi plugin install resource random 0.4.0
 
     # Install Terraform.
     - curl -sLo /tmp/terraform.zip https://releases.hashicorp.com/terraform/0.11.8/terraform_0.11.8_linux_amd64.zip
