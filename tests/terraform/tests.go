@@ -45,7 +45,7 @@ type Test struct {
 // ConvertOptions are options controlling the behavior of tf2pulumi. Its arguments are generally converted to
 // command-line flags.
 type ConvertOptions struct {
-	Compile    bool   // If true, run pulumi on the generated code.
+	Compile    *bool  // If true, run pulumi on the generated code. Defaults to true.
 	FilterName string // If non-empty, filter out properties with the given name.
 	Skip       string // If non-empty, skip the current test with the given message.
 }
@@ -53,6 +53,9 @@ type ConvertOptions struct {
 // With constructs a new ConvertOptions out of a base set of options and a set of options that will override fields that
 // are not set in the base.
 func (c ConvertOptions) With(other ConvertOptions) ConvertOptions {
+	if other.Compile != nil {
+		c.Compile = other.Compile
+	}
 	if other.FilterName != "" {
 		c.FilterName = other.FilterName
 	}
@@ -154,7 +157,7 @@ func (test *targetTest) Run(t *testing.T) {
 	}
 
 	// Now, if desired, finally ensure that it actually compiles (and anything else the specific test requires).
-	if test.convertOpts.Compile {
+	if test.convertOpts.Compile == nil || *test.convertOpts.Compile {
 		integration.ProgramTest(t, test.runOpts)
 	}
 }
@@ -232,7 +235,7 @@ func (test *targetTest) generateCode(t *testing.T) {
 func RunTest(t *testing.T, dir string, opts ...TestOptionsFunc) {
 	test := Test{}
 	// Apply common defaults.
-	test.Options.Compile = true
+	test.Options.Compile = nil
 	test.Options.FilterName = "name"
 	test.RunOptions = &integration.ProgramTestOptions{
 		Dir:                  dir,
@@ -249,9 +252,9 @@ func RunTest(t *testing.T, dir string, opts ...TestOptionsFunc) {
 type TestOptionsFunc func(*testing.T, *Test)
 
 // Compile sets whether or not this test case should be executed by Pulumi after being processed by tf2pulumi. Defaults
-// to false if not provided.
+// to true if not provided.
 func Compile(value bool) TestOptionsFunc {
-	return func(_ *testing.T, test *Test) { test.Options.Compile = value }
+	return func(_ *testing.T, test *Test) { test.Options.Compile = &value }
 }
 
 // FilterName sets whether or not tf2pulumi should filter properties with the given name for this test case. Defaults
