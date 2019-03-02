@@ -48,9 +48,9 @@ func (g *generator) computeHTTPInputs(r *il.ResourceNode, indent bool, count str
 
 	buf := &bytes.Buffer{}
 	buf.WriteString("{\n")
-	fmt.Fprintf(buf, "%s    url: %s,\n", g.indent, url)
-	fmt.Fprintf(buf, "%s    headers: %s,\n", g.indent, requestHeaders)
-	fmt.Fprintf(buf, "%s}", g.indent)
+	fmt.Fprintf(buf, "%s    url: %s,\n", g.Indent, url)
+	fmt.Fprintf(buf, "%s    headers: %s,\n", g.Indent, requestHeaders)
+	fmt.Fprintf(buf, "%s}", g.Indent)
 	return buf.String(), nil
 }
 
@@ -66,7 +66,7 @@ func (g *generator) generateHTTP(r *il.ResourceNode) error {
 			return err
 		}
 
-		g.printf("const %s = pulumi.output(rpn(%s).promise());", name, inputs)
+		g.Printf("const %s = pulumi.output(rpn(%s).promise());", name, inputs)
 	} else {
 		count, _, err := g.computeProperty(r.Count, false, "")
 		if err != nil {
@@ -77,10 +77,10 @@ func (g *generator) generateHTTP(r *il.ResourceNode) error {
 			return err
 		}
 
-		g.printf("const %s: pulumi.Output<string>[] = [];\n", name)
-		g.printf("for (let i = 0; i < %s; i++) {\n", count)
-		g.printf("    %s.push(pulumi.output(rpn(%s).promise()));\n", name, inputs)
-		g.printf("}")
+		g.Printf("const %s: pulumi.Output<string>[] = [];\n", name)
+		g.Printf("for (let i = 0; i < %s; i++) {\n", count)
+		g.Printf("    %s.push(pulumi.output(rpn(%s).promise()));\n", name, inputs)
+		g.Printf("}")
 	}
 
 	return nil

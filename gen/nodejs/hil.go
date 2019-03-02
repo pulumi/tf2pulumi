@@ -31,8 +31,8 @@ import (
 // node-specific generation function to ensure that the generated code is appropriately parenthesized where necessary
 // in order to avoid unexpected issues with operator precedence.
 
-// genArithmetic generates code for the given arithmetic expression.
-func (g *generator) genArithmetic(w io.Writer, n *il.BoundArithmetic) {
+// GenArithmetic generates code for the given arithmetic expression.
+func (g *generator) GenArithmetic(w io.Writer, n *il.BoundArithmetic) {
 	op := ""
 	switch n.HILNode.Op {
 	case ast.ArithmeticOpAdd:
@@ -64,22 +64,22 @@ func (g *generator) genArithmetic(w io.Writer, n *il.BoundArithmetic) {
 	}
 	op = fmt.Sprintf(" %s ", op)
 
-	g.gen(w, "(")
+	g.Fgen(w, "(")
 	for i, n := range n.Exprs {
 		if i != 0 {
-			g.gen(w, op)
+			g.Fgen(w, op)
 		}
-		g.gen(w, n)
+		g.Fgen(w, n)
 	}
-	g.gen(w, ")")
+	g.Fgen(w, ")")
 }
 
 // genApplyOutput generates code for a single argument to a `.apply` invocation.
 func (g *generator) genApplyOutput(w io.Writer, n *il.BoundVariableAccess) {
 	if rv, ok := n.TFVar.(*config.ResourceVariable); ok && rv.Multi && rv.Index == -1 {
-		g.genf(w, "pulumi.all(%v)", n)
+		g.Fgenf(w, "pulumi.all(%v)", n)
 	} else {
-		g.gen(w, n)
+		g.Fgen(w, n)
 	}
 }
 
@@ -92,24 +92,24 @@ func (g *generator) genApply(w io.Writer, n *il.BoundCall) {
 	if len(g.applyArgs) == 1 {
 		// If we only have a single output, just generate a normal `.apply`.
 		g.genApplyOutput(w, g.applyArgs[0])
-		g.genf(w, ".apply(%s => %v)", g.applyArgNames[0], then)
+		g.Fgenf(w, ".apply(%s => %v)", g.applyArgNames[0], then)
 	} else {
 		// Otherwise, generate a call to `pulumi.all([]).apply()`.
-		g.gen(w, "pulumi.all([")
+		g.Fgen(w, "pulumi.all([")
 		for i, o := range g.applyArgs {
 			if i > 0 {
-				g.gen(w, ", ")
+				g.Fgen(w, ", ")
 			}
 			g.genApplyOutput(w, o)
 		}
-		g.gen(w, "]).apply(([")
+		g.Fgen(w, "]).apply(([")
 		for i := range g.applyArgs {
 			if i > 0 {
-				g.gen(w, ", ")
+				g.Fgen(w, ", ")
 			}
-			g.genf(w, "%s", g.applyArgNames[i])
+			g.Fgenf(w, "%s", g.applyArgNames[i])
 		}
-		g.gen(w, "]) => ", then, ")")
+		g.Fgen(w, "]) => ", then, ")")
 	}
 
 	// Finally, clear the current set of apply arguments.
@@ -124,14 +124,14 @@ func (g *generator) genApplyArg(w io.Writer, index int) {
 	v := g.applyArgs[index]
 
 	// Generate a reference to the parameter.
-	g.gen(w, g.applyArgNames[index])
+	g.Fgen(w, g.applyArgNames[index])
 
 	// Generate any nested path.
 	if rv, ok := v.TFVar.(*config.ResourceVariable); ok {
 		// Handle splats
 		isSplat := rv.Multi && rv.Index == -1
 		if isSplat {
-			g.gen(w, ".map(v => v")
+			g.Fgen(w, ".map(v => v")
 		}
 
 		sch, elements := v.Schemas, v.Elements
@@ -148,15 +148,15 @@ func (g *generator) genApplyArg(w io.Writer, index int) {
 			if isListElement {
 				// If we're projecting the list element, just skip this path element entirely.
 				if !projectListElement {
-					g.genf(w, "[%s]", e)
+					g.Fgenf(w, "[%s]", e)
 				}
 			} else {
-				g.genf(w, ".%s", tfbridge.TerraformToPulumiName(e, sch.TF, false))
+				g.Fgenf(w, ".%s", tfbridge.TerraformToPulumiName(e, sch.TF, false))
 			}
 		}
 
 		if isSplat {
-			g.gen(w, ")")
+			g.Fgen(w, ")")
 		}
 	}
 }
@@ -167,158 +167,158 @@ func (g *generator) genCoercion(w io.Writer, n il.BoundExpr, toType il.Type) {
 	case il.TypeBool:
 		if toType == il.TypeString {
 			if lit, ok := n.(*il.BoundLiteral); ok {
-				g.genf(w, "\"%v\"", lit)
+				g.Fgenf(w, "\"%v\"", lit)
 			} else {
-				g.genf(w, "`${%v}`", n)
+				g.Fgenf(w, "`${%v}`", n)
 			}
 			return
 		}
 	case il.TypeNumber:
 		if toType == il.TypeString {
 			if lit, ok := n.(*il.BoundLiteral); ok {
-				g.genf(w, "\"%v\"", lit)
+				g.Fgenf(w, "\"%v\"", lit)
 			} else {
-				g.genf(w, "`${%v}`", n)
+				g.Fgenf(w, "`${%v}`", n)
 			}
 			return
 		}
 	case il.TypeString:
 		switch toType {
 		case il.TypeBool:
-			g.genf(w, "(%v === \"true\")", n)
+			g.Fgenf(w, "(%v === \"true\")", n)
 			return
 		case il.TypeNumber:
-			g.genf(w, "Number.parseFloat(%v)", n)
+			g.Fgenf(w, "Number.parseFloat(%v)", n)
 			return
 		}
 	}
 
 	// If we get here, we weren't able to genereate a coercion. Just generate the node. This is questionable behavior
 	// at best.
-	g.gen(w, n)
+	g.Fgen(w, n)
 }
 
-// genCall generates code for a call expression.
-func (g *generator) genCall(w io.Writer, n *il.BoundCall) {
+// GenCall generates code for a call expression.
+func (g *generator) GenCall(w io.Writer, n *il.BoundCall) {
 	switch n.HILNode.Func {
 	case il.IntrinsicApply:
 		g.genApply(w, n)
 	case il.IntrinsicApplyArg:
 		g.genApplyArg(w, il.ParseApplyArgCall(n))
 	case il.IntrinsicArchive:
-		g.genf(w, "new pulumi.asset.FileArchive(%v)", il.ParseArchiveCall(n))
+		g.Fgenf(w, "new pulumi.asset.FileArchive(%v)", il.ParseArchiveCall(n))
 	case il.IntrinsicAsset:
-		g.genf(w, "new pulumi.asset.FileAsset(%v)", il.ParseAssetCall(n))
+		g.Fgenf(w, "new pulumi.asset.FileAsset(%v)", il.ParseAssetCall(n))
 	case il.IntrinsicCoerce:
 		value, toType := il.ParseCoerceCall(n)
 		g.genCoercion(w, value, toType)
 	case il.IntrinsicGetStack:
-		g.genf(w, "pulumi.getStack()")
+		g.Fgenf(w, "pulumi.getStack()")
 	case intrinsicDataSource:
 		function, inputs := parseDataSourceCall(n)
-		g.genf(w, "%s(%s)", function, inputs)
+		g.Fgenf(w, "%s(%s)", function, inputs)
 	case "base64decode":
-		g.genf(w, "Buffer.from(%v, \"base64\").toString()", n.Args[0])
+		g.Fgenf(w, "Buffer.from(%v, \"base64\").toString()", n.Args[0])
 	case "base64encode":
-		g.genf(w, "Buffer.from(%v).toString(\"base64\")", n.Args[0])
+		g.Fgenf(w, "Buffer.from(%v).toString(\"base64\")", n.Args[0])
 	case "chomp":
-		g.genf(w, "%v.replace(/(\\n|\\r\\n)*$/, \"\")", n.Args[0])
+		g.Fgenf(w, "%v.replace(/(\\n|\\r\\n)*$/, \"\")", n.Args[0])
 	case "coalesce":
-		g.gen(w, "[")
+		g.Fgen(w, "[")
 		for i, v := range n.Args {
 			if i > 0 {
-				g.gen(w, ", ")
+				g.Fgen(w, ", ")
 			}
-			g.gen(w, v)
+			g.Fgen(w, v)
 		}
-		g.gen(w, "].find((v: any) => v !== undefined && v !== \"\")")
+		g.Fgen(w, "].find((v: any) => v !== undefined && v !== \"\")")
 	case "coalescelist":
-		g.gen(w, "[")
+		g.Fgen(w, "[")
 		for i, v := range n.Args {
 			if i > 0 {
-				g.gen(w, ", ")
+				g.Fgen(w, ", ")
 			}
-			g.gen(w, v)
+			g.Fgen(w, v)
 		}
-		g.gen(w, "].find((v: any) => v !== undefined && (<any[]>v).length > 0)")
+		g.Fgen(w, "].find((v: any) => v !== undefined && (<any[]>v).length > 0)")
 	case "compact":
-		g.genf(w, "%v.filter((v: any) => <string>v !== \"\")", n.Args[0])
+		g.Fgenf(w, "%v.filter((v: any) => <string>v !== \"\")", n.Args[0])
 	case "concat":
-		g.genf(w, "%v.concat(", n.Args[0])
+		g.Fgenf(w, "%v.concat(", n.Args[0])
 		for i, arg := range n.Args[1:] {
 			if i > 0 {
-				g.gen(w, ", ")
+				g.Fgen(w, ", ")
 			}
-			g.genf(w, "%v", arg)
+			g.Fgenf(w, "%v", arg)
 		}
-		g.gen(w, ")")
+		g.Fgen(w, ")")
 	case "element":
-		g.genf(w, "%v[%v]", n.Args[0], n.Args[1])
+		g.Fgenf(w, "%v[%v]", n.Args[0], n.Args[1])
 	case "file":
-		g.genf(w, "fs.readFileSync(%v, \"utf-8\")", n.Args[0])
+		g.Fgenf(w, "fs.readFileSync(%v, \"utf-8\")", n.Args[0])
 	case "format":
-		g.gen(w, "sprintf.sprintf(")
+		g.Fgen(w, "sprintf.sprintf(")
 		for i, a := range n.Args {
 			if i > 0 {
-				g.gen(w, ", ")
+				g.Fgen(w, ", ")
 			}
-			g.gen(w, a)
+			g.Fgen(w, a)
 		}
-		g.gen(w, ")")
+		g.Fgen(w, ")")
 	case "indent":
-		g.genf(w,
+		g.Fgenf(w,
 			"((str, indent) => str.split(\"\\n\").map((l, i) => i == 0 ? l : indent + l).join(\"\"))(%v, \" \".repeat(%v))",
 			n.Args[1], n.Args[0])
 	case "join":
-		g.genf(w, "%v.join(%v)", n.Args[1], n.Args[0])
+		g.Fgenf(w, "%v.join(%v)", n.Args[1], n.Args[0])
 	case "length":
-		g.genf(w, "%v.length", n.Args[0])
+		g.Fgenf(w, "%v.length", n.Args[0])
 	case "list":
-		g.gen(w, "[")
+		g.Fgen(w, "[")
 		for i, e := range n.Args {
 			if i > 0 {
-				g.gen(w, ", ")
+				g.Fgen(w, ", ")
 			}
-			g.gen(w, e)
+			g.Fgen(w, e)
 		}
-		g.gen(w, "]")
+		g.Fgen(w, "]")
 	case "lookup":
 		hasDefault := len(n.Args) == 3
 		if hasDefault {
-			g.gen(w, "(")
+			g.Fgen(w, "(")
 		}
-		g.genf(w, "(<any>%v)[%v]", n.Args[0], n.Args[1])
+		g.Fgenf(w, "(<any>%v)[%v]", n.Args[0], n.Args[1])
 		if hasDefault {
-			g.genf(w, " || %v)", n.Args[2])
+			g.Fgenf(w, " || %v)", n.Args[2])
 		}
 	case "lower":
-		g.genf(w, "%v.toLowerCase()", n.Args[0])
+		g.Fgenf(w, "%v.toLowerCase()", n.Args[0])
 	case "map":
 		contract.Assert(len(n.Args)%2 == 0)
-		g.gen(w, "{")
+		g.Fgen(w, "{")
 		for i := 0; i < len(n.Args); i += 2 {
 			if i > 0 {
-				g.gen(w, ", ")
+				g.Fgen(w, ", ")
 			}
 			if lit, ok := n.Args[i].(*il.BoundLiteral); ok && lit.Type() == il.TypeString {
-				g.gen(w, lit)
+				g.Fgen(w, lit)
 			} else {
-				g.genf(w, "[%v]", n.Args[i])
+				g.Fgenf(w, "[%v]", n.Args[i])
 			}
-			g.genf(w, ": %v", n.Args[i+1])
+			g.Fgenf(w, ": %v", n.Args[i+1])
 		}
-		g.gen(w, "}")
+		g.Fgen(w, "}")
 	case "merge":
-		g.genf(w, "Object.assign(%v", n.Args[0])
+		g.Fgenf(w, "Object.assign(%v", n.Args[0])
 		for i, arg := range n.Args[1:] {
 			if i > 0 {
-				g.gen(w, ", ")
+				g.Fgen(w, ", ")
 			}
-			g.genf(w, "%v", arg)
+			g.Fgenf(w, "%v", arg)
 		}
-		g.gen(w, ")")
+		g.Fgen(w, ")")
 	case "min":
-		g.genf(w, "%v.reduce((min, v) => !min ? v : Math.min(min, v))", n.Args[0])
+		g.Fgenf(w, "%v.reduce((min, v) => !min ? v : Math.min(min, v))", n.Args[0])
 	case "replace":
 		pat := (interface{})(n.Args[1])
 		if lit, ok := pat.(*il.BoundLiteral); ok && lit.Type() == il.TypeString {
@@ -327,29 +327,29 @@ func (g *generator) genCall(w io.Writer, n *il.BoundCall) {
 				pat = patStr
 			}
 		}
-		g.genf(w, "%v.replace(%v, %v)", n.Args[0], pat, n.Args[2])
+		g.Fgenf(w, "%v.replace(%v, %v)", n.Args[0], pat, n.Args[2])
 	case "signum":
-		g.genf(w, "Math.sign(%v)", n.Args[0])
+		g.Fgenf(w, "Math.sign(%v)", n.Args[0])
 	case "split":
-		g.genf(w, "%v.split(%v)", n.Args[1], n.Args[0])
+		g.Fgenf(w, "%v.split(%v)", n.Args[1], n.Args[0])
 	case "substr":
-		g.genf(w, "((str, s, l) => str.slice(s, l === -1 ? s.length : s + l))(%v, %v, %v)", n.Args[0], n.Args[1], n.Args[2])
+		g.Fgenf(w, "((str, s, l) => str.slice(s, l === -1 ? s.length : s + l))(%v, %v, %v)", n.Args[0], n.Args[1], n.Args[2])
 	case "zipmap":
-		g.genf(w, "((keys, values) => Object.assign.apply({}, keys.map((k: any, i: number) => ({[k]: values[i]}))))(%v, %v)",
+		g.Fgenf(w, "((keys, values) => Object.assign.apply({}, keys.map((k: any, i: number) => ({[k]: values[i]}))))(%v, %v)",
 			n.Args[0], n.Args[1])
 	default:
-		g.genf(w, "(() => { throw \"NYI: call to %v\"; })()", n.HILNode.Func)
+		g.Fgenf(w, "(() => { throw \"NYI: call to %v\"; })()", n.HILNode.Func)
 	}
 }
 
-// genConditional generates code for a single conditional expression.
-func (g *generator) genConditional(w io.Writer, n *il.BoundConditional) {
-	g.genf(w, "(%v ? %v : %v)", n.CondExpr, n.TrueExpr, n.FalseExpr)
+// GenConditional generates code for a single conditional expression.
+func (g *generator) GenConditional(w io.Writer, n *il.BoundConditional) {
+	g.Fgenf(w, "(%v ? %v : %v)", n.CondExpr, n.TrueExpr, n.FalseExpr)
 }
 
-// genIndex generates code for a single index expression.
-func (g *generator) genIndex(w io.Writer, n *il.BoundIndex) {
-	g.genf(w, "%v[%v]", n.TargetExpr, n.KeyExpr)
+// GenIndex generates code for a single index expression.
+func (g *generator) GenIndex(w io.Writer, n *il.BoundIndex) {
+	g.Fgenf(w, "%v[%v]", n.TargetExpr, n.KeyExpr)
 }
 
 func (g *generator) genStringLiteral(w io.Writer, v string) {
@@ -390,20 +390,20 @@ func (g *generator) genStringLiteral(w io.Writer, v string) {
 		builder.WriteRune('`')
 	}
 
-	g.genf(w, "%s", builder.String())
+	g.Fgenf(w, "%s", builder.String())
 }
 
-// genLiteral generates code for a single literal expression
-func (g *generator) genLiteral(w io.Writer, n *il.BoundLiteral) {
+// GenLiteral generates code for a single literal expression
+func (g *generator) GenLiteral(w io.Writer, n *il.BoundLiteral) {
 	switch n.ExprType {
 	case il.TypeBool:
-		g.genf(w, "%v", n.Value)
+		g.Fgenf(w, "%v", n.Value)
 	case il.TypeNumber:
 		f := n.Value.(float64)
 		if float64(int64(f)) == f {
-			g.genf(w, "%d", int64(f))
+			g.Fgenf(w, "%d", int64(f))
 		} else {
-			g.genf(w, "%g", n.Value)
+			g.Fgenf(w, "%g", n.Value)
 		}
 	case il.TypeString:
 		g.genStringLiteral(w, n.Value.(string))
@@ -412,34 +412,39 @@ func (g *generator) genLiteral(w io.Writer, n *il.BoundLiteral) {
 	}
 }
 
-// genOutput generates code for a single output expression.
-func (g *generator) genOutput(w io.Writer, n *il.BoundOutput) {
-	g.gen(w, "`")
+// GenOutput generates code for a single output expression.
+func (g *generator) GenOutput(w io.Writer, n *il.BoundOutput) {
+	g.Fgen(w, "`")
 	for _, s := range n.Exprs {
 		if lit, ok := s.(*il.BoundLiteral); ok && lit.ExprType == il.TypeString {
-			g.gen(w, lit.Value.(string))
+			g.Fgen(w, lit.Value.(string))
 		} else {
-			g.genf(w, "${%v}", s)
+			g.Fgenf(w, "${%v}", s)
 		}
 	}
-	g.gen(w, "`")
+	g.Fgen(w, "`")
 }
 
-// genVariableAccess generates code for a single variable access expression.
-func (g *generator) genVariableAccess(w io.Writer, n *il.BoundVariableAccess) {
+// GenPropertyValue generates code for a single property value expression.
+func (g *generator) GenPropertyValue(w io.Writer, n *il.BoundPropertyValue) {
+	g.Gen(w, n.Value)
+}
+
+// GenVariableAccess generates code for a single variable access expression.
+func (g *generator) GenVariableAccess(w io.Writer, n *il.BoundVariableAccess) {
 	switch v := n.TFVar.(type) {
 	case *config.CountVariable, *config.LocalVariable, *config.UserVariable:
-		g.gen(w, g.variableName(n))
+		g.Fgen(w, g.variableName(n))
 
 	case *config.ModuleVariable:
-		g.gen(w, g.variableName(n))
+		g.Fgen(w, g.variableName(n))
 		for _, e := range strings.Split(v.Field, ".") {
-			g.genf(w, ".%s", tfbridge.TerraformToPulumiName(e, nil, false))
+			g.Fgenf(w, ".%s", tfbridge.TerraformToPulumiName(e, nil, false))
 		}
 	case *config.PathVariable:
 		switch v.Type {
 		case config.PathValueCwd:
-			g.gen(w, "process.cwd()")
+			g.Fgen(w, "process.cwd()")
 		case config.PathValueModule:
 			contract.Failf("modules path references should have been lowered to literals")
 		case config.PathValueRoot:
@@ -447,9 +452,9 @@ func (g *generator) genVariableAccess(w io.Writer, n *il.BoundVariableAccess) {
 		}
 	case *config.ResourceVariable:
 		// We only generate up to the "output" part of the path here: the apply transform will take care of the rest.
-		g.gen(w, g.variableName(n))
+		g.Fgen(w, g.variableName(n))
 		if v.Multi && v.Index != -1 {
-			g.genf(w, "[%d]", v.Index)
+			g.Fgenf(w, "[%d]", v.Index)
 		}
 
 		// A managed resource is not itself an output: instead, it is a bag of outputs. As such, we must generate the
@@ -461,11 +466,11 @@ func (g *generator) genVariableAccess(w io.Writer, n *il.BoundVariableAccess) {
 			// Handle splats
 			isSplat := v.Multi && v.Index == -1
 			if isSplat {
-				g.gen(w, ".map(v => v")
+				g.Fgen(w, ".map(v => v")
 			}
-			g.genf(w, ".%s", tfbridge.TerraformToPulumiName(element, elementSch.TF, false))
+			g.Fgenf(w, ".%s", tfbridge.TerraformToPulumiName(element, elementSch.TF, false))
 			if isSplat {
-				g.gen(w, ")")
+				g.Fgen(w, ")")
 			}
 		}
 	default:

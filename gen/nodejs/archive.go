@@ -37,14 +37,14 @@ func (g *generator) computeArchiveInputs(r *il.ResourceNode, indent bool, count 
 			return "", err
 		}
 
-		fmt.Fprintf(buf, "%s    %s: new pulumi.asset.FileAsset(%s),\n", g.indent, path, path)
+		fmt.Fprintf(buf, "%s    %s: new pulumi.asset.FileAsset(%s),\n", g.Indent, path, path)
 	} else if sourceDir, ok := r.Properties.Elements["source_dir"]; ok {
 		path, _, err := g.computeProperty(sourceDir, indent, count)
 		if err != nil {
 			return "", err
 		}
 
-		fmt.Fprintf(buf, "%s    %s: new pulumi.asset.FileAsset(%s),\n", g.indent, path, path)
+		fmt.Fprintf(buf, "%s    %s: new pulumi.asset.FileAsset(%s),\n", g.Indent, path, path)
 	} else if sourceContent, ok := r.Properties.Elements["source_content"]; ok {
 		filename, ok := r.Properties.Elements["source_filename"]
 		if !ok {
@@ -60,7 +60,7 @@ func (g *generator) computeArchiveInputs(r *il.ResourceNode, indent bool, count 
 			return "", err
 		}
 
-		fmt.Fprintf(buf, "%s    %s: new pulumi.asset.StringAsset(%s),\n", g.indent, path, content)
+		fmt.Fprintf(buf, "%s    %s: new pulumi.asset.StringAsset(%s),\n", g.Indent, path, content)
 	} else if source, ok := r.Properties.Elements["source"]; ok {
 		list, ok := source.(*il.BoundListProperty)
 		if !ok {
@@ -91,10 +91,10 @@ func (g *generator) computeArchiveInputs(r *il.ResourceNode, indent bool, count 
 				return "", err
 			}
 
-			fmt.Fprintf(buf, "%s    %s: new pulumi.asset.StringAsset(%s),\n", g.indent, path, content)
+			fmt.Fprintf(buf, "%s    %s: new pulumi.asset.StringAsset(%s),\n", g.Indent, path, content)
 		}
 	}
-	fmt.Fprintf(buf, "%s}", g.indent)
+	fmt.Fprintf(buf, "%s}", g.Indent)
 	return buf.String(), nil
 }
 
@@ -113,7 +113,7 @@ func (g *generator) generateArchive(r *il.ResourceNode) error {
 		}
 
 		// Generate an asset archive.
-		g.printf("const %s = new pulumi.asset.AssetArchive(%s);", name, inputs)
+		g.Printf("const %s = new pulumi.asset.AssetArchive(%s);", name, inputs)
 	} else {
 		// Otherwise we need to Generate multiple resources in a loop.
 		count, _, err := g.computeProperty(r.Count, false, "")
@@ -125,10 +125,10 @@ func (g *generator) generateArchive(r *il.ResourceNode) error {
 			return err
 		}
 
-		g.printf("const %s: pulumi.asset.AssetArchive[] = [];\n", name)
-		g.printf("for (let i = 0; i < %s; i++) {\n", count)
-		g.printf("    %s.push(new pulumi.asset.AssetArchive(%s));\n", name, inputs)
-		g.printf("}")
+		g.Printf("const %s: pulumi.asset.AssetArchive[] = [];\n", name)
+		g.Printf("for (let i = 0; i < %s; i++) {\n", count)
+		g.Printf("    %s.push(new pulumi.asset.AssetArchive(%s));\n", name, inputs)
+		g.Printf("}")
 	}
 
 	return nil

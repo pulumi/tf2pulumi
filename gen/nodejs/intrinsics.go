@@ -37,7 +37,7 @@ func newDataSourceCall(functionName string, inputs il.BoundNode) *il.BoundCall {
 				ExprType: il.TypeString,
 				Value:    functionName,
 			},
-			&il.BoundPropertyExpr{
+			&il.BoundPropertyValue{
 				NodeType: il.TypeMap,
 				Value:    inputs,
 			},
@@ -49,5 +49,5 @@ func newDataSourceCall(functionName string, inputs il.BoundNode) *il.BoundCall {
 // a call to the data source intrinsic.
 func parseDataSourceCall(c *il.BoundCall) (function string, inputs il.BoundNode) {
 	contract.Assert(c.HILNode.Func == intrinsicDataSource)
-	return c.Args[0].(*il.BoundLiteral).Value.(string), c.Args[1].(*il.BoundPropertyExpr).Value
+	return c.Args[0].(*il.BoundLiteral).Value.(string), c.Args[1].(*il.BoundPropertyValue).Value
 }

@@ -567,9 +567,9 @@ func (n *BoundError) dump(d *dumper) {
 func (n *BoundError) isNode() {}
 func (n *BoundError) isExpr() {}
 
-// BoundPropertyExpr wraps a BoundMapProperty or BoundListProperty in a BoundExpr. This is intended primarily for the
+// BoundPropertyValue wraps a BoundMapProperty or BoundListProperty in a BoundExpr. This is intended primarily for the
 // use of transforms that must pass bound properties to intrinsics.
-type BoundPropertyExpr struct {
+type BoundPropertyValue struct {
 	// The type of the node.
 	NodeType Type
 	// Comments is the set of comments associated with this node, if any.
@@ -579,24 +579,24 @@ type BoundPropertyExpr struct {
 }
 
 // Type returns the type of the expression.
-func (n *BoundPropertyExpr) Type() Type {
+func (n *BoundPropertyValue) Type() Type {
 	return n.NodeType
 }
 
 // Comments returns the comments attached to this node, if any.
-func (n *BoundPropertyExpr) Comments() *Comments {
+func (n *BoundPropertyValue) Comments() *Comments {
 	return n.NodeComments
 }
 
 // setComments attaches the given comments to this node.
-func (n *BoundPropertyExpr) setComments(c *Comments) {
+func (n *BoundPropertyValue) setComments(c *Comments) {
 	n.NodeComments = c
 }
 
-func (n *BoundPropertyExpr) isNode() {}
-func (n *BoundPropertyExpr) isExpr() {}
+func (n *BoundPropertyValue) isNode() {}
+func (n *BoundPropertyValue) isExpr() {}
 
-func (n *BoundPropertyExpr) dump(d *dumper) {
+func (n *BoundPropertyValue) dump(d *dumper) {
 	d.dump("(propertyExpr ", fmt.Sprintf("%v", n.Type()))
 	d.indented(func() {
 		d.dump("\n", d.indent, n.Value)

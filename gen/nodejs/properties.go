@@ -25,10 +25,10 @@ import (
 )
 
 // genListProperty generates code for as single list property.
-func (g *generator) genListProperty(w io.Writer, n *il.BoundListProperty) {
+func (g *generator) GenListProperty(w io.Writer, n *il.BoundListProperty) {
 	switch len(n.Elements) {
 	case 0:
-		g.gen(w, "[]")
+		g.Fgen(w, "[]")
 	case 1:
 		// We can ignore comments in this case: the comment extractor will never associate comments with a
 		// single-element list.
@@ -38,47 +38,47 @@ func (g *generator) genListProperty(w io.Writer, n *il.BoundListProperty) {
 			//
 			// TODO: if there is a list element that is dynamically a list, that also needs to be flattened. This is
 			// only knowable at runtime and will require a helper.
-			g.genf(w, "%v", v)
+			g.Fgenf(w, "%v", v)
 		} else {
-			g.genf(w, "[%v]", v)
+			g.Fgenf(w, "[%v]", v)
 		}
 	default:
-		g.gen(w, "[")
-		g.indented(func() {
+		g.Fgen(w, "[")
+		g.Indented(func() {
 			for _, v := range n.Elements {
-				g.genf(w, "\n")
+				g.Fgenf(w, "\n")
 				g.genLeadingComment(w, v.Comments())
-				g.genf(w, "%s", g.indent)
+				g.Fgenf(w, "%s", g.Indent)
 
 				// TF flattens list elements that are themselves lists into the parent list.
 				//
 				// TODO: if there is a list element that is dynamically a list, that also needs to be flattened. This is
 				// only knowable at runtime and will require a helper.
 				if v.Type().IsList() {
-					g.gen(w, "...")
+					g.Fgen(w, "...")
 				}
-				g.genf(w, "%v,", v)
+				g.Fgenf(w, "%v,", v)
 
 				g.genTrailingComment(w, v.Comments())
 			}
 		})
-		g.gen(w, "\n", g.indent, "]")
+		g.Fgen(w, "\n", g.Indent, "]")
 	}
 }
 
 // genMapProperty generates code for a single map property.
-func (g *generator) genMapProperty(w io.Writer, n *il.BoundMapProperty) {
+func (g *generator) GenMapProperty(w io.Writer, n *il.BoundMapProperty) {
 	if len(n.Elements) == 0 {
-		g.gen(w, "{}")
+		g.Fgen(w, "{}")
 	} else {
 		useExactKeys := n.Schemas.TF != nil && n.Schemas.TF.Type == schema.TypeMap
 
-		g.gen(w, "{")
-		g.indented(func() {
+		g.Fgen(w, "{")
+		g.Indented(func() {
 			for _, k := range gen.SortedKeys(n.Elements) {
 				v := n.Elements[k]
 
-				g.genf(w, "\n")
+				g.Fgenf(w, "\n")
 				g.genLeadingComment(w, v.Comments())
 
 				propSch, key := n.Schemas.PropertySchemas(k), k
@@ -87,11 +87,11 @@ func (g *generator) genMapProperty(w io.Writer, n *il.BoundMapProperty) {
 				} else if !isLegalIdentifier(key) {
 					key = fmt.Sprintf("%q", key)
 				}
-				g.genf(w, "%s%s: %v,", g.indent, key, v)
+				g.Fgenf(w, "%s%s: %v,", g.Indent, key, v)
 
 				g.genTrailingComment(w, v.Comments())
 			}
 		})
-		g.gen(w, "\n", g.indent, "}")
+		g.Fgen(w, "\n", g.Indent, "}")
 	}
 }
