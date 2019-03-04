@@ -34,22 +34,22 @@ import (
 
 // New creates a new NodeJS code generator.
 func New(projectName string, w io.Writer) gen.Generator {
-	return &generator{
-		ProjectName: projectName,
-		w:           w,
-	}
+	g := &generator{ProjectName: projectName}
+	g.Emitter = gen.NewEmitter(w, g)
+	return g
 }
 
 // generator generates Typescript code that targets the Pulumi libraries from a Terraform configuration.
 type generator struct {
+	// The emitter to use when generating code.
+	*gen.Emitter
+
 	// ProjectName is the name of the Pulumi project.
 	ProjectName string
 	// rootPath is the path to the directory that contains the root module.
 	rootPath string
 	// module is the module currently being generated;.
 	module *il.Graph
-	// indent is the current indentation level for the generated source.
-	indent string
 	// countIndex is the name (if any) of the currently in-scope count variable.
 	countIndex string
 	// applyArgs is the list of currently in-scope apply arguments.
@@ -60,8 +60,6 @@ type generator struct {
 	unknownInputs map[*il.VariableNode]struct{}
 	// nameTable is a mapping from top-level nodes to names.
 	nameTable map[il.Node]string
-	// w is the writer to use for printing the resulting Pulumi code.
-	w io.Writer
 }
 
 // isLegalIdentifierStart returns true if it is legal for c to be the first character of a JavaScript identifier as per
@@ -169,89 +167,14 @@ func (g *generator) resourceMode(n *il.BoundVariableAccess) config.ResourceMode 
 	return n.ILNode.(*il.ResourceNode).Config.Mode
 }
 
-// indented bumps the current indentation level, invokes the given function, and then resets the indentation level to
-// its prior value.
-func (g *generator) indented(f func()) {
-	g.indent += "    "
-	f()
-	g.indent = g.indent[:len(g.indent)-4]
-}
-
-// gen generates code for a list of strings and expression trees. The former are written directly to the destination;
-// the latter are recursively generated using the appropriate gen* functions.
-func (g *generator) gen(w io.Writer, vs ...interface{}) {
-	for _, v := range vs {
-		switch v := v.(type) {
-		case string:
-			_, err := fmt.Fprint(w, v)
-			contract.IgnoreError(err)
-		case *il.BoundArithmetic:
-			g.genArithmetic(w, v)
-		case *il.BoundCall:
-			g.genCall(w, v)
-		case *il.BoundConditional:
-			g.genConditional(w, v)
-		case *il.BoundIndex:
-			g.genIndex(w, v)
-		case *il.BoundLiteral:
-			g.genLiteral(w, v)
-		case *il.BoundOutput:
-			g.genOutput(w, v)
-		case *il.BoundPropertyExpr:
-			g.gen(w, v.Value)
-		case *il.BoundVariableAccess:
-			g.genVariableAccess(w, v)
-		case *il.BoundListProperty:
-			g.genListProperty(w, v)
-		case *il.BoundMapProperty:
-			g.genMapProperty(w, v)
-		case *il.BoundError:
-			g.genError(w, v)
-		default:
-			contract.Failf("unexpected type in gen: %T", v)
-		}
-	}
-}
-
-// genf generates code using a format string and its arguments. Any arguments that are BoundNode values are wrapped in
-// a FormatFunc that calls the appropriate recursive generation function. This allows for the composition of standard
-// format strings with expression/property code gen (e.g. `g.genf(w, ".apply(__arg0 => %v)", then)`, where `then` is
-// an expression tree).
-func (g *generator) genf(w io.Writer, format string, args ...interface{}) {
-	for i := range args {
-		if node, ok := args[i].(il.BoundNode); ok {
-			args[i] = gen.FormatFunc(func(f fmt.State, c rune) { g.gen(f, node) })
-		}
-	}
-	fmt.Fprintf(w, format, args...)
-}
-
 // genError generates code for a node that represents a binding error.
-func (g *generator) genError(w io.Writer, v *il.BoundError) {
-	g.gen(w, "(() => {\n")
-	g.indented(func() {
-		g.genf(w, "%sthrow \"tf2pulumi error: %v\";\n", g.indent, v.Error.Error())
-		g.genf(w, "%sreturn %v;\n", g.indent, v.Value)
+func (g *generator) GenError(w io.Writer, v *il.BoundError) {
+	g.Fgen(w, "(() => {\n")
+	g.Indented(func() {
+		g.Fgenf(w, "%sthrow \"tf2pulumi error: %v\";\n", g.Indent, v.Error.Error())
+		g.Fgenf(w, "%sreturn %v;\n", g.Indent, v.Value)
 	})
-	g.gen(w, g.indent, "})()")
-}
-
-// print prints one or more values to the generator's output stream.
-func (g *generator) print(a ...interface{}) {
-	_, err := fmt.Fprint(g.w, a...)
-	contract.IgnoreError(err)
-}
-
-// println prints one or more values to the generator's output stream, followed by a newline.
-func (g *generator) println(a ...interface{}) {
-	g.print(a...)
-	g.print("\n")
-}
-
-// prinft prints a formatted message to the generator's output stream.
-func (g *generator) printf(format string, a ...interface{}) {
-	_, err := fmt.Fprintf(g.w, format, a...)
-	contract.IgnoreError(err)
+	g.Fgen(w, g.Indent, "})()")
 }
 
 // computeProperty generates code for the given property into a string ala fmt.Sprintf. It returns both the generated
@@ -298,12 +221,12 @@ func (g *generator) computeProperty(prop il.BoundNode, indent bool, count string
 
 	// Finally, generate code for the property.
 	if indent {
-		g.indent += "    "
-		defer func() { g.indent = g.indent[:len(g.indent)-4] }()
+		g.Indent += "    "
+		defer func() { g.Indent = g.Indent[:len(g.Indent)-4] }()
 	}
 	g.countIndex = count
 	buf := &bytes.Buffer{}
-	g.gen(buf, p)
+	g.Fgen(buf, p)
 	return buf.String(), containsOutputs, nil
 }
 
@@ -318,7 +241,7 @@ func (g *generator) genLeadingComment(w io.Writer, comments *il.Comments) {
 		return
 	}
 	for _, l := range comments.Leading {
-		g.genf(w, "%s//%s\n", g.indent, l)
+		g.Fgenf(w, "%s//%s\n", g.Indent, l)
 	}
 }
 
@@ -330,10 +253,10 @@ func (g *generator) genTrailingComment(w io.Writer, comments *il.Comments) {
 
 	// If this is a single-line comment, generate it as-is. Otherwise, add a line break and generate it as a block.
 	if len(comments.Trailing) == 1 {
-		g.genf(w, " //%s", comments.Trailing[0])
+		g.Fgenf(w, " //%s", comments.Trailing[0])
 	} else {
 		for _, l := range comments.Trailing {
-			g.genf(w, "\n%s//%s", g.indent, l)
+			g.Fgenf(w, "\n%s//%s", g.Indent, l)
 		}
 	}
 }
@@ -352,7 +275,7 @@ func (g *generator) GeneratePreamble(modules []*il.Graph) error {
 	}
 
 	// Print the @pulumi/pulumi import at the top.
-	g.println(`import * as pulumi from "@pulumi/pulumi";`)
+	g.Println(`import * as pulumi from "@pulumi/pulumi";`)
 
 	// Accumulate other imports for the various providers. Don't emit them yet, as we need to sort them later on.
 	var imports []string
@@ -431,9 +354,9 @@ func (g *generator) GeneratePreamble(modules []*il.Graph) error {
 	// Now sort the imports, so we emit them deterministically, and emit them.
 	sort.Strings(imports)
 	for _, line := range imports {
-		g.println(line)
+		g.Println(line)
 	}
-	g.printf("\n")
+	g.Printf("\n")
 
 	return nil
 }
@@ -443,9 +366,9 @@ func (g *generator) GeneratePreamble(modules []*il.Graph) error {
 func (g *generator) BeginModule(m *il.Graph) error {
 	g.module = m
 	if !g.isRoot() {
-		g.printf("const new_mod_%s = function(mod_name: string, mod_args: pulumi.Inputs) {\n",
+		g.Printf("const new_mod_%s = function(mod_name: string, mod_args: pulumi.Inputs) {\n",
 			cleanName(m.Tree.Name()))
-		g.indent += "    "
+		g.Indent += "    "
 
 		// Discover the set of input variables that may have unknown values. This is the complete set of inputs minus
 		// the set of variables used in count interpolations, as Terraform requires that the latter are known at graph
@@ -481,8 +404,8 @@ func (g *generator) BeginModule(m *il.Graph) error {
 // field.
 func (g *generator) EndModule(m *il.Graph) error {
 	if !g.isRoot() {
-		g.indent = g.indent[:len(g.indent)-4]
-		g.printf("};\n")
+		g.Indent = g.Indent[:len(g.Indent)-4]
+		g.Printf("};\n")
 	}
 	g.module = nil
 	return nil
@@ -499,24 +422,24 @@ func (g *generator) GenerateVariables(vs []*il.VariableNode) error {
 	// a config object and appropriate get/require calls; if we are not, we generate references into the module args.
 	isRoot := g.isRoot()
 	if isRoot {
-		g.printf("const config = new pulumi.Config();\n")
+		g.Printf("const config = new pulumi.Config();\n")
 	}
 	for _, v := range vs {
 		configName := tsName(v.Config.Name, nil, nil, false)
 		_, isUnknown := g.unknownInputs[v]
 
-		g.genLeadingComment(g.w, v.Comments)
+		g.genLeadingComment(g, v.Comments)
 
-		g.printf("%sconst %s = ", g.indent, g.nodeName(v))
+		g.Printf("%sconst %s = ", g.Indent, g.nodeName(v))
 		if v.DefaultValue == nil {
 			if isRoot {
-				g.printf("config.require(\"%s\")", configName)
+				g.Printf("config.require(\"%s\")", configName)
 			} else {
 				f := "mod_args[\"%s\"]"
 				if isUnknown {
 					f = "pulumi.output(" + f + ")"
 				}
-				g.printf(f, configName)
+				g.Printf(f, configName)
 			}
 		} else {
 			def, _, err := g.computeProperty(v.DefaultValue, false, "")
@@ -532,21 +455,21 @@ func (g *generator) GenerateVariables(vs []*il.VariableNode) error {
 				case il.TypeNumber:
 					get = "getNumber"
 				}
-				g.printf("config.%v(\"%s\") || %s", get, configName, def)
+				g.Printf("config.%v(\"%s\") || %s", get, configName, def)
 			} else {
 				f := "mod_args[\"%s\"] || %s"
 				if isUnknown {
 					f = "pulumi.output(" + f + ")"
 				}
-				g.printf(f, configName, def)
+				g.Printf(f, configName, def)
 			}
 		}
-		g.printf(";")
+		g.Printf(";")
 
-		g.genTrailingComment(g.w, v.Comments)
-		g.printf("\n")
+		g.genTrailingComment(g, v.Comments)
+		g.Printf("\n")
 	}
-	g.printf("\n")
+	g.Printf("\n")
 
 	return nil
 }
@@ -558,10 +481,10 @@ func (g *generator) GenerateLocal(l *il.LocalNode) error {
 		return err
 	}
 
-	g.genLeadingComment(g.w, l.Comments)
-	g.printf("%sconst %s = %s;", g.indent, g.nodeName(l), value)
-	g.genTrailingComment(g.w, l.Comments)
-	g.print("\n")
+	g.genLeadingComment(g, l.Comments)
+	g.Printf("%sconst %s = %s;", g.Indent, g.nodeName(l), value)
+	g.genTrailingComment(g, l.Comments)
+	g.Print("\n")
 
 	return nil
 }
@@ -576,10 +499,10 @@ func (g *generator) GenerateModule(m *il.ModuleNode) error {
 	}
 
 	instanceName, modName := g.nodeName(m), cleanName(m.Config.Name)
-	g.genLeadingComment(g.w, m.Comments)
-	g.printf("%sconst %s = new_mod_%s(\"%s\", %s);", g.indent, instanceName, modName, instanceName, args)
-	g.genTrailingComment(g.w, m.Comments)
-	g.print("\n")
+	g.genLeadingComment(g, m.Comments)
+	g.Printf("%sconst %s = new_mod_%s(\"%s\", %s);", g.Indent, instanceName, modName, instanceName, args)
+	g.genTrailingComment(g, m.Comments)
+	g.Print("\n")
 
 	return nil
 }
@@ -674,7 +597,7 @@ func (g *generator) generateResource(r *il.ResourceNode) error {
 				resName = fmt.Sprintf("`${mod_name}_%s`", r.Config.Name)
 			}
 
-			g.printf("%sconst %s = new %s(%s, %s%s);", g.indent, name, qualifiedMemberName, resName, inputs, explicitDeps)
+			g.Printf("%sconst %s = new %s(%s, %s%s);", g.Indent, name, qualifiedMemberName, resName, inputs, explicitDeps)
 		} else {
 			// TODO: explicit dependencies
 
@@ -686,7 +609,7 @@ func (g *generator) generateResource(r *il.ResourceNode) error {
 				fmtstr = "%sconst %s = %s;"
 			}
 
-			g.printf(fmtstr, g.indent, name, inputs)
+			g.Printf(fmtstr, g.Indent, name, inputs)
 		}
 	} else {
 		// Otherwise we need to Generate multiple resources in a loop.
@@ -704,11 +627,11 @@ func (g *generator) generateResource(r *il.ResourceNode) error {
 			arrElementType = fmt.Sprintf("Output<%s%s.%sResult>", provider, module, strings.ToUpper(memberName))
 		}
 
-		g.printf("%sconst %s: %s[] = [];\n", g.indent, name, arrElementType)
-		g.printf("%sfor (let i = 0; i < %s; i++) {\n", g.indent, count)
-		g.indented(func() {
+		g.Printf("%sconst %s: %s[] = [];\n", g.Indent, name, arrElementType)
+		g.Printf("%sfor (let i = 0; i < %s; i++) {\n", g.Indent, count)
+		g.Indented(func() {
 			if r.Config.Mode == config.ManagedResourceMode {
-				g.printf("%s%s.push(new %s(`%s-${i}`, %s%s));\n", g.indent, name, qualifiedMemberName, r.Config.Name,
+				g.Printf("%s%s.push(new %s(`%s-${i}`, %s%s));\n", g.Indent, name, qualifiedMemberName, r.Config.Name,
 					inputs, explicitDeps)
 			} else {
 				// TODO: explicit dependencies
@@ -721,10 +644,10 @@ func (g *generator) generateResource(r *il.ResourceNode) error {
 					fmtstr = "%s%s.push(%s);\n"
 				}
 
-				g.printf(fmtstr, g.indent, name, qualifiedMemberName, inputs)
+				g.Printf(fmtstr, g.Indent, name, qualifiedMemberName, inputs)
 			}
 		})
-		g.printf("%s}", g.indent)
+		g.Printf("%s}", g.Indent)
 	}
 
 	return nil
@@ -735,7 +658,7 @@ func (g *generator) generateResource(r *il.ResourceNode) error {
 // function. Single-instance resources are assigned to a local variable; counted resources are stored in an array-typed
 // local.
 func (g *generator) GenerateResource(r *il.ResourceNode) error {
-	g.genLeadingComment(g.w, r.Comments)
+	g.genLeadingComment(g, r.Comments)
 
 	// If this resource's provider is one of the built-ins, perform whatever provider-specific code generation is
 	// required.
@@ -752,8 +675,8 @@ func (g *generator) GenerateResource(r *il.ResourceNode) error {
 		return err
 	}
 
-	g.genTrailingComment(g.w, r.Comments)
-	g.print("\n")
+	g.genTrailingComment(g, r.Comments)
+	g.Print("\n")
 	return nil
 }
 
@@ -768,10 +691,10 @@ func (g *generator) GenerateOutputs(os []*il.OutputNode) error {
 	// if we are not, we generate an appropriate return statement with the outputs as properties in a map.
 	isRoot := g.isRoot()
 
-	g.printf("\n")
+	g.Printf("\n")
 	if !isRoot {
-		g.printf("%sreturn {\n", g.indent)
-		g.indent += "    "
+		g.Printf("%sreturn {\n", g.Indent)
+		g.Indent += "    "
 	}
 	for _, o := range os {
 		outputs, _, err := g.computeProperty(o.Value, false, "")
@@ -790,20 +713,20 @@ func (g *generator) GenerateOutputs(os []*il.OutputNode) error {
 			comments.Trailing = append(comments.Trailing, vc.Trailing...)
 		}
 
-		g.genLeadingComment(g.w, comments)
+		g.genLeadingComment(g, comments)
 
 		if !isRoot {
-			g.printf("%s%s: %s,", g.indent, g.nodeName(o), outputs)
+			g.Printf("%s%s: %s,", g.Indent, g.nodeName(o), outputs)
 		} else {
-			g.printf("export const %s = %s;", g.nodeName(o), outputs)
+			g.Printf("export const %s = %s;", g.nodeName(o), outputs)
 		}
 
-		g.genTrailingComment(g.w, comments)
-		g.print("\n")
+		g.genTrailingComment(g, comments)
+		g.Print("\n")
 	}
 	if !isRoot {
-		g.indent = g.indent[:len(g.indent)-4]
-		g.printf("%s};\n", g.indent)
+		g.Indent = g.Indent[:len(g.Indent)-4]
+		g.Printf("%s};\n", g.Indent)
 	}
 	return nil
 }
