@@ -20,17 +20,15 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
+	"github.com/pulumi/tf2pulumi/gen"
 	"github.com/pulumi/tf2pulumi/il"
 )
 
 func runGen(node il.BoundNode) string {
 	var buf bytes.Buffer
-	g := &generator{
-		projectName: "test",
-		w:           &buf,
-	}
-
-	g.gen(&buf, node)
+	g := &generator{projectName: "test"}
+	g.Emitter = gen.NewEmitter(&buf, g)
+	g.Fgen(&buf, node)
 	return buf.String()
 }
 

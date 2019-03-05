@@ -35,20 +35,19 @@ import (
 
 // New creates a new Python Generator that writes to the given writer and uses the given project name.
 func New(projectName string, w io.Writer) gen.Generator {
-	return &generator{
-		projectName: projectName,
-		w:           w,
-	}
+	g := &generator{projectName: projectName}
+	g.Emitter = gen.NewEmitter(w, g)
+	return g
 }
 
 type generator struct {
+	// The emitter to use when generating code.
+	*gen.Emitter
+
 	projectName   string
-	w             io.Writer
 	needNYIHelper bool
 
 	// put here because of copy-pasta
-	// indent is the current indentation level for the generated source.
-	indent string
 	// countIndex is the name (if any) of the currently in-scope count variable.
 	countIndex string
 	// unknownInputs is the set of input variables that may be unknown at runtime.
@@ -56,7 +55,7 @@ type generator struct {
 }
 
 func (g *generator) GeneratePreamble(modules []*il.Graph) error {
-	g.println("import pulumi")
+	g.Println("import pulumi")
 
 	// Accumulate other imports for the various providers. Don't emit them yet, as we need to sort them later on.
 	var imports []string
@@ -82,9 +81,9 @@ func (g *generator) GeneratePreamble(modules []*il.Graph) error {
 
 	sort.Strings(imports)
 	for _, pkg := range imports {
-		g.println(pkg)
+		g.Println(pkg)
 	}
-	g.println("") // end the preamble with a newline, standard Python style.
+	g.Println("") // end the preamble with a newline, standard Python style.
 	return nil
 }
 
@@ -96,7 +95,7 @@ func (g *generator) BeginModule(mod *il.Graph) error {
 }
 
 func (g *generator) EndModule(mod *il.Graph) error {
-	g.genNYIHelper(g.w)
+	g.genNYIHelper(g)
 	return nil
 }
 
@@ -142,7 +141,7 @@ func (g *generator) GenerateResource(r *il.ResourceNode) error {
 	}
 
 	name := g.nodeName(r)
-	g.printf("%s%s = %s(%q%s)\n", g.indent, name, qualifiedMemberName, name, inputs)
+	g.Printf("%s%s = %s(%q%s)\n", g.Indent, name, qualifiedMemberName, name, inputs)
 	return nil
 }
 
@@ -184,73 +183,6 @@ func cleanName(name string) string {
 //
 // Copy-pasted stuff from the node backend. Don't modify anything below this line!
 //
-
-// print prints one or more values to the generator's output stream.
-func (g *generator) print(a ...interface{}) {
-	_, err := fmt.Fprint(g.w, a...)
-	contract.IgnoreError(err)
-}
-
-// println prints one or more values to the generator's output stream, followed by a newline.
-func (g *generator) println(a ...interface{}) {
-	g.print(a...)
-	g.print("\n")
-}
-
-// prinft prints a formatted message to the generator's output stream.
-func (g *generator) printf(format string, a ...interface{}) {
-	_, err := fmt.Fprintf(g.w, format, a...)
-	contract.IgnoreError(err)
-}
-
-// gen generates code for a list of strings and expression trees. The former are written directly to the destination;
-// the latter are recursively generated using the appropriate gen* functions.
-func (g *generator) gen(w io.Writer, vs ...interface{}) {
-	for _, v := range vs {
-		switch v := v.(type) {
-		case string:
-			_, err := fmt.Fprint(w, v)
-			contract.IgnoreError(err)
-		case *il.BoundArithmetic:
-			g.genArithmetic(w, v)
-		case *il.BoundCall:
-			g.genCall(w, v)
-		case *il.BoundConditional:
-			g.genConditional(w, v)
-		case *il.BoundIndex:
-			g.genIndex(w, v)
-		case *il.BoundLiteral:
-			g.genLiteral(w, v)
-		case *il.BoundOutput:
-			g.genOutput(w, v)
-		case *il.BoundPropertyExpr:
-			g.gen(w, v.Value)
-		case *il.BoundVariableAccess:
-			g.genVariableAccess(w, v)
-		case *il.BoundListProperty:
-			g.genListProperty(w, v)
-		case *il.BoundMapProperty:
-			g.genMapProperty(w, v)
-		case *il.BoundError:
-			g.genError(w, v)
-		default:
-			contract.Failf("unexpected type in gen: %T", v)
-		}
-	}
-}
-
-// genf generates code using a format string and its arguments. Any arguments that are BoundNode values are wrapped in
-// a FormatFunc that calls the appropriate recursive generation function. This allows for the composition of standard
-// format strings with expression/property code gen (e.g. `g.genf(w, ".apply(__arg0 => %v)", then)`, where `then` is
-// an expression tree).
-func (g *generator) genf(w io.Writer, format string, args ...interface{}) {
-	for i := range args {
-		if node, ok := args[i].(il.BoundNode); ok {
-			args[i] = gen.FormatFunc(func(f fmt.State, c rune) { g.gen(f, node) })
-		}
-	}
-	fmt.Fprintf(w, format, args...)
-}
 
 // computeProperty generates code for the given property into a string ala fmt.Sprintf. It returns both the generated
 // code and a bool value that indicates whether or not any output-typed values were nested in the property value.
@@ -296,12 +228,12 @@ func (g *generator) computeProperty(prop il.BoundNode, indent bool, count string
 
 	// Finally, generate code for the property.
 	if indent {
-		g.indent += "    "
-		defer func() { g.indent = g.indent[:len(g.indent)-4] }()
+		g.Indent += "    "
+		defer func() { g.Indent = g.Indent[:len(g.Indent)-4] }()
 	}
 	g.countIndex = count
 	buf := &bytes.Buffer{}
-	g.gen(buf, p)
+	g.Fgen(buf, p)
 	return buf.String(), containsOutputs, nil
 }
 

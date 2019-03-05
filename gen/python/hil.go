@@ -38,37 +38,37 @@ def tf2pulumi_nyi(reason):
 `
 )
 
-func (g *generator) genArithmetic(w io.Writer, v *il.BoundArithmetic) {
+func (g *generator) GenArithmetic(w io.Writer, v *il.BoundArithmetic) {
 	g.genNYI(w, "arithmetic")
 }
 
-func (g *generator) genCall(w io.Writer, v *il.BoundCall) {
+func (g *generator) GenCall(w io.Writer, v *il.BoundCall) {
 	g.genNYI(w, "call")
 }
 
-func (g *generator) genConditional(w io.Writer, v *il.BoundConditional) {
+func (g *generator) GenConditional(w io.Writer, v *il.BoundConditional) {
 	g.genNYI(w, "conditionals")
 }
 
-func (g *generator) genIndex(w io.Writer, v *il.BoundIndex) {
+func (g *generator) GenIndex(w io.Writer, v *il.BoundIndex) {
 	g.genNYI(w, "index")
 }
 
-func (g *generator) genLiteral(w io.Writer, v *il.BoundLiteral) {
+func (g *generator) GenLiteral(w io.Writer, v *il.BoundLiteral) {
 	switch v.ExprType {
 	case il.TypeBool:
 		boolVal := v.Value.(bool)
 		if boolVal {
-			g.gen(w, "True")
+			g.Fgen(w, "True")
 		} else {
-			g.gen(w, "False")
+			g.Fgen(w, "False")
 		}
 	case il.TypeNumber:
 		floatVal := v.Value.(float64)
 		if float64(int64(floatVal)) == floatVal {
-			g.genf(w, "%d", int64(floatVal))
+			g.Fgenf(w, "%d", int64(floatVal))
 		} else {
-			g.genf(w, "%g", v.Value)
+			g.Fgenf(w, "%g", v.Value)
 		}
 	case il.TypeString:
 		g.genNYI(w, "string literals")
@@ -77,19 +77,19 @@ func (g *generator) genLiteral(w io.Writer, v *il.BoundLiteral) {
 	}
 }
 
-func (g *generator) genOutput(w io.Writer, v *il.BoundOutput) {
+func (g *generator) GenOutput(w io.Writer, v *il.BoundOutput) {
 	g.genNYI(w, "outputs")
 }
 
-func (g *generator) genVariableAccess(w io.Writer, v *il.BoundVariableAccess) {
+func (g *generator) GenVariableAccess(w io.Writer, v *il.BoundVariableAccess) {
 	g.genNYI(w, "variables")
 }
 
-func (g *generator) genListProperty(w io.Writer, v *il.BoundListProperty) {
+func (g *generator) GenListProperty(w io.Writer, v *il.BoundListProperty) {
 	g.genNYI(w, "list properties")
 }
 
-func (g *generator) genMapProperty(w io.Writer, v *il.BoundMapProperty) {
+func (g *generator) GenMapProperty(w io.Writer, v *il.BoundMapProperty) {
 	if v.Schemas.TF != nil && v.Schemas.TF.Type == schema.TypeMap {
 		g.genNYI(w, "exact map properties")
 		return
@@ -108,12 +108,16 @@ func (g *generator) genMapProperty(w io.Writer, v *il.BoundMapProperty) {
 	for _, key := range gen.SortedKeys(v.Elements) {
 		value := v.Elements[key]
 		// TODO(swgillespie) emit leading comments
-		g.genf(w, ", %s=%v", key, value)
+		g.Fgenf(w, ", %s=%v", key, value)
 		// TODO(swgillespie) emit trailing comments
 	}
 }
 
-func (g *generator) genError(w io.Writer, v *il.BoundError) {
+func (g *generator) GenPropertyValue(w io.Writer, v *il.BoundPropertyValue) {
+	g.Fgen(w, v.Value)
+}
+
+func (g *generator) GenError(w io.Writer, v *il.BoundError) {
 	g.genNYI(w, "errors")
 }
 
