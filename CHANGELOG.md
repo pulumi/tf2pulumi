@@ -1,5 +1,6 @@
 ## v0.4.9 (Released March 1, 2019)
 
+
 ## Improvements
 
 - Auto-named properties can now be optionally filtered from the generated source using schema information. This gives
@@ -11,7 +12,7 @@
 ## Improvements
 
 - Allow references to `terraform.workspace` (tf2pulumi#68)
-- Allow normal references to counted resources. Terraform allows this when a resource's count evaluates to 1, so 
+- Allow normal references to counted resources. Terraform allows this when a resource's count evaluates to 1, so
   we code generate this as a reference to the first resource in the counted resource's list.
 - Data sources with inputs that are outputs of other resources and data sources are now generated correctly.
 
