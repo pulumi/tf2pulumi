@@ -1,0 +1,13 @@
+{
+    "name": "random-integer",
+    "devDependencies": {
+        "@types/node": "latest",
+        "@types/sprintf-js": "latest"
+    },
+    "dependencies": {
+        "@pulumi/pulumi": "latest",
+        "@pulumi/random": "latest",
+        "sprintf-js": "latest"
+    }
+}
+
