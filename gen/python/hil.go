@@ -18,7 +18,8 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/hashicorp/terraform/helper/schema"
+	"github.com/hashicorp/terraform/config"
+
 	"github.com/pulumi/pulumi/pkg/util/contract"
 
 	"github.com/pulumi/tf2pulumi/gen"
@@ -43,7 +44,51 @@ func (g *generator) GenArithmetic(w io.Writer, v *il.BoundArithmetic) {
 }
 
 func (g *generator) GenCall(w io.Writer, v *il.BoundCall) {
-	g.genNYI(w, "call")
+	switch v.HILNode.Func {
+	case intrinsicDataSource:
+		g.genDataSourceCall(w, v)
+	case intrinsicResource:
+		g.genResourceCall(w, v)
+	case il.IntrinsicApply:
+		g.genApply(w, v)
+	default:
+		g.genNYI(w, "call")
+	}
+}
+
+func (g *generator) genDataSourceCall(w io.Writer, v *il.BoundCall) {
+	functionName, inputs := parseDataSourceCall(v)
+
+	// Like resources, Python projects property input maps as keyword arguments on the data source function itself.
+	// The name of the data source function is functionName above - we've already calculated the Python name for it.
+	g.Fgenf(w, "%s(", functionName)
+	sortedElements := gen.SortedKeys(inputs.Elements)
+	for i, key := range sortedElements {
+		value := inputs.Elements[key]
+		g.Fgenf(w, "%s=%v", key, value)
+		if i != len(sortedElements)-1 {
+			g.Fgen(w, ", ")
+		}
+	}
+	g.Fgen(w, ")")
+}
+
+func (g *generator) genResourceCall(w io.Writer, v *il.BoundCall) {
+	resourceType, resourceName, inputs := parseResourceCall(v)
+	g.Fgenf(w, "%s(%q, ", resourceType, resourceName)
+	sortedElements := gen.SortedKeys(inputs.Elements)
+	for i, key := range sortedElements {
+		value := inputs.Elements[key]
+		g.Fgenf(w, "%s=%v", key, value)
+		if i != len(sortedElements)-1 {
+			g.Fgen(w, ", ")
+		}
+	}
+	g.Fgen(w, ")")
+}
+
+func (g *generator) genApply(w io.Writer, v *il.BoundCall) {
+	g.genNYI(w, "nontrivial apply")
 }
 
 func (g *generator) GenConditional(w io.Writer, v *il.BoundConditional) {
@@ -71,7 +116,7 @@ func (g *generator) GenLiteral(w io.Writer, v *il.BoundLiteral) {
 			g.Fgenf(w, "%g", v.Value)
 		}
 	case il.TypeString:
-		g.genNYI(w, "string literals")
+		g.Fgenf(w, "%q", v.Value.(string))
 	default:
 		contract.Failf("unexpected literal type in genLiteral: %v", v.ExprType)
 	}
@@ -82,35 +127,43 @@ func (g *generator) GenOutput(w io.Writer, v *il.BoundOutput) {
 }
 
 func (g *generator) GenVariableAccess(w io.Writer, v *il.BoundVariableAccess) {
-	g.genNYI(w, "variables")
+	switch v.TFVar.(type) {
+	case *config.ResourceVariable:
+		if v.ILNode == nil {
+			g.genNYI(w, "resource variable with no IL node")
+			return
+		}
+
+		name := g.nodeName(v.ILNode)
+		g.Fgenf(w, "%s.%s", name, v.Elements[0])
+	default:
+		g.genNYI(w, "variables")
+	}
 }
 
 func (g *generator) GenListProperty(w io.Writer, v *il.BoundListProperty) {
-	g.genNYI(w, "list properties")
+	g.Fgen(w, "[")
+	for i, prop := range v.Elements {
+		g.Fgen(w, prop)
+		if i != len(v.Elements)-1 {
+			g.Fgen(w, ", ")
+		}
+	}
+	g.Fgen(w, "]")
 }
 
 func (g *generator) GenMapProperty(w io.Writer, v *il.BoundMapProperty) {
-	if v.Schemas.TF != nil && v.Schemas.TF.Type == schema.TypeMap {
-		g.genNYI(w, "exact map properties")
-		return
-	}
-
-	if len(v.Elements) == 0 {
-		return
-	}
-
-	// Unlike the Node backend, Python resources accept keyword arguments for each input property. If we're being
-	// requested to instantiate a resource map (i.e. not a field whose schema type is TypeMap), emit a comma-separated
-	// list of keyword arguments for a function.
-	//
-	// Note that this is not a valid expression normally, so we must be in a "call" parse context in order for this to
-	// parse correctly.
-	for _, key := range gen.SortedKeys(v.Elements) {
+	g.Fgen(w, "{")
+	sortedElements := gen.SortedKeys(v.Elements)
+	for i, key := range sortedElements {
 		value := v.Elements[key]
-		// TODO(swgillespie) emit leading comments
-		g.Fgenf(w, ", %s=%v", key, value)
-		// TODO(swgillespie) emit trailing comments
+		g.Fgenf(w, "%q: %s", key, value)
+		if i != len(sortedElements)-1 {
+			g.Fgen(w, ", ")
+		}
 	}
+	g.Fgen(w, "}")
+	return
 }
 
 func (g *generator) GenPropertyValue(w io.Writer, v *il.BoundPropertyValue) {
