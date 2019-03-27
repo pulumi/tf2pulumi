@@ -163,7 +163,6 @@ func (g *generator) GenMapProperty(w io.Writer, v *il.BoundMapProperty) {
 		}
 	}
 	g.Fgen(w, "}")
-	return
 }
 
 func (g *generator) GenPropertyValue(w io.Writer, v *il.BoundPropertyValue) {
