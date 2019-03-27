@@ -12,9 +12,12 @@ time, it will also translate Terraform state files into Pulumi checkpoint files.
 
 ## Building and Installation
 
-You need to have [Go](https://golang.org/) and [`dep`](https://github.com/golang/dep) installed in
-order to build `tf2pulumi`. Once those prerequisites are installed, run the following to build the
-`tf2pulumi` binary and install it into `$GOPATH/bin`:
+If you wish to use `tf2pulumi` without developing the tool itself, you can use one of the [binary
+releases](https://github.com/pulumi/tf2pulumi/releases) hosted on GitHub.
+
+If you want to develop `tf2pulumi` itself, you need to have [Go](https://golang.org/) and
+[`dep`](https://github.com/golang/dep) installed in order to build. Once those prerequisites are
+installed, run the following to build the `tf2pulumi` binary and install it into `$GOPATH/bin`:
 
 ```console
 $ go get -d github.com/pulumi/tf2pulumi/...
