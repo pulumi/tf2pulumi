@@ -38,51 +38,58 @@ func RequireAWSRegion() terraform.TestOptionsFunc {
 }
 
 func RunAWSTest(t *testing.T, dir string, opts ...terraform.TestOptionsFunc) {
-	opts = append(opts, RequireAWSRegion(), terraform.SkipPython())
+	opts = append(opts, RequireAWSRegion())
 	terraform.RunTest(t, dir, opts...)
 }
 
 func TestASG(t *testing.T) {
-	RunAWSTest(t, "asg")
+	RunAWSTest(t, "asg", terraform.SkipPython())
 }
 
 func TestCognitoUserPool(t *testing.T) {
-	RunAWSTest(t, "cognito-user-pool")
+	RunAWSTest(t, "cognito-user-pool", terraform.SkipPython())
 }
 
 func TestCount(t *testing.T) {
-	RunAWSTest(t, "count")
+	RunAWSTest(t, "count", terraform.SkipPython())
 }
 
 func TestECSALB(t *testing.T) {
 	t.Skipf("Skipping test due to NYI: call to cidersubnet")
-	RunAWSTest(t, "ecs-alb")
+	RunAWSTest(t, "ecs-alb", terraform.SkipPython())
 }
 
 func TestEIP(t *testing.T) {
-	RunAWSTest(t, "eip")
+	RunAWSTest(t, "eip", terraform.SkipPython())
 }
 
 func TestELB(t *testing.T) {
-	RunAWSTest(t, "elb")
+	RunAWSTest(t, "elb", terraform.SkipPython())
 }
 
 func TestELB2(t *testing.T) {
-	RunAWSTest(t, "elb2")
+	RunAWSTest(t, "elb2", terraform.SkipPython())
 }
 
 func TestLBListener(t *testing.T) {
 	RunAWSTest(t, "lb-listener",
+		terraform.SkipPython(),
 		// Note we don't compile this one, since it contains semantic errors.
 		terraform.Compile(false),
 	)
 }
 
 func TestLambda(t *testing.T) {
-	RunAWSTest(t, "lambda")
+	RunAWSTest(t, "lambda", terraform.SkipPython())
 }
 
 func TestNetworking(t *testing.T) {
 	t.Skipf("Skipping test due to NYI: provider instances")
-	RunAWSTest(t, "networking")
+	RunAWSTest(t, "networking", terraform.SkipPython())
+}
+
+func TestEC2(t *testing.T) {
+	RunAWSTest(t, "ec2",
+		terraform.Compile(false),
+	)
 }

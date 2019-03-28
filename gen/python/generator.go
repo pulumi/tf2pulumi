@@ -23,6 +23,7 @@ import (
 	"io"
 	"sort"
 	"strings"
+	"unicode"
 
 	"github.com/hashicorp/terraform/config"
 	"github.com/pkg/errors"
@@ -127,21 +128,46 @@ func (g *generator) GenerateResource(r *il.ResourceNode) error {
 	if len(r.ExplicitDeps) != 0 {
 		return errors.New("NYI: Python Explicit Dependencies")
 	}
-	if r.Config.Mode != config.ManagedResourceMode {
-		return errors.New("NYI: Python Data Source Invocation")
-	}
-	if r.Count != nil {
-		return errors.New("NYI: Python Resource Count")
-	}
-
-	qualifiedMemberName := fmt.Sprintf("%s%s.%s", pkg, subpkg, class)
-	inputs, _, err := g.computeProperty(r.Properties, false, "")
-	if err != nil {
-		return err
-	}
 
 	name := g.nodeName(r)
-	g.Printf("%s%s = %s(%q%s)\n", g.Indent, name, qualifiedMemberName, name, inputs)
+	// Prepare the inputs by lifting them into applies, as necessary. If this is a data source, we must also lift the
+	// data source call itself into the apply.
+	if r.Config.Mode != config.ManagedResourceMode {
+		// Qualified member names are snake cased for data sources.
+		qualifiedMemberName := fmt.Sprintf("%s%s.%s", pkg, subpkg, pyName(class))
+		properties := newDataSourceCall(qualifiedMemberName, r.Properties)
+		inputs, transformed, err := g.computeProperty(properties, false, "")
+		if err != nil {
+			return err
+		}
+
+		// If computeProperty transformed the input bag, it is already output-typed; otherwise, it must be made
+		// output-typed using `from_input`.
+		if transformed {
+			g.Printf("%s%s = %s\n", g.Indent, name, inputs)
+		} else {
+			g.Printf("%s%s = pulumi.Output.from_input(%s)\n", g.Indent, name, inputs)
+		}
+	} else {
+		// For resources, the property inputs must still be apply-rewritten, but the resource invocation itself should
+		// not.
+		qualifiedMemberName := fmt.Sprintf("%s%s.%s", pkg, subpkg, class)
+		inputs, err := g.transformProperty(r.Properties)
+		if err != nil {
+			return err
+		}
+
+		// Unlike the Node backend, the Python backend represents resource calls as calls to the __resource intrinsic.
+		// The reason for this is that Python draws a sharp distinction between map-based inputs and top-level
+		// properties of a resource: the first is typed as a dinctionary while the second is typed as a series of
+		// keyword arguments to a constructor.
+		//
+		// hil.go is responsible for rewriting the __resource intrinsic into a call to a resource's constructor.
+		resCall := newResourceCall(qualifiedMemberName, r.Config.Name, inputs.(*il.BoundMapProperty))
+		buf := &bytes.Buffer{}
+		g.Fgen(buf, resCall)
+		g.Printf("%s%s = %s\n", g.Indent, name, buf.String())
+	}
 	return nil
 }
 
@@ -174,10 +200,58 @@ func (g *generator) nodeName(n il.Node) string {
 }
 
 // cleanName takes a name visible in Terraform config and translates it to a form suitable for Python. This involves
-// working around keywords and other things that are otherwise not legal in Python identifiers. For now, this does
-// nothing and returns the name verbatim.
+// working around keywords and other things that are otherwise not legal in Python identifiers.
 func cleanName(name string) string {
+	if _, isKeyword := pythonKeywords[name]; isKeyword {
+		return name + "_"
+	}
 	return name
+}
+
+//
+// Copy-pasted but modified stuff from the node backend.
+//
+func (g *generator) transformProperty(prop il.BoundNode) (il.BoundNode, error) {
+	// First:
+	// - retype any possibly-unknown module inputs as the appropriate output types
+	// - discover whether or not the property contains any output-typed expressions
+	containsOutputs := false
+	_, err := il.VisitBoundNode(prop, il.IdentityVisitor, func(n il.BoundNode) (il.BoundNode, error) {
+		if n, ok := n.(*il.BoundVariableAccess); ok {
+			if v, ok := n.ILNode.(*il.VariableNode); ok {
+				if _, ok = g.unknownInputs[v]; ok {
+					n.ExprType = n.ExprType.OutputOf()
+				}
+			}
+			containsOutputs = containsOutputs || n.Type().IsOutput()
+		}
+		return n, nil
+	})
+	contract.Assert(err == nil)
+
+	// Next, rewrite assets, lower certain constructrs to literals, insert any necessary coercions, and run the apply
+	// transform.
+	p, err := il.RewriteAssets(prop)
+	if err != nil {
+		return nil, err
+	}
+
+	p, err = g.lowerToLiterals(p)
+	if err != nil {
+		return nil, err
+	}
+
+	p, err = il.AddCoercions(p)
+	if err != nil {
+		return nil, err
+	}
+
+	p, err = il.RewriteApplies(p)
+	if err != nil {
+		return nil, err
+	}
+
+	return RewriteTrivialApplies(p)
 }
 
 //
@@ -271,4 +345,187 @@ func resourceTypeName(r *il.ResourceNode) (string, string, string, error) {
 	}
 
 	return provider, module, memberName, nil
+}
+
+//
+// Copy-pasted from tfgen
+//
+
+// pyName turns a variable or function name, normally using camelCase, to an underscore_case name.
+func pyName(name string) string {
+	// This method is a state machine with four states:
+	//   stateFirst - the initial state.
+	//   stateUpper - The last character we saw was an uppercase letter and the character before it
+	//                was either a number or a lowercase letter.
+	//   stateAcronym - The last character we saw was an uppercase letter and the character before it
+	//                  was an uppercase letter.
+	//   stateLowerOrNumber - The last character we saw was a lowercase letter or a number.
+	//
+	// The following are the state transitions of this state machine:
+	//   stateFirst -> (uppercase letter) -> stateUpper
+	//   stateFirst -> (lowercase letter or number) -> stateLowerOrNumber
+	//      Append the lower-case form of the character to currentComponent.
+	//
+	//   stateUpper -> (uppercase letter) -> stateAcronym
+	//   stateUpper -> (lowercase letter or number) -> stateLowerOrNumber
+	//      Append the lower-case form of the character to currentComponent.
+	//
+	//   stateAcronym -> (uppercase letter) -> stateAcronym
+	//		Append the lower-case form of the character to currentComponent.
+	//   stateAcronym -> (number) -> stateLowerOrNumber
+	//      Append the character to currentComponent.
+	//   stateAcronym -> (lowercase letter) -> stateLowerOrNumber
+	//      Take all but the last character in currentComponent, turn that into
+	//      a string, and append that to components. Set currentComponent to the
+	//      last two characters seen.
+	//
+	//   stateLowerOrNumber -> (uppercase letter) -> stateUpper
+	//      Take all characters in currentComponent, turn that into a string,
+	//      and append that to components. Set currentComponent to the last
+	//      character seen.
+	//	 stateLowerOrNumber -> (lowercase letter) -> stateLowerOrNumber
+	//      Append the character to currentComponent.
+	//
+	// The Go libraries that convert camelCase to snake_case deviate subtly from
+	// the semantics we're going for in this method, namely that they separate
+	// numbers and lowercase letters. We don't want this in all cases (we want e.g. Sha256Hash to
+	// be converted as sha256_hash). We also want SHA256Hash to be converted as sha256_hash, so
+	// we must at least be aware of digits when in the stateAcronym state.
+	//
+	// As for why this is a state machine, the libraries that do this all pretty much use
+	// either regular expressions or state machines, which I suppose are ultimately the same thing.
+	const (
+		stateFirst = iota
+		stateUpper
+		stateAcronym
+		stateLowerOrNumber
+	)
+
+	var components []string     // The components that will be joined together with underscores
+	var currentComponent []rune // The characters composing the current component being built
+	state := stateFirst
+	for _, char := range name {
+		switch state {
+		case stateFirst:
+			if unicode.IsUpper(char) {
+				// stateFirst -> stateUpper
+				state = stateUpper
+				currentComponent = append(currentComponent, unicode.ToLower(char))
+				continue
+			}
+
+			// stateFirst -> stateLowerOrNumber
+			state = stateLowerOrNumber
+			currentComponent = append(currentComponent, char)
+			continue
+
+		case stateUpper:
+			if unicode.IsUpper(char) {
+				// stateUpper -> stateAcronym
+				state = stateAcronym
+				currentComponent = append(currentComponent, unicode.ToLower(char))
+				continue
+			}
+
+			// stateUpper -> stateLowerOrNumber
+			state = stateLowerOrNumber
+			currentComponent = append(currentComponent, char)
+			continue
+
+		case stateAcronym:
+			if unicode.IsUpper(char) {
+				// stateAcronym -> stateAcronym
+				currentComponent = append(currentComponent, unicode.ToLower(char))
+				continue
+			}
+
+			// We want to fold digits immediately following an acronym into the same
+			// component as the acronym.
+			if unicode.IsDigit(char) {
+				// stateAcronym -> stateLowerOrNumber
+				currentComponent = append(currentComponent, char)
+				state = stateLowerOrNumber
+				continue
+			}
+
+			// stateAcronym -> stateLowerOrNumber
+			last, rest := currentComponent[len(currentComponent)-1], currentComponent[:len(currentComponent)-1]
+			components = append(components, string(rest))
+			currentComponent = []rune{last, char}
+			state = stateLowerOrNumber
+			continue
+
+		case stateLowerOrNumber:
+			if unicode.IsUpper(char) {
+				// stateLowerOrNumber -> stateUpper
+				components = append(components, string(currentComponent))
+				currentComponent = []rune{unicode.ToLower(char)}
+				state = stateUpper
+				continue
+			}
+
+			// stateLowerOrNumber -> stateLowerOrNumber
+			currentComponent = append(currentComponent, char)
+			continue
+		}
+	}
+
+	components = append(components, string(currentComponent))
+	result := strings.Join(components, "_")
+	return ensurePythonKeywordSafe(result)
+}
+
+// pythonKeywords is a map of reserved keywords used by Python 2 and 3.  We use this to avoid generating unspeakable
+// names in the resulting code.  This map was sourced by merging the following reference material:
+//
+//     * Python 2: https://docs.python.org/2.5/ref/keywords.html
+//     * Python 3: https://docs.python.org/3/reference/lexical_analysis.html#keywords
+//
+var pythonKeywords = map[string]bool{
+	"False":    true,
+	"None":     true,
+	"True":     true,
+	"and":      true,
+	"as":       true,
+	"assert":   true,
+	"async":    true,
+	"await":    true,
+	"break":    true,
+	"class":    true,
+	"continue": true,
+	"def":      true,
+	"del":      true,
+	"elif":     true,
+	"else":     true,
+	"except":   true,
+	"exec":     true,
+	"finally":  true,
+	"for":      true,
+	"from":     true,
+	"global":   true,
+	"if":       true,
+	"import":   true,
+	"in":       true,
+	"is":       true,
+	"lambda":   true,
+	"nonlocal": true,
+	"not":      true,
+	"or":       true,
+	"pass":     true,
+	"print":    true,
+	"raise":    true,
+	"return":   true,
+	"try":      true,
+	"while":    true,
+	"with":     true,
+	"yield":    true,
+}
+
+// ensurePythonKeywordSafe adds a trailing underscore if the generated name clashes with a Python 2 or 3 keyword, per
+// PEP 8: https://www.python.org/dev/peps/pep-0008/?#function-and-method-arguments
+func ensurePythonKeywordSafe(name string) string {
+	if _, isKeyword := pythonKeywords[name]; isKeyword {
+		return name + "_"
+	}
+	return name
 }
