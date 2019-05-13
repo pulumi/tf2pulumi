@@ -173,6 +173,10 @@ resource "aws_security_group" "default" {
 		protocol    = "-1" // All
 		cidr_blocks = ["0.0.0.0/0"]
 	}
+
+	tags {
+		Vpc = "VPC ${var.aws_region}:${aws_vpc.default.id}"
+	}
 }
 
 /**
@@ -186,13 +190,32 @@ output "security_group_name" {
 }
 `
 
-	const expectedText = `import * as pulumi from "@pulumi/pulumi";
+	const expectedText16 = `import * as pulumi from "@pulumi/pulumi";
 import * as aws from "@pulumi/aws";
 
 const config = new pulumi.Config();
 // Accept the AWS region as input.
 const awsRegion = config.get("awsRegion") || "us-west-2";
 
+// Create a VPC.
+//
+// Note that the VPC has been tagged appropriately.
+const defaultVpc = new aws.ec2.Vpc("default", {
+    cidrBlock: "10.0.0.0/16", // Just one CIDR block
+    enableDnsHostnames: true, // Definitely want DNS hostnames.
+    // The tag collection for this VPC.
+    tags: {
+        // Ensure that we tag this VPC with a Name.
+        Name: "test",
+    },
+});
+// The region, again
+const region = awsRegion; // why not
+// The VPC details
+const vpc = [{
+    // The ID
+    id: defaultVpc.id,
+}];
 // Create a security group.
 //
 // This group should allow SSH and HTTP access.
@@ -221,27 +244,11 @@ const defaultSecurityGroup = new aws.ec2.SecurityGroup("default", {
             toPort: 80,
         },
     ],
+    tags: {
+        Vpc: defaultVpc.id.apply(id => ` + "`" + `VPC ${awsRegion}:${id}` + "`" + `),
+    },
     vpcId: locals_vpc_id.id,
 });
-// Create a VPC.
-//
-// Note that the VPC has been tagged appropriately.
-const defaultVpc = new aws.ec2.Vpc("default", {
-    cidrBlock: "10.0.0.0/16", // Just one CIDR block
-    enableDnsHostnames: true, // Definitely want DNS hostnames.
-    // The tag collection for this VPC.
-    tags: {
-        // Ensure that we tag this VPC with a Name.
-        Name: "test",
-    },
-});
-// The region, again
-const region = awsRegion; // why not
-// The VPC details
-const vpc = [{
-    // The ID
-    id: defaultVpc.id,
-}];
 
 // Output the SG name.
 //
@@ -278,8 +285,93 @@ export const securityGroupName = defaultSecurityGroup.name; // Neat!
 	}
 
 	var b bytes.Buffer
-	err = gen.Generate([]*il.Graph{g}, New("main", &b))
+	lang, err := New("main", "0.16.0", &b)
+	assert.NoError(t, err)
+	err = gen.Generate([]*il.Graph{g}, lang)
 	assert.NoError(t, err)
 
-	assert.Equal(t, expectedText, b.String())
+	assert.Equal(t, expectedText16, b.String())
+
+	const expectedText17 = `import * as pulumi from "@pulumi/pulumi";
+import * as aws from "@pulumi/aws";
+
+const config = new pulumi.Config();
+// Accept the AWS region as input.
+const awsRegion = config.get("awsRegion") || "us-west-2";
+
+// Create a VPC.
+//
+// Note that the VPC has been tagged appropriately.
+const defaultVpc = new aws.ec2.Vpc("default", {
+    cidrBlock: "10.0.0.0/16", // Just one CIDR block
+    enableDnsHostnames: true, // Definitely want DNS hostnames.
+    // The tag collection for this VPC.
+    tags: {
+        // Ensure that we tag this VPC with a Name.
+        Name: "test",
+    },
+});
+// The region, again
+const region = awsRegion; // why not
+// The VPC details
+const vpc = [{
+    // The ID
+    id: defaultVpc.id,
+}];
+// Create a security group.
+//
+// This group should allow SSH and HTTP access.
+const defaultSecurityGroup = new aws.ec2.SecurityGroup("default", {
+    // outbound internet access
+    egress: [{
+        cidrBlocks: ["0.0.0.0/0"],
+        fromPort: 0,
+        protocol: "-1", // All
+        toPort: 0,
+    }],
+    ingress: [
+        // SSH access from anywhere
+        {
+            // "0.0.0.0/0" is anywhere
+            cidrBlocks: ["0.0.0.0/0"],
+            fromPort: 22,
+            protocol: "tcp",
+            toPort: 22,
+        },
+        // HTTP access from anywhere
+        {
+            cidrBlocks: ["0.0.0.0/0"],
+            fromPort: 80,
+            protocol: "tcp", // HTTP is TCP-only
+            toPort: 80,
+        },
+    ],
+    tags: {
+        Vpc: pulumi.interpolate` + "`" + `VPC ${awsRegion}:${defaultVpc.id}` + "`" + `,
+    },
+    vpcId: locals_vpc_id.id,
+});
+
+// Output the SG name.
+//
+// We pull the name from the default SG.
+// Take the value from the default SG.
+export const securityGroupName = defaultSecurityGroup.name; // Neat!
+`
+	g, err = il.BuildGraph(module.NewTree("main", conf), &il.BuildOptions{
+		AllowMissingProviders: true,
+		AllowMissingVariables: true,
+		AllowMissingComments:  true,
+	})
+	if err != nil {
+		t.Fatalf("could not build graph: %v", err)
+	}
+
+	b.Reset()
+	lang, err = New("main", "0.17.1", &b)
+	assert.NoError(t, err)
+	err = gen.Generate([]*il.Graph{g}, lang)
+	assert.NoError(t, err)
+
+	assert.Equal(t, expectedText17, b.String())
 }

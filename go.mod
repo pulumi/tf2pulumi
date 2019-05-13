@@ -12,6 +12,7 @@ replace (
 
 require (
 	git.apache.org/thrift.git v0.12.0 // indirect
+	github.com/blang/semver v3.5.1+incompatible
 	github.com/chzyer/logex v1.1.11-0.20160617073814-96a4d311aa9b // indirect
 	github.com/gopherjs/gopherjs v0.0.0-20181103185306-d547d1d9531e // indirect
 	github.com/hashicorp/hcl v1.0.0

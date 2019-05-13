@@ -24,6 +24,8 @@ import (
 const (
 	// intrinsicDataSource is the name of the data source intrinsic.
 	intrinsicDataSource = "__dataSource"
+	// inttrinsicInterpolate is the name of the interpolate intrinsic.
+	intrinsicInterpolate = "__interpolate"
 )
 
 // newDataSourceCall creates a new call to the data source intrinsic that represents an invocation of the specified
@@ -50,4 +52,14 @@ func newDataSourceCall(functionName string, inputs il.BoundNode) *il.BoundCall {
 func parseDataSourceCall(c *il.BoundCall) (function string, inputs il.BoundNode) {
 	contract.Assert(c.HILNode.Func == intrinsicDataSource)
 	return c.Args[0].(*il.BoundLiteral).Value.(string), c.Args[1].(*il.BoundPropertyValue).Value
+}
+
+// newInterpolateCall creates a new call to the interpolate intrinsic that represents a template literal that uses the
+// pulumi.interpolate function.
+func newInterpolateCall(args []il.BoundExpr) *il.BoundCall {
+	return &il.BoundCall{
+		HILNode:  &ast.Call{Func: intrinsicInterpolate},
+		ExprType: il.TypeString.OutputOf(),
+		Args:     args,
+	}
 }

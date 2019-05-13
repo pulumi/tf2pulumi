@@ -22,6 +22,7 @@ import (
 	"strings"
 	"unicode"
 
+	"github.com/blang/semver"
 	"github.com/hashicorp/terraform/config"
 	"github.com/hashicorp/terraform/helper/schema"
 	"github.com/pkg/errors"
@@ -33,10 +34,14 @@ import (
 )
 
 // New creates a new NodeJS code generator.
-func New(projectName string, w io.Writer) gen.Generator {
-	g := &generator{ProjectName: projectName}
+func New(projectName string, targetSDKVersion string, w io.Writer) (gen.Generator, error) {
+	v, err := semver.Parse(targetSDKVersion)
+	if err != nil {
+		return nil, err
+	}
+	g := &generator{ProjectName: projectName, supportsProxyApplies: v.GTE(semver.MustParse("0.17.0"))}
 	g.Emitter = gen.NewEmitter(w, g)
-	return g
+	return g, nil
 }
 
 // generator generates Typescript code that targets the Pulumi libraries from a Terraform configuration.
@@ -46,12 +51,16 @@ type generator struct {
 
 	// ProjectName is the name of the Pulumi project.
 	ProjectName string
+	// supportsProxyApplies is true if the target SDK version supports proxied applies on Outputs.
+	supportsProxyApplies bool
 	// rootPath is the path to the directory that contains the root module.
 	rootPath string
 	// module is the module currently being generated;.
 	module *il.Graph
 	// countIndex is the name (if any) of the currently in-scope count variable.
 	countIndex string
+	// inApplyCall is true iff we are currently generating an apply call.
+	inApplyCall bool
 	// applyArgs is the list of currently in-scope apply arguments.
 	applyArgs []*il.BoundVariableAccess
 	// applyArgNames is the list of names for the currently in-scope apply arguments.
@@ -217,6 +226,13 @@ func (g *generator) computeProperty(prop il.BoundNode, indent bool, count string
 	p, err = il.RewriteApplies(p)
 	if err != nil {
 		return "", false, err
+	}
+
+	if g.supportsProxyApplies {
+		p, err = g.lowerProxyApplies(p)
+		if err != nil {
+			return "", false, err
+		}
 	}
 
 	// Finally, generate code for the property.

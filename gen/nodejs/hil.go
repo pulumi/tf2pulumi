@@ -85,9 +85,13 @@ func (g *generator) genApplyOutput(w io.Writer, n *il.BoundVariableAccess) {
 
 // genApply generates code for a single `.apply` invocation as represented by a call to the `__apply` intrinsic.
 func (g *generator) genApply(w io.Writer, n *il.BoundCall) {
+	g.inApplyCall = true
+	defer func() { g.inApplyCall = false }()
+
 	// Extract the list of outputs and the continuation expression from the `__apply` arguments.
 	applyArgs, then := il.ParseApplyCall(n)
 	g.applyArgs, g.applyArgNames = applyArgs, g.assignApplyArgNames(applyArgs, then)
+	defer func() { g.applyArgs = nil }()
 
 	if len(g.applyArgs) == 1 {
 		// If we only have a single output, just generate a normal `.apply`.
@@ -111,9 +115,33 @@ func (g *generator) genApply(w io.Writer, n *il.BoundCall) {
 		}
 		g.Fgen(w, "]) => ", then, ")")
 	}
+}
 
-	// Finally, clear the current set of apply arguments.
-	g.applyArgs = nil
+// genNestedPropertyAccess generates a property access expression for a nested property of a resource or data source.
+func (g *generator) genNestedPropertyAccess(w io.Writer, v *il.BoundVariableAccess) {
+	_, ok := v.TFVar.(*config.ResourceVariable)
+	contract.Assert(ok)
+
+	sch, elements := v.Schemas, v.Elements
+	if g.resourceMode(v) == config.ManagedResourceMode {
+		sch, elements = sch.PropertySchemas(elements[0]), elements[1:]
+	} else if r, ok := v.ILNode.(*il.ResourceNode); ok && r.Provider.Config.Name == "http" {
+		elements = nil
+	}
+	for _, e := range elements {
+		isListElement := sch.Type().IsList()
+		projectListElement := isListElement && tfbridge.IsMaxItemsOne(sch.TF, sch.Pulumi)
+
+		sch = sch.PropertySchemas(e)
+		if isListElement {
+			// If we're projecting the list element, just skip this path element entirely.
+			if !projectListElement {
+				g.Fgenf(w, "[%s]", e)
+			}
+		} else {
+			g.Fgenf(w, ".%s", tfbridge.TerraformToPulumiName(e, sch.TF, false))
+		}
+	}
 }
 
 // genApplyArg generates a single reference to a resolved output value inside the context of a call top `.apply`.
@@ -134,26 +162,7 @@ func (g *generator) genApplyArg(w io.Writer, index int) {
 			g.Fgen(w, ".map(v => v")
 		}
 
-		sch, elements := v.Schemas, v.Elements
-		if g.resourceMode(v) == config.ManagedResourceMode {
-			sch, elements = sch.PropertySchemas(elements[0]), elements[1:]
-		} else if r, ok := v.ILNode.(*il.ResourceNode); ok && r.Provider.Config.Name == "http" {
-			elements = nil
-		}
-		for _, e := range elements {
-			isListElement := sch.Type().IsList()
-			projectListElement := isListElement && tfbridge.IsMaxItemsOne(sch.TF, sch.Pulumi)
-
-			sch = sch.PropertySchemas(e)
-			if isListElement {
-				// If we're projecting the list element, just skip this path element entirely.
-				if !projectListElement {
-					g.Fgenf(w, "[%s]", e)
-				}
-			} else {
-				g.Fgenf(w, ".%s", tfbridge.TerraformToPulumiName(e, sch.TF, false))
-			}
-		}
+		g.genNestedPropertyAccess(w, v)
 
 		if isSplat {
 			g.Fgen(w, ")")
@@ -217,6 +226,16 @@ func (g *generator) GenCall(w io.Writer, n *il.BoundCall) {
 	case intrinsicDataSource:
 		function, inputs := parseDataSourceCall(n)
 		g.Fgenf(w, "%s(%s)", function, inputs)
+	case intrinsicInterpolate:
+		fmt.Fprint(w, "pulumi.interpolate`")
+		for _, s := range n.Args {
+			if lit, ok := s.(*il.BoundLiteral); ok && lit.ExprType == il.TypeString {
+				fmt.Fprint(w, lit.Value.(string))
+			} else {
+				g.Fgenf(w, "${%v}", s)
+			}
+		}
+		fmt.Fprint(w, "`")
 	case "base64decode":
 		g.Fgenf(w, "Buffer.from(%v, \"base64\").toString()", n.Args[0])
 	case "base64encode":
@@ -457,9 +476,16 @@ func (g *generator) GenVariableAccess(w io.Writer, n *il.BoundVariableAccess) {
 			g.Fgenf(w, "[%d]", v.Index)
 		}
 
-		// A managed resource is not itself an output: instead, it is a bag of outputs. As such, we must generate the
-		// first portion of this access.
-		if g.resourceMode(n) == config.ManagedResourceMode && len(n.Elements) > 0 {
+		// If we don't have a property access, we're done. This can happen in the case of assets.
+		if len(n.Elements) == 0 {
+			return
+		}
+
+		// Otherwise, we will generate different code depending on whether or not we have a managed resource or a data
+		// source. The former are bags of outputs while the latter are outputs.
+		if g.resourceMode(n) == config.ManagedResourceMode {
+			// Because a managed resource is a bag of outputs, we must generate the first portion of this access. If we
+			// are _not_ within an apply, we generate the entire access.
 			element := n.Elements[0]
 			elementSch := n.Schemas.PropertySchemas(element)
 
@@ -469,6 +495,21 @@ func (g *generator) GenVariableAccess(w io.Writer, n *il.BoundVariableAccess) {
 				g.Fgen(w, ".map(v => v")
 			}
 			g.Fgenf(w, ".%s", tfbridge.TerraformToPulumiName(element, elementSch.TF, false))
+			if !g.inApplyCall {
+				g.genNestedPropertyAccess(w, n)
+			}
+			if isSplat {
+				g.Fgen(w, ")")
+			}
+		} else if !g.inApplyCall {
+			// Handle splats
+			isSplat := v.Multi && v.Index == -1
+			if isSplat {
+				g.Fgen(w, ".map(v => v")
+			}
+			if !g.inApplyCall {
+				g.genNestedPropertyAccess(w, n)
+			}
 			if isSplat {
 				g.Fgen(w, ")")
 			}

@@ -63,7 +63,9 @@ Pulumi TypeScript program that describes the same resource graph.`,
 	flag.BoolVar(&filterAutoNames, "filter-auto-names", false,
 		"when set, properties that are auto-generated names will be removed from all resources")
 	flag.StringVar(&opts.TargetLanguage, "target-language", "typescript",
-		"sets the target language")
+		"sets the language to target")
+	flag.StringVar(&opts.TargetSDKVersion, "target-sdk-version", "0.17.1",
+		"sets the language SDK version to target")
 	rootCmd.AddCommand(&cobra.Command{
 		Use:   "version",
 		Short: "Print the version number of tf2pulumi",
