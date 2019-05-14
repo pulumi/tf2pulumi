@@ -1,3 +1,11 @@
+## v0.5.0 (Unreleased)
+
+- Added a command line option, `-target-sdk-version`,  to indicate the SDK version targeted by the generated code.
+  Note that this option defaults to `0.17.1`, which will by default generate code that is not compatible with
+  older SDKs.
+- Simplified the generation of output property accesses and string interpolations when targeting SDKs newer than
+  version 0.17.0.
+
 ## v0.4.9 (Released March 1, 2019)
 
 ## Improvements
