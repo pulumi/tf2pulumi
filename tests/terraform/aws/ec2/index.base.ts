@@ -16,7 +16,7 @@ const ubuntu = pulumi.output(aws.getAmi({
     owners: ["099720109477"],
 }));
 const web = new aws.ec2.Instance("web", {
-    ami: ubuntu.apply(ubuntu => ubuntu.id),
+    ami: ubuntu.id,
     instanceType: "t2.micro",
     tags: {
         Name: "HelloWorld",

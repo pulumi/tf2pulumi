@@ -66,19 +66,19 @@ func (e *Emitter) Indented(f func()) {
 	e.Indent = e.Indent[:len(e.Indent)-4]
 }
 
-// print prints one or more values to the generator's output stream.
+// Print prints one or more values to the generator's output stream.
 func (e *Emitter) Print(a ...interface{}) {
 	_, err := fmt.Fprint(e.w, a...)
 	contract.IgnoreError(err)
 }
 
-// println prints one or more values to the generator's output stream, followed by a newline.
+// Println prints one or more values to the generator's output stream, followed by a newline.
 func (e *Emitter) Println(a ...interface{}) {
 	e.Print(a...)
 	e.Print("\n")
 }
 
-// prinft prints a formatted message to the generator's output stream.
+// Printf prints a formatted message to the generator's output stream.
 func (e *Emitter) Printf(format string, a ...interface{}) {
 	_, err := fmt.Fprintf(e.w, format, a...)
 	contract.IgnoreError(err)
