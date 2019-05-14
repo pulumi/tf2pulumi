@@ -7,23 +7,20 @@ const domain = new aws.cognito.UserPoolDomain("domain", {});
 const frontEndLoadBalancer = new aws.elasticloadbalancingv2.LoadBalancer("front_end", {});
 const frontEndTargetGroup = new aws.elasticloadbalancingv2.TargetGroup("front_end", {});
 const frontEndListener = new aws.elasticloadbalancingv2.Listener("front_end", {
-    defaultAction: pulumi.all([pool.arn, client.id, domain.domain, frontEndTargetGroup.arn]).apply(([poolArn, id, domain, frontEndTargetGroupArn]) => (() => {
-        throw "tf2pulumi error: aws_lb_listener.front_end.default_action: expected at most one item in list, got 2";
-        return [
-            {
-                authenticateCognito: [{
-                    userPoolArn: poolArn,
-                    userPoolClientId: id,
-                    userPoolDomain: domain,
-                }],
-                type: "authenticate-cognito",
+    defaultActions: [
+        {
+            authenticateCognito: {
+                userPoolArn: pool.arn,
+                userPoolClientId: client.id,
+                userPoolDomain: domain.domain,
             },
-            {
-                targetGroupArn: frontEndTargetGroupArn,
-                type: "forward",
-            },
-        ];
-    })()),
+            type: "authenticate-cognito",
+        },
+        {
+            targetGroupArn: frontEndTargetGroup.arn,
+            type: "forward",
+        },
+    ],
     loadBalancerArn: frontEndLoadBalancer.arn,
     port: 80,
     protocol: "HTTP",
