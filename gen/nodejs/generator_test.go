@@ -97,7 +97,7 @@ func TestLowerToLiteral(t *testing.T) {
 	assert.True(t, ok)
 	assert.Equal(t, ".", lit3.Value)
 
-	computed, _, err := g.computeProperty(prop, false, "")
+	computed, err := g.computeProperty(prop, false, "")
 	assert.NoError(t, err)
 	assert.Equal(t, "{\n    key: `module: foo/bar root: .`,\n}", computed)
 }

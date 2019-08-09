@@ -186,13 +186,10 @@ func (g *generator) GenError(w io.Writer, v *il.BoundError) {
 	g.Fgen(w, g.Indent, "})()")
 }
 
-// computeProperty generates code for the given property into a string ala fmt.Sprintf. It returns both the generated
-// code and a bool value that indicates whether or not any output-typed values were nested in the property value.
-func (g *generator) computeProperty(prop il.BoundNode, indent bool, count string) (string, bool, error) {
+// computeProperty generates code for the given property into a string ala fmt.Sprintf.
+func (g *generator) computeProperty(prop il.BoundNode, indent bool, count string) (string, error) {
 	// First:
 	// - retype any possibly-unknown module inputs as the appropriate output types
-	// - discover whether or not the property contains any output-typed expressions
-	containsOutputs := false
 	_, err := il.VisitBoundNode(prop, il.IdentityVisitor, func(n il.BoundNode) (il.BoundNode, error) {
 		if n, ok := n.(*il.BoundVariableAccess); ok {
 			if v, ok := n.ILNode.(*il.VariableNode); ok {
@@ -200,7 +197,6 @@ func (g *generator) computeProperty(prop il.BoundNode, indent bool, count string
 					n.ExprType = n.ExprType.OutputOf()
 				}
 			}
-			containsOutputs = containsOutputs || n.Type().IsOutput()
 		}
 		return n, nil
 	})
@@ -210,28 +206,28 @@ func (g *generator) computeProperty(prop il.BoundNode, indent bool, count string
 	// transform.
 	p, err := il.RewriteAssets(prop)
 	if err != nil {
-		return "", false, err
+		return "", err
 	}
 
 	p, err = g.lowerToLiterals(p)
 	if err != nil {
-		return "", false, err
+		return "", err
 	}
 
 	p, err = il.AddCoercions(p)
 	if err != nil {
-		return "", false, err
+		return "", err
 	}
 
 	p, err = il.RewriteApplies(p)
 	if err != nil {
-		return "", false, err
+		return "", err
 	}
 
 	if g.supportsProxyApplies {
 		p, err = g.lowerProxyApplies(p)
 		if err != nil {
-			return "", false, err
+			return "", err
 		}
 	}
 
@@ -243,7 +239,7 @@ func (g *generator) computeProperty(prop il.BoundNode, indent bool, count string
 	g.countIndex = count
 	buf := &bytes.Buffer{}
 	g.Fgen(buf, p)
-	return buf.String(), containsOutputs, nil
+	return buf.String(), nil
 }
 
 // isRoot returns true if we are generating code for the root module.
@@ -458,7 +454,7 @@ func (g *generator) GenerateVariables(vs []*il.VariableNode) error {
 				g.Printf(f, configName)
 			}
 		} else {
-			def, _, err := g.computeProperty(v.DefaultValue, false, "")
+			def, err := g.computeProperty(v.DefaultValue, false, "")
 			if err != nil {
 				return err
 			}
@@ -492,7 +488,7 @@ func (g *generator) GenerateVariables(vs []*il.VariableNode) error {
 
 // GenerateLocal generates a single local value. These values are generated as local variable definitions.
 func (g *generator) GenerateLocal(l *il.LocalNode) error {
-	value, _, err := g.computeProperty(l.Value, false, "")
+	value, err := g.computeProperty(l.Value, false, "")
 	if err != nil {
 		return err
 	}
@@ -509,7 +505,7 @@ func (g *generator) GenerateLocal(l *il.LocalNode) error {
 // appropriate module factory function; the result is assigned to a local variable.
 func (g *generator) GenerateModule(m *il.ModuleNode) error {
 	// generate a call to the module constructor
-	args, _, err := g.computeProperty(m.Properties, false, "")
+	args, err := g.computeProperty(m.Properties, false, "")
 	if err != nil {
 		return err
 	}
@@ -600,7 +596,7 @@ func (g *generator) generateResource(r *il.ResourceNode) error {
 
 	if r.Count == nil {
 		// If count is nil, this is a single-instance resource.
-		inputs, transformed, err := g.computeProperty(properties, false, "")
+		inputs, err := g.computeProperty(properties, false, "")
 		if err != nil {
 			return err
 		}
@@ -616,24 +612,15 @@ func (g *generator) generateResource(r *il.ResourceNode) error {
 			g.Printf("%sconst %s = new %s(%s, %s%s);", g.Indent, name, qualifiedMemberName, resName, inputs, explicitDeps)
 		} else {
 			// TODO: explicit dependencies
-
-			// If the input properties did not contain any outputs, then we need to wrap the result in a call to pulumi.output.
-			// Otherwise, we are okay as-is: the apply rewrite perfomed by computeProperty will have ensured that the result
-			// is output-typed.
-			fmtstr := "%sconst %s = pulumi.output(%s);"
-			if transformed {
-				fmtstr = "%sconst %s = %s;"
-			}
-
-			g.Printf(fmtstr, g.Indent, name, inputs)
+			g.Printf("%sconst %s = %s;", g.Indent, name, inputs)
 		}
 	} else {
 		// Otherwise we need to Generate multiple resources in a loop.
-		count, _, err := g.computeProperty(r.Count, false, "")
+		count, err := g.computeProperty(r.Count, false, "")
 		if err != nil {
 			return err
 		}
-		inputs, transformed, err := g.computeProperty(properties, true, "i")
+		inputs, err := g.computeProperty(properties, true, "i")
 		if err != nil {
 			return err
 		}
@@ -651,16 +638,7 @@ func (g *generator) generateResource(r *il.ResourceNode) error {
 					inputs, explicitDeps)
 			} else {
 				// TODO: explicit dependencies
-
-				// If the input properties did not contain any outputs, then we need to wrap the result in a call to
-				// pulumi.output. Otherwise, we are okay as-is: the apply rewrite perfomed by computeProperty will hav
-				// ensured that the result is output-typed.
-				fmtstr := "%s%s.push(pulumi.output(%s));\n"
-				if transformed {
-					fmtstr = "%s%s.push(%s);\n"
-				}
-
-				g.Printf(fmtstr, g.Indent, name, qualifiedMemberName, inputs)
+				g.Printf("%s%s.push(%s);\n", g.Indent, name, qualifiedMemberName)
 			}
 		})
 		g.Printf("%s}", g.Indent)
@@ -713,7 +691,7 @@ func (g *generator) GenerateOutputs(os []*il.OutputNode) error {
 		g.Indent += "    "
 	}
 	for _, o := range os {
-		outputs, _, err := g.computeProperty(o.Value, false, "")
+		outputs, err := g.computeProperty(o.Value, false, "")
 		if err != nil {
 			return err
 		}

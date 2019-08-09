@@ -136,18 +136,12 @@ func (g *generator) GenerateResource(r *il.ResourceNode) error {
 		// Qualified member names are snake cased for data sources.
 		qualifiedMemberName := fmt.Sprintf("%s%s.%s", pkg, subpkg, pyName(class))
 		properties := newDataSourceCall(qualifiedMemberName, r.Properties)
-		inputs, transformed, err := g.computeProperty(properties, false, "")
+		inputs, err := g.computeProperty(properties, false, "")
 		if err != nil {
 			return err
 		}
 
-		// If computeProperty transformed the input bag, it is already output-typed; otherwise, it must be made
-		// output-typed using `from_input`.
-		if transformed {
-			g.Printf("%s%s = %s\n", g.Indent, name, inputs)
-		} else {
-			g.Printf("%s%s = pulumi.Output.from_input(%s)\n", g.Indent, name, inputs)
-		}
+		g.Printf("%s%s = %s\n", g.Indent, name, inputs)
 	} else {
 		// For resources, the property inputs must still be apply-rewritten, but the resource invocation itself should
 		// not.
@@ -258,13 +252,10 @@ func (g *generator) transformProperty(prop il.BoundNode) (il.BoundNode, error) {
 // Copy-pasted stuff from the node backend. Don't modify anything below this line!
 //
 
-// computeProperty generates code for the given property into a string ala fmt.Sprintf. It returns both the generated
-// code and a bool value that indicates whether or not any output-typed values were nested in the property value.
-func (g *generator) computeProperty(prop il.BoundNode, indent bool, count string) (string, bool, error) {
+// computeProperty generates code for the given property into a string ala fmt.Sprintf.
+func (g *generator) computeProperty(prop il.BoundNode, indent bool, count string) (string,  error) {
 	// First:
 	// - retype any possibly-unknown module inputs as the appropriate output types
-	// - discover whether or not the property contains any output-typed expressions
-	containsOutputs := false
 	_, err := il.VisitBoundNode(prop, il.IdentityVisitor, func(n il.BoundNode) (il.BoundNode, error) {
 		if n, ok := n.(*il.BoundVariableAccess); ok {
 			if v, ok := n.ILNode.(*il.VariableNode); ok {
@@ -272,7 +263,6 @@ func (g *generator) computeProperty(prop il.BoundNode, indent bool, count string
 					n.ExprType = n.ExprType.OutputOf()
 				}
 			}
-			containsOutputs = containsOutputs || n.Type().IsOutput()
 		}
 		return n, nil
 	})
@@ -282,22 +272,22 @@ func (g *generator) computeProperty(prop il.BoundNode, indent bool, count string
 	// transform.
 	p, err := il.RewriteAssets(prop)
 	if err != nil {
-		return "", false, err
+		return "", err
 	}
 
 	p, err = g.lowerToLiterals(p)
 	if err != nil {
-		return "", false, err
+		return "", err
 	}
 
 	p, err = il.AddCoercions(p)
 	if err != nil {
-		return "", false, err
+		return "", err
 	}
 
 	p, err = il.RewriteApplies(p)
 	if err != nil {
-		return "", false, err
+		return "", err
 	}
 
 	// Finally, generate code for the property.
@@ -308,7 +298,7 @@ func (g *generator) computeProperty(prop il.BoundNode, indent bool, count string
 	g.countIndex = count
 	buf := &bytes.Buffer{}
 	g.Fgen(buf, p)
-	return buf.String(), containsOutputs, nil
+	return buf.String(), nil
 }
 
 // resourceTypeName computes the Python package, subpackage, and class name for a given resource.

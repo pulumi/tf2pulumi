@@ -31,7 +31,7 @@ func (g *generator) computeHTTPInputs(r *il.ResourceNode, indent bool, count str
 	if !ok {
 		return "", errors.Errorf("missing required property \"url\" in resource %s", r.Config.Name)
 	}
-	url, _, err := g.computeProperty(urlProperty, indent, count)
+	url, err := g.computeProperty(urlProperty, indent, count)
 	if err != nil {
 		return "", err
 	}
@@ -41,7 +41,7 @@ func (g *generator) computeHTTPInputs(r *il.ResourceNode, indent bool, count str
 		return url, nil
 	}
 
-	requestHeaders, _, err := g.computeProperty(requestHeadersProperty, true, count)
+	requestHeaders, err := g.computeProperty(requestHeadersProperty, true, count)
 	if err != nil {
 		return "", err
 	}
@@ -68,7 +68,7 @@ func (g *generator) generateHTTP(r *il.ResourceNode) error {
 
 		g.Printf("const %s = pulumi.output(rpn(%s).promise());", name, inputs)
 	} else {
-		count, _, err := g.computeProperty(r.Count, false, "")
+		count, err := g.computeProperty(r.Count, false, "")
 		if err != nil {
 			return err
 		}
