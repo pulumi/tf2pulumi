@@ -33,13 +33,23 @@ import (
 	"github.com/pulumi/tf2pulumi/il"
 )
 
+// Options defines parameters that are specific to the NodeJS code generator.
+type Options struct {
+	// UsePromptDataSources is true if the target provider supports prompt invocation of data sources.
+	UsePromptDataSources bool
+}
+
 // New creates a new NodeJS code generator.
-func New(projectName string, targetSDKVersion string, w io.Writer) (gen.Generator, error) {
+func New(projectName string, targetSDKVersion string, usePromptDataSources bool, w io.Writer) (gen.Generator, error) {
 	v, err := semver.Parse(targetSDKVersion)
 	if err != nil {
 		return nil, err
 	}
-	g := &generator{ProjectName: projectName, supportsProxyApplies: v.GTE(semver.MustParse("0.17.0"))}
+	g := &generator{
+		ProjectName:          projectName,
+		supportsProxyApplies: v.GTE(semver.MustParse("0.17.0")),
+		usePromptDataSources: usePromptDataSources,
+	}
 	g.Emitter = gen.NewEmitter(w, g)
 	return g, nil
 }
@@ -53,6 +63,8 @@ type generator struct {
 	ProjectName string
 	// supportsProxyApplies is true if the target SDK version supports proxied applies on Outputs.
 	supportsProxyApplies bool
+	// usePromptDataSources is true if the target provider supports prompt invocation of data sources.
+	usePromptDataSources bool
 	// rootPath is the path to the directory that contains the root module.
 	rootPath string
 	// module is the module currently being generated;.
@@ -69,6 +81,8 @@ type generator struct {
 	unknownInputs map[*il.VariableNode]struct{}
 	// nameTable is a mapping from top-level nodes to names.
 	nameTable map[il.Node]string
+	// promptDataSources is a table of datasources that do not contain output-typed inputs.
+	promptDataSources map[*il.ResourceNode]bool
 }
 
 // isLegalIdentifierStart returns true if it is legal for c to be the first character of a JavaScript identifier as per
@@ -195,11 +209,6 @@ func (g *generator) computeProperty(prop il.BoundNode, indent bool, count string
 	containsOutputs := false
 	_, err := il.VisitBoundNode(prop, il.IdentityVisitor, func(n il.BoundNode) (il.BoundNode, error) {
 		if n, ok := n.(*il.BoundVariableAccess); ok {
-			if v, ok := n.ILNode.(*il.VariableNode); ok {
-				if _, ok = g.unknownInputs[v]; ok {
-					n.ExprType = n.ExprType.OutputOf()
-				}
-			}
 			containsOutputs = containsOutputs || n.Type().IsOutput()
 		}
 		return n, nil
@@ -341,30 +350,8 @@ func (g *generator) GeneratePreamble(modules []*il.Graph) error {
 		return n, nil
 	}
 	for _, m := range modules {
-		for _, n := range m.Modules {
-			_, err := il.VisitBoundNode(n.Properties, findOptionals, il.IdentityVisitor)
-			contract.Assert(err == nil)
-		}
-		for _, n := range m.Providers {
-			_, err := il.VisitBoundNode(n.Properties, findOptionals, il.IdentityVisitor)
-			contract.Assert(err == nil)
-		}
-		for _, n := range m.Resources {
-			_, err := il.VisitBoundNode(n.Properties, findOptionals, il.IdentityVisitor)
-			contract.Assert(err == nil)
-		}
-		for _, n := range m.Outputs {
-			_, err := il.VisitBoundNode(n.Value, findOptionals, il.IdentityVisitor)
-			contract.Assert(err == nil)
-		}
-		for _, n := range m.Locals {
-			_, err := il.VisitBoundNode(n.Value, findOptionals, il.IdentityVisitor)
-			contract.Assert(err == nil)
-		}
-		for _, n := range m.Variables {
-			_, err := il.VisitBoundNode(n.DefaultValue, findOptionals, il.IdentityVisitor)
-			contract.Assert(err == nil)
-		}
+		err := il.VisitAllProperties(m, findOptionals, il.IdentityVisitor)
+		contract.Assert(err == nil)
 	}
 
 	// Now sort the imports, so we emit them deterministically, and emit them.
@@ -409,6 +396,24 @@ func (g *generator) BeginModule(m *il.Graph) error {
 				g.unknownInputs[v] = struct{}{}
 			}
 		}
+
+		// Retype any possibly-unknown module inputs as the appropriate output type.
+		err := il.VisitAllProperties(m, il.IdentityVisitor, func(n il.BoundNode) (il.BoundNode, error) {
+			if n, ok := n.(*il.BoundVariableAccess); ok {
+				if v, ok := n.ILNode.(*il.VariableNode); ok {
+					if _, ok = g.unknownInputs[v]; ok {
+						n.ExprType = n.ExprType.OutputOf()
+					}
+				}
+			}
+			return n, nil
+		})
+		contract.Assert(err == nil)
+	}
+
+	// Find all prompt datasources if possible.
+	if g.usePromptDataSources {
+		g.promptDataSources = il.MarkPromptDataSources(m)
 	}
 
 	// Compute unambiguous names for this module's top-level nodes.
@@ -621,7 +626,7 @@ func (g *generator) generateResource(r *il.ResourceNode) error {
 			// Otherwise, we are okay as-is: the apply rewrite perfomed by computeProperty will have ensured that the result
 			// is output-typed.
 			fmtstr := "%sconst %s = pulumi.output(%s);"
-			if transformed {
+			if g.promptDataSources[r] || transformed {
 				fmtstr = "%sconst %s = %s;"
 			}
 
@@ -640,7 +645,11 @@ func (g *generator) generateResource(r *il.ResourceNode) error {
 
 		arrElementType := qualifiedMemberName
 		if r.Config.Mode == config.DataResourceMode {
-			arrElementType = fmt.Sprintf("Output<%s%s.%sResult>", provider, module, strings.ToUpper(memberName))
+			fmtStr := "pulumi.Output<%s%s.%sResult>"
+			if g.promptDataSources[r] {
+				fmtStr = "%s%s.%sResult"
+			}
+			arrElementType = fmt.Sprintf(fmtStr, provider, module, strings.Title(memberName))
 		}
 
 		g.Printf("%sconst %s: %s[] = [];\n", g.Indent, name, arrElementType)
@@ -656,11 +665,11 @@ func (g *generator) generateResource(r *il.ResourceNode) error {
 				// pulumi.output. Otherwise, we are okay as-is: the apply rewrite perfomed by computeProperty will hav
 				// ensured that the result is output-typed.
 				fmtstr := "%s%s.push(pulumi.output(%s));\n"
-				if transformed {
+				if g.promptDataSources[r] || transformed {
 					fmtstr = "%s%s.push(%s);\n"
 				}
 
-				g.Printf(fmtstr, g.Indent, name, qualifiedMemberName, inputs)
+				g.Printf(fmtstr, g.Indent, name, inputs)
 			}
 		})
 		g.Printf("%s}", g.Indent)

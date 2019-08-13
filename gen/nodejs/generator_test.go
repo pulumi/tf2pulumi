@@ -285,7 +285,7 @@ export const securityGroupName = defaultSecurityGroup.name; // Neat!
 	}
 
 	var b bytes.Buffer
-	lang, err := New("main", "0.16.0", &b)
+	lang, err := New("main", "0.16.0", false, &b)
 	assert.NoError(t, err)
 	err = gen.Generate([]*il.Graph{g}, lang)
 	assert.NoError(t, err)
@@ -368,7 +368,7 @@ export const securityGroupName = defaultSecurityGroup.name; // Neat!
 	}
 
 	b.Reset()
-	lang, err = New("main", "0.17.1", &b)
+	lang, err = New("main", "0.17.1", false, &b)
 	assert.NoError(t, err)
 	err = gen.Generate([]*il.Graph{g}, lang)
 	assert.NoError(t, err)

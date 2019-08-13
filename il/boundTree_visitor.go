@@ -244,3 +244,43 @@ func VisitBoundExpr(n BoundExpr, pre, post BoundNodeVisitor) (BoundExpr, error) 
 	}
 	return nn.(BoundExpr), nil
 }
+
+// VisitAllProperties visits all property nodes in the graph using the given pre- and post-order visitors.
+func VisitAllProperties(m *Graph, pre, post BoundNodeVisitor) error {
+	for _, n := range m.Modules {
+		if _, err := VisitBoundNode(n.Properties, pre, post); err != nil {
+			return err
+		}
+	}
+	for _, n := range m.Providers {
+		if _, err := VisitBoundNode(n.Properties, pre, post); err != nil {
+			return err
+		}
+	}
+	for _, n := range m.Resources {
+		if n.Count != nil {
+			if _, err := VisitBoundNode(n.Count, pre, post); err != nil {
+				return err
+			}
+		}
+		if _, err := VisitBoundNode(n.Properties, pre, post); err != nil {
+			return err
+		}
+	}
+	for _, n := range m.Outputs {
+		if _, err := VisitBoundNode(n.Value, pre, post); err != nil {
+			return err
+		}
+	}
+	for _, n := range m.Locals {
+		if _, err := VisitBoundNode(n.Value, pre, post); err != nil {
+			return err
+		}
+	}
+	for _, n := range m.Variables {
+		if _, err := VisitBoundNode(n.DefaultValue, pre, post); err != nil {
+			return err
+		}
+	}
+	return nil
+}
