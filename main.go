@@ -22,11 +22,13 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/pulumi/tf2pulumi/convert"
+	"github.com/pulumi/tf2pulumi/gen/nodejs"
 	"github.com/pulumi/tf2pulumi/version"
 )
 
 func main() {
 	var opts convert.Options
+	var nodeJSOpts nodejs.Options
 	resourceNameProperty, filterAutoNames := "", false
 
 	rootCmd := &cobra.Command{
@@ -47,6 +49,10 @@ Pulumi TypeScript program that describes the same resource graph.`,
 			opts.FilterResourceNames = resourceNameProperty != "" || filterAutoNames
 			opts.ResourceNameProperty = resourceNameProperty
 
+			if opts.TargetLanguage == convert.LanguageTypescript {
+				opts.TargetOptions = nodeJSOpts
+			}
+
 			return convert.Convert(opts)
 		},
 	}
@@ -64,8 +70,10 @@ Pulumi TypeScript program that describes the same resource graph.`,
 		"when set, properties that are auto-generated names will be removed from all resources")
 	flag.StringVar(&opts.TargetLanguage, "target-language", "typescript",
 		"sets the language to target")
-	flag.StringVar(&opts.TargetSDKVersion, "target-sdk-version", "0.17.1",
+	flag.StringVar(&opts.TargetSDKVersion, "target-sdk-version", "0.17.28",
 		"sets the language SDK version to target")
+	flag.BoolVar(&nodeJSOpts.UsePromptDataSources, "typescript.synchronous-data-sources", true,
+		"enables or disables synchronous data sources in generated TypeScript code")
 	rootCmd.AddCommand(&cobra.Command{
 		Use:   "version",
 		Short: "Print the version number of tf2pulumi",

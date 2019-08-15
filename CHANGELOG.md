@@ -1,4 +1,10 @@
-## v0.5.0 (Unreleased)
+## v0.5.1 (Released August 14, 2019)
+
+- Added a command line option, `-typescript.synchronous-data-sources`, to indicate that the generated code should
+  use synchronous data source invocations.
+- Bumped the default target SDK version to 0.17.28.
+
+## v0.5.0 (Released May 14, 2019)
 
 - Added a command line option, `-target-sdk-version`,  to indicate the SDK version targeted by the generated code.
   Note that this option defaults to `0.17.1`, which will by default generate code that is not compatible with

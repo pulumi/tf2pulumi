@@ -132,6 +132,18 @@ resource "aws_vpc" "default" {
 	}
 }
 
+# Use some data sources.
+data "aws_subnet_ids" "default" {
+	vpc_id = "${aws_vpc.default.id}"
+}
+
+data "aws_availability_zones" "default" {}
+
+data "aws_availability_zone" "default" {
+	count = "${length(data.aws_availability_zones.default.ids)}"
+	zone_id = "${data.aws_availability_zones.default.zone_ids[count.index]}"
+}
+
 locals {
 	# The VPC details
 	vpc = {
@@ -147,7 +159,7 @@ locals {
 //
 // This group should allow SSH and HTTP access.
 resource "aws_security_group" "default" {
-	vpc_id = "${locals.vpc_id.id}"
+	vpc_id = "${local.vpc["id"]}"
 
 	// SSH access from anywhere
 	ingress {
@@ -209,6 +221,7 @@ const defaultVpc = new aws.ec2.Vpc("default", {
         Name: "test",
     },
 });
+const defaultAvailabilityZones = pulumi.output(aws.getAvailabilityZones({}));
 // The region, again
 const region = awsRegion; // why not
 // The VPC details
@@ -245,10 +258,20 @@ const defaultSecurityGroup = new aws.ec2.SecurityGroup("default", {
         },
     ],
     tags: {
-        Vpc: defaultVpc.id.apply(id => ` + "`" + `VPC ${awsRegion}:${id}` + "`" + `),
+        Vpc: defaultVpc.id.apply(id => ` + "`VPC ${awsRegion}:${id}`" + `),
     },
-    vpcId: locals_vpc_id.id,
+    vpcId: vpc["id"],
 });
+const defaultAvailabilityZone: pulumi.Output<aws.GetAvailabilityZoneResult>[] = [];
+for (let i = 0; i < defaultAvailabilityZones.apply(defaultAvailabilityZones => defaultAvailabilityZones.ids.length); i++) {
+    defaultAvailabilityZone.push(defaultAvailabilityZones.apply(defaultAvailabilityZones => aws.getAvailabilityZone({
+        zoneId: defaultAvailabilityZones.zoneIds[i],
+    })));
+}
+// Use some data sources.
+const defaultSubnetIds = defaultVpc.id.apply(id => aws.ec2.getSubnetIds({
+    vpcId: id,
+}));
 
 // Output the SG name.
 //
@@ -285,7 +308,7 @@ export const securityGroupName = defaultSecurityGroup.name; // Neat!
 	}
 
 	var b bytes.Buffer
-	lang, err := New("main", "0.16.0", &b)
+	lang, err := New("main", "0.16.0", false, &b)
 	assert.NoError(t, err)
 	err = gen.Generate([]*il.Graph{g}, lang)
 	assert.NoError(t, err)
@@ -311,6 +334,7 @@ const defaultVpc = new aws.ec2.Vpc("default", {
         Name: "test",
     },
 });
+const defaultAvailabilityZones = pulumi.output(aws.getAvailabilityZones({}));
 // The region, again
 const region = awsRegion; // why not
 // The VPC details
@@ -347,10 +371,20 @@ const defaultSecurityGroup = new aws.ec2.SecurityGroup("default", {
         },
     ],
     tags: {
-        Vpc: pulumi.interpolate` + "`" + `VPC ${awsRegion}:${defaultVpc.id}` + "`" + `,
+        Vpc: pulumi.interpolate` + "`VPC ${awsRegion}:${defaultVpc.id}`" + `,
     },
-    vpcId: locals_vpc_id.id,
+    vpcId: vpc["id"],
 });
+const defaultAvailabilityZone: pulumi.Output<aws.GetAvailabilityZoneResult>[] = [];
+for (let i = 0; i < defaultAvailabilityZones.apply(defaultAvailabilityZones => defaultAvailabilityZones.ids.length); i++) {
+    defaultAvailabilityZone.push(defaultAvailabilityZones.apply(defaultAvailabilityZones => aws.getAvailabilityZone({
+        zoneId: defaultAvailabilityZones.zoneIds[i],
+    })));
+}
+// Use some data sources.
+const defaultSubnetIds = defaultVpc.id.apply(id => aws.ec2.getSubnetIds({
+    vpcId: id,
+}));
 
 // Output the SG name.
 //
@@ -368,10 +402,105 @@ export const securityGroupName = defaultSecurityGroup.name; // Neat!
 	}
 
 	b.Reset()
-	lang, err = New("main", "0.17.1", &b)
+	lang, err = New("main", "0.17.1", false, &b)
 	assert.NoError(t, err)
 	err = gen.Generate([]*il.Graph{g}, lang)
 	assert.NoError(t, err)
 
 	assert.Equal(t, expectedText17, b.String())
+
+	const expectedText17PromptDataSources = `import * as pulumi from "@pulumi/pulumi";
+import * as aws from "@pulumi/aws";
+
+const config = new pulumi.Config();
+// Accept the AWS region as input.
+const awsRegion = config.get("awsRegion") || "us-west-2";
+
+// Create a VPC.
+//
+// Note that the VPC has been tagged appropriately.
+const defaultVpc = new aws.ec2.Vpc("default", {
+    cidrBlock: "10.0.0.0/16", // Just one CIDR block
+    enableDnsHostnames: true, // Definitely want DNS hostnames.
+    // The tag collection for this VPC.
+    tags: {
+        // Ensure that we tag this VPC with a Name.
+        Name: "test",
+    },
+});
+const defaultAvailabilityZones = aws.getAvailabilityZones({});
+// The region, again
+const region = awsRegion; // why not
+// The VPC details
+const vpc = [{
+    // The ID
+    id: defaultVpc.id,
+}];
+// Create a security group.
+//
+// This group should allow SSH and HTTP access.
+const defaultSecurityGroup = new aws.ec2.SecurityGroup("default", {
+    // outbound internet access
+    egress: [{
+        cidrBlocks: ["0.0.0.0/0"],
+        fromPort: 0,
+        protocol: "-1", // All
+        toPort: 0,
+    }],
+    ingress: [
+        // SSH access from anywhere
+        {
+            // "0.0.0.0/0" is anywhere
+            cidrBlocks: ["0.0.0.0/0"],
+            fromPort: 22,
+            protocol: "tcp",
+            toPort: 22,
+        },
+        // HTTP access from anywhere
+        {
+            cidrBlocks: ["0.0.0.0/0"],
+            fromPort: 80,
+            protocol: "tcp", // HTTP is TCP-only
+            toPort: 80,
+        },
+    ],
+    tags: {
+        Vpc: pulumi.interpolate` + "`VPC ${awsRegion}:${defaultVpc.id}`" + `,
+    },
+    vpcId: vpc["id"],
+});
+const defaultAvailabilityZone: aws.GetAvailabilityZoneResult[] = [];
+for (let i = 0; i < defaultAvailabilityZones.ids.length; i++) {
+    defaultAvailabilityZone.push(aws.getAvailabilityZone({
+        zoneId: defaultAvailabilityZones.zoneIds[i],
+    }));
+}
+// Use some data sources.
+const defaultSubnetIds = defaultVpc.id.apply(id => aws.ec2.getSubnetIds({
+    vpcId: id,
+}));
+
+// Output the SG name.
+//
+// We pull the name from the default SG.
+// Take the value from the default SG.
+export const securityGroupName = defaultSecurityGroup.name; // Neat!
+`
+	g, err = il.BuildGraph(module.NewTree("main", conf), &il.BuildOptions{
+		AllowMissingProviders: true,
+		AllowMissingVariables: true,
+		AllowMissingComments:  true,
+	})
+	if err != nil {
+		t.Fatalf("could not build graph: %v", err)
+	}
+
+	b.Reset()
+	lang, err = New("main", "0.17.28", true, &b)
+	assert.NoError(t, err)
+	err = gen.Generate([]*il.Graph{g}, lang)
+	assert.NoError(t, err)
+
+	assert.Equal(t, expectedText17PromptDataSources, b.String())
+
 }

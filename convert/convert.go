@@ -127,6 +127,9 @@ type Options struct {
 	TargetLanguage string
 	// The target SDK version.
 	TargetSDKVersion string
+
+	// TargetOptions captures any target-specific options.
+	TargetOptions interface{}
 }
 
 type noCredentials struct{}
@@ -165,7 +168,11 @@ func buildGraphs(tree *module.Tree, isRoot bool, opts Options) ([]*il.Graph, err
 func newGenerator(projectName string, opts Options) (gen.Generator, error) {
 	switch opts.TargetLanguage {
 	case LanguageTypescript:
-		return nodejs.New(projectName, opts.TargetSDKVersion, opts.Writer)
+		nodeOpts, ok := opts.TargetOptions.(nodejs.Options)
+		if !ok {
+			return nil, errors.Errorf("invalid target options of type %T", opts.TargetOptions)
+		}
+		return nodejs.New(projectName, opts.TargetSDKVersion, nodeOpts.UsePromptDataSources, opts.Writer)
 	case LanguagePython:
 		return python.New(projectName, opts.Writer), nil
 	default:

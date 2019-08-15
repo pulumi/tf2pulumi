@@ -233,3 +233,50 @@ func FilterProperties(r *ResourceNode, filter func(key string, property BoundNod
 		}
 	}
 }
+
+// MarkPromptDataSources finds all data sources with no Output-typed inputs, marks these data sources as prompt,
+// and retypes all variable accesses rooted in these data sources appropriately.
+func MarkPromptDataSources(g *Graph) map[*ResourceNode]bool {
+	// Mark any datasources with no output-typed inputs as prompt. Do this until we reach a fixed point.
+	promptDataSources := make(map[*ResourceNode]bool)
+
+	for {
+		changed := false
+
+		// First, check all data sources for output-typed inputs.
+		for _, r := range g.Resources {
+			if r.Config.Mode == config.DataResourceMode {
+				containsOutputs := false
+				_, err := VisitBoundNode(r.Properties, IdentityVisitor, func(n BoundNode) (BoundNode, error) {
+					containsOutputs = containsOutputs || n.Type().IsOutput()
+					return n, nil
+				})
+				contract.Assert(err == nil)
+
+				if !containsOutputs && !promptDataSources[r] {
+					promptDataSources[r] = true
+					changed = true
+				}
+			}
+		}
+
+		// If nothing changed, we are done.
+		if !changed {
+			return promptDataSources
+		}
+
+		// Otherwise, retype any data source accesses as appropriate.
+		err := VisitAllProperties(g, IdentityVisitor, func(n BoundNode) (BoundNode, error) {
+			if n, ok := n.(*BoundVariableAccess); ok {
+				if r, ok := n.ILNode.(*ResourceNode); ok {
+					if promptDataSources[r] {
+						n.ExprType = n.ExprType & ^TypeOutput
+					}
+				}
+			}
+			return n, nil
+		})
+		contract.Assert(err == nil)
+	}
+
+}
