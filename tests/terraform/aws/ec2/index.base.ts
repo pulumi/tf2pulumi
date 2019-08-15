@@ -1,7 +1,7 @@
 import * as pulumi from "@pulumi/pulumi";
 import * as aws from "@pulumi/aws";
 
-const ubuntu = pulumi.output(aws.getAmi({
+const ubuntu = aws.getAmi({
     filters: [
         {
             name: "name",
@@ -14,7 +14,7 @@ const ubuntu = pulumi.output(aws.getAmi({
     ],
     mostRecent: true,
     owners: ["099720109477"],
-}));
+});
 const web = new aws.ec2.Instance("web", {
     ami: ubuntu.id,
     instanceType: "t2.micro",
