@@ -24,13 +24,15 @@ import (
 func TestIntrinsicDataSource(t *testing.T) {
 	function := "aws.getFunction"
 	inputs := &il.BoundMapProperty{}
+	optionsBag := ", {}"
 
-	c := newDataSourceCall(function, inputs)
+	c := newDataSourceCall(function, inputs, optionsBag)
 	assert.Equal(t, intrinsicDataSource, c.HILNode.Func)
 	assert.Equal(t, il.TypeMap, c.ExprType)
-	assert.Equal(t, 2, len(c.Args))
+	assert.Equal(t, 3, len(c.Args))
 
-	function2, inputs2 := parseDataSourceCall(c)
+	function2, inputs2, optionsBag2 := parseDataSourceCall(c)
 	assert.Equal(t, function, function2)
 	assert.Equal(t, inputs, inputs2)
+	assert.Equal(t, optionsBag, optionsBag2)
 }
