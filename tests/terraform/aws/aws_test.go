@@ -55,7 +55,7 @@ func TestCount(t *testing.T) {
 }
 
 func TestECSALB(t *testing.T) {
-	t.Skipf("Skipping test due to NYI: call to cidersubnet")
+	t.Skipf("Skipping test due to NYI: call to cidrsubnet")
 	RunAWSTest(t, "ecs-alb", terraform.SkipPython())
 }
 
@@ -84,7 +84,7 @@ func TestLambda(t *testing.T) {
 }
 
 func TestNetworking(t *testing.T) {
-	t.Skipf("Skipping test due to NYI: provider instances")
+	t.Skipf("Skipping test due to NYI: call to cidrsubnet")
 	RunAWSTest(t, "networking", terraform.SkipPython())
 }
 
