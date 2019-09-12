@@ -3,6 +3,7 @@ module github.com/pulumi/tf2pulumi
 go 1.12
 
 replace (
+	git.apache.org/thrift.git => github.com/apache/thrift v0.12.0
 	github.com/Nvveen/Gotty => github.com/ijc25/Gotty v0.0.0-20170406111628-a8b993ba6abd
 	github.com/census-instrumentation/opencensus-proto v0.1.0 => github.com/census-instrumentation/opencensus-proto v0.1.0-0.20181214143942-ba49f56771b8
 	github.com/golang/glog => github.com/pulumi/glog v0.0.0-20180820174630-7eaa6ffb71e4
