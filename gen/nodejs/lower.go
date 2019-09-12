@@ -18,6 +18,7 @@ import (
 	"path/filepath"
 
 	"github.com/hashicorp/terraform/config"
+	"github.com/pulumi/pulumi-terraform/pkg/tfbridge"
 	"github.com/pulumi/pulumi/pkg/util/contract"
 	"github.com/pulumi/tf2pulumi/il"
 )
@@ -58,10 +59,34 @@ func (g *generator) lowerToLiterals(prop il.BoundNode) (il.BoundNode, error) {
 	return il.VisitBoundNode(prop, il.IdentityVisitor, rewriter)
 }
 
+// canLiftVariableAccess returns true if this variable access expression can be lifted.
+func (g *generator) canLiftVariableAccess(v *il.BoundVariableAccess) bool {
+	sch, elements := v.Schemas, v.Elements
+	if g.resourceMode(v) == config.ManagedResourceMode {
+		sch, elements = sch.PropertySchemas(elements[0]), elements[1:]
+	} else if r, ok := v.ILNode.(*il.ResourceNode); ok && r.Provider.Config.Name == "http" {
+		elements = nil
+	}
+
+	for _, e := range elements {
+		isListElement := sch.Type().IsList()
+		projectListElement := isListElement && tfbridge.IsMaxItemsOne(sch.TF, sch.Pulumi)
+
+		// We cannot lift array index expressions.
+		if isListElement && !projectListElement {
+			return false
+		}
+
+		sch = sch.PropertySchemas(e)
+	}
+
+	return true
+}
+
 // parseProxyApply attempts to match the given parsed apply against the pattern (call __applyArg 0). If the call
 // matches, it returns the BoundVariableAccess that corresponds to argument zero, which can then be generated as a
 // proxied apply call.
-func parseProxyApply(args []*il.BoundVariableAccess, then il.BoundExpr) (*il.BoundVariableAccess, bool) {
+func (g *generator) parseProxyApply(args []*il.BoundVariableAccess, then il.BoundExpr) (*il.BoundVariableAccess, bool) {
 	if len(args) != 1 {
 		return nil, false
 	}
@@ -76,7 +101,12 @@ func parseProxyApply(args []*il.BoundVariableAccess, then il.BoundExpr) (*il.Bou
 		return nil, false
 	}
 
-	return args[argIndex], true
+	v := args[argIndex]
+	if !g.canLiftVariableAccess(v) {
+		return nil, false
+	}
+
+	return v, true
 }
 
 // hasApplyArgDescendant returns true if the given BoundExpr has any descendant that is a call to __applyArg. This is a
@@ -100,7 +130,7 @@ func hasApplyArgDescendant(expr il.BoundExpr) bool {
 //
 // If the call matches, parseInterpolate returns an appropriate call to the __interpolate intrinsic with a mix of
 // expressions and variable accesses that correspond to the __applyArg calls.
-func parseInterpolate(args []*il.BoundVariableAccess, then il.BoundExpr) (*il.BoundCall, bool) {
+func (g *generator) parseInterpolate(args []*il.BoundVariableAccess, then il.BoundExpr) (*il.BoundCall, bool) {
 	thenOutput, ok := then.(*il.BoundOutput)
 	if !ok {
 		return nil, false
@@ -111,7 +141,11 @@ func parseInterpolate(args []*il.BoundVariableAccess, then il.BoundExpr) (*il.Bo
 		call, isCall := expr.(*il.BoundCall)
 		switch {
 		case isCall && call.HILNode.Func == il.IntrinsicApplyArg:
-			exprs[i] = args[il.ParseApplyArgCall(call)]
+			v := args[il.ParseApplyArgCall(call)]
+			if !g.canLiftVariableAccess(v) {
+				return nil, false
+			}
+			exprs[i] = v
 		case !hasApplyArgDescendant(expr):
 			exprs[i] = expr
 		default:
@@ -143,12 +177,12 @@ func (g *generator) lowerProxyApplies(prop il.BoundNode) (il.BoundNode, error) {
 		args, then := il.ParseApplyCall(apply)
 
 		// Attempt to match (call __apply (rvar) (call __applyArg 0))
-		if v, ok := parseProxyApply(args, then); ok {
+		if v, ok := g.parseProxyApply(args, then); ok {
 			return v, nil
 		}
 
 		// Attempt to match (call __apply (rvar 0) ... (rvar n) (output /* mix of literals and calls to __applyArg)
-		if v, ok := parseInterpolate(args, then); ok {
+		if v, ok := g.parseInterpolate(args, then); ok {
 			return v, nil
 		}
 
