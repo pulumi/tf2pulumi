@@ -117,17 +117,25 @@ func (g *generator) genApply(w io.Writer, n *il.BoundCall) {
 	}
 }
 
+// getNestedPropertyAccessElementInfo returns the schema information for the first element of the nested property
+// access expression and the list of elements accessed in the expression. This information can then be used to
+// examine the type and name of each property accessed by the expression.
+func (g *generator) getNestedPropertyAccessElementInfo(v *il.BoundVariableAccess) (il.Schemas, []string) {
+	sch, elements := v.Schemas, v.Elements
+	if g.resourceMode(v) == config.ManagedResourceMode {
+		return sch.PropertySchemas(elements[0]), elements[1:]
+	} else if r, ok := v.ILNode.(*il.ResourceNode); ok && r.Provider.Config.Name == "http" {
+		return sch, nil
+	}
+	return sch, elements
+}
+
 // genNestedPropertyAccess generates a property access expression for a nested property of a resource or data source.
 func (g *generator) genNestedPropertyAccess(w io.Writer, v *il.BoundVariableAccess) {
 	_, ok := v.TFVar.(*config.ResourceVariable)
 	contract.Assert(ok)
 
-	sch, elements := v.Schemas, v.Elements
-	if g.resourceMode(v) == config.ManagedResourceMode {
-		sch, elements = sch.PropertySchemas(elements[0]), elements[1:]
-	} else if r, ok := v.ILNode.(*il.ResourceNode); ok && r.Provider.Config.Name == "http" {
-		elements = nil
-	}
+	sch, elements := g.getNestedPropertyAccessElementInfo(v)
 	for _, e := range elements {
 		isListElement := sch.Type().IsList()
 		projectListElement := isListElement && tfbridge.IsMaxItemsOne(sch.TF, sch.Pulumi)

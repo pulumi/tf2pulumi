@@ -18,7 +18,6 @@ import (
 	"path/filepath"
 
 	"github.com/hashicorp/terraform/config"
-	"github.com/pulumi/pulumi-terraform/pkg/tfbridge"
 	"github.com/pulumi/pulumi/pkg/util/contract"
 	"github.com/pulumi/tf2pulumi/il"
 )
@@ -59,27 +58,17 @@ func (g *generator) lowerToLiterals(prop il.BoundNode) (il.BoundNode, error) {
 	return il.VisitBoundNode(prop, il.IdentityVisitor, rewriter)
 }
 
-// canLiftVariableAccess returns true if this variable access expression can be lifted.
+// canLiftVariableAccess returns true if this variable access expression can be lifted. Any variable access expression
+// that does not contain references to potentially-undefined values (e.g. optional fields of a resource) can be lifted.
 func (g *generator) canLiftVariableAccess(v *il.BoundVariableAccess) bool {
-	sch, elements := v.Schemas, v.Elements
-	if g.resourceMode(v) == config.ManagedResourceMode {
-		sch, elements = sch.PropertySchemas(elements[0]), elements[1:]
-	} else if r, ok := v.ILNode.(*il.ResourceNode); ok && r.Provider.Config.Name == "http" {
-		elements = nil
-	}
+	sch, elements := g.getNestedPropertyAccessElementInfo(v)
 
 	for _, e := range elements {
-		isListElement := sch.Type().IsList()
-		projectListElement := isListElement && tfbridge.IsMaxItemsOne(sch.TF, sch.Pulumi)
-
-		// We cannot lift array index expressions.
-		if isListElement && !projectListElement {
+		if sch.TF != nil && sch.TF.Optional {
 			return false
 		}
-
 		sch = sch.PropertySchemas(e)
 	}
-
 	return true
 }
 
