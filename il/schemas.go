@@ -15,6 +15,8 @@
 package il
 
 import (
+	"strconv"
+
 	"github.com/hashicorp/terraform/helper/schema"
 	"github.com/pulumi/pulumi-terraform/pkg/tfbridge"
 )
@@ -28,10 +30,14 @@ type Schemas struct {
 	Pulumi *tfbridge.SchemaInfo
 }
 
-// PropertySchemas returns the Schemas for the child property with the given name. This is only valid if the current
-// Schemas describe a map property.
+// PropertySchemas returns the Schemas for the child property with the given name. If the name is an integer, this
+// function returns the value of a call to ElemSchemas.
 func (s Schemas) PropertySchemas(key string) Schemas {
 	var propSch Schemas
+
+	if _, err := strconv.ParseInt(key, 0, 0); err == nil {
+		return s.ElemSchemas()
+	}
 
 	if s.TFRes != nil && s.TFRes.Schema != nil {
 		propSch.TF = s.TFRes.Schema[key]

@@ -1,3 +1,7 @@
+## HEAD (Unreleased)
+
+- Fix bad code generation for variable accesses that involve index expressions or optional properties.
+
 ## v0.5.1 (Released August 14, 2019)
 
 - Added a command line option, `-typescript.synchronous-data-sources`, to indicate that the generated code should
