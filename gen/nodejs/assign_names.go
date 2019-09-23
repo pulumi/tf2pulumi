@@ -138,6 +138,18 @@ func (nt *nameTable) assignModule(n *il.ModuleNode) {
 	nt.names[n], nt.assigned[name] = name, true
 }
 
+// assignProvider assigns an unambiguous name to a provider node.
+func (nt *nameTable) assignProvider(n *il.ProviderNode) {
+	name, isReserved := nt.tsName(n.Config.Alias)
+
+	// If the raw name is ambiguous, first attempt to disambiguate by prepending the package name.
+	if isReserved || nt.assigned[name] {
+		name = nt.disambiguate(n.PluginName + title(name))
+	}
+
+	nt.names[n], nt.assigned[name] = name, true
+}
+
 // disambiguateResourceName computes an unambiguous name for the given resource node.
 func (nt *nameTable) disambiguateResourceName(n *il.ResourceNode) string {
 	name, isReserved := nt.tsName(n.Config.Name)
@@ -203,8 +215,8 @@ func assignNames(g *il.Graph, isRootModule bool) map[il.Node]string {
 	// 1. Locals
 	// 2. Variables
 	// 3. Modules
-	// 4. Resources
-	// Providers should be handled before resources once first-class providers are supported (#11).
+	// 4. Providers
+	// 5. Resources
 	for _, k := range gen.SortedKeys(g.Locals) {
 		nt.assignLocal(g.Locals[k])
 	}
@@ -213,6 +225,9 @@ func assignNames(g *il.Graph, isRootModule bool) map[il.Node]string {
 	}
 	for _, k := range gen.SortedKeys(g.Modules) {
 		nt.assignModule(g.Modules[k])
+	}
+	for _, k := range gen.SortedKeys(g.Providers) {
+		nt.assignProvider(g.Providers[k])
 	}
 
 	// We handle resources in two passes: in the first pass, we decide which names are ambiguous, and in the second pass

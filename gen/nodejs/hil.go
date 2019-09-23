@@ -235,8 +235,8 @@ func (g *generator) GenCall(w io.Writer, n *il.BoundCall) {
 	case il.IntrinsicGetStack:
 		g.Fgenf(w, "pulumi.getStack()")
 	case intrinsicDataSource:
-		function, inputs := parseDataSourceCall(n)
-		g.Fgenf(w, "%s(%s)", function, inputs)
+		function, inputs, optionsBag := parseDataSourceCall(n)
+		g.Fgenf(w, "%s(%s%s)", function, inputs, optionsBag)
 	case intrinsicInterpolate:
 		fmt.Fprint(w, "pulumi.interpolate`")
 		for _, s := range n.Args {

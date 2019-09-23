@@ -173,7 +173,8 @@ func (b *propertyBinder) bindIndex(n *ast.Index) (BoundExpr, error) {
 
 // bindLiteral binds an HIL literal expression. The literal must be of type bool, int, float, or string.
 func (b *propertyBinder) bindLiteral(n *ast.LiteralNode) (BoundExpr, error) {
-	exprType, value := TypeUnknown, n.Value
+	var exprType Type
+	value := n.Value
 	switch n.Typex {
 	case ast.TypeBool:
 		exprType = TypeBool

@@ -528,6 +528,37 @@ func (g *generator) GenerateModule(m *il.ModuleNode) error {
 	return nil
 }
 
+// GenerateProvider generates a single provider instantiation. Each provider instantiation is generated as a call to
+// the appropriate provider constructor that is assigned to a local variable.
+func (g *generator) GenerateProvider(p *il.ProviderNode) error {
+	// If this provider has no alias, ignore it.
+	if p.Config.Alias == "" {
+		return nil
+	}
+
+	g.genLeadingComment(g, p.Comments)
+
+	name := g.nodeName(p)
+	qualifiedMemberName := p.PluginName + ".Provider"
+
+	inputs, _, err := g.computeProperty(il.BoundNode(p.Properties), false, "")
+	if err != nil {
+		return err
+	}
+
+	var resName string
+	if len(g.module.Tree.Path()) == 0 {
+		resName = fmt.Sprintf("\"%s\"", p.Config.Alias)
+	} else {
+		resName = fmt.Sprintf("`${mod_name}_%s`", p.Config.Alias)
+	}
+
+	g.Printf("%sconst %s = new %s(%s, %s);", g.Indent, name, qualifiedMemberName, resName, inputs)
+	g.genTrailingComment(g, p.Comments)
+	g.Print("\n")
+	return nil
+}
+
 // resourceTypeName computes the NodeJS package, module, and type name for the given resource.
 func resourceTypeName(r *il.ResourceNode) (string, string, string, error) {
 	// Compute the resource type from the Terraform type.
@@ -574,11 +605,15 @@ func (g *generator) generateResource(r *il.ResourceNode) error {
 		module = "." + module
 	}
 
+	var resourceOptions []string
+	if r.Provider.Config.Alias != "" {
+		resourceOptions = append(resourceOptions, "provider: "+g.nodeName(r.Provider))
+	}
+
 	// Build the list of explicit deps, if any.
-	explicitDeps := ""
-	if len(r.ExplicitDeps) != 0 {
+	if len(r.ExplicitDeps) != 0 && r.Config.Mode == config.ManagedResourceMode {
 		buf := &bytes.Buffer{}
-		fmt.Fprintf(buf, ", {dependsOn: [")
+		fmt.Fprintf(buf, "dependsOn: [")
 		for i, n := range r.ExplicitDeps {
 			if i > 0 {
 				fmt.Fprintf(buf, ", ")
@@ -589,8 +624,13 @@ func (g *generator) generateResource(r *il.ResourceNode) error {
 			}
 			fmt.Fprintf(buf, "%s", g.nodeName(depRes))
 		}
-		fmt.Fprintf(buf, "]}")
-		explicitDeps = buf.String()
+		fmt.Fprintf(buf, "]")
+		resourceOptions = append(resourceOptions, buf.String())
+	}
+
+	optionsBag := ""
+	if len(resourceOptions) != 0 {
+		optionsBag = fmt.Sprintf(", {%s}", strings.Join(resourceOptions, ","))
 	}
 
 	name := g.nodeName(r)
@@ -600,7 +640,7 @@ func (g *generator) generateResource(r *il.ResourceNode) error {
 	// rewriting them into calls to the `__dataSource` intrinsic.
 	properties := il.BoundNode(r.Properties)
 	if r.Config.Mode != config.ManagedResourceMode {
-		properties = newDataSourceCall(qualifiedMemberName, properties)
+		properties = newDataSourceCall(qualifiedMemberName, properties, optionsBag)
 	}
 
 	if r.Count == nil {
@@ -618,7 +658,7 @@ func (g *generator) generateResource(r *il.ResourceNode) error {
 				resName = fmt.Sprintf("`${mod_name}_%s`", r.Config.Name)
 			}
 
-			g.Printf("%sconst %s = new %s(%s, %s%s);", g.Indent, name, qualifiedMemberName, resName, inputs, explicitDeps)
+			g.Printf("%sconst %s = new %s(%s, %s%s);", g.Indent, name, qualifiedMemberName, resName, inputs, optionsBag)
 		} else {
 			// TODO: explicit dependencies
 
@@ -657,7 +697,7 @@ func (g *generator) generateResource(r *il.ResourceNode) error {
 		g.Indented(func() {
 			if r.Config.Mode == config.ManagedResourceMode {
 				g.Printf("%s%s.push(new %s(`%s-${i}`, %s%s));\n", g.Indent, name, qualifiedMemberName, r.Config.Name,
-					inputs, explicitDeps)
+					inputs, optionsBag)
 			} else {
 				// TODO: explicit dependencies
 

@@ -30,7 +30,7 @@ const (
 
 // newDataSourceCall creates a new call to the data source intrinsic that represents an invocation of the specified
 // data source function with the given input properties.
-func newDataSourceCall(functionName string, inputs il.BoundNode) *il.BoundCall {
+func newDataSourceCall(functionName string, inputs il.BoundNode, optionsBag string) *il.BoundCall {
 	return &il.BoundCall{
 		HILNode:  &ast.Call{Func: intrinsicDataSource},
 		ExprType: il.TypeMap,
@@ -43,15 +43,22 @@ func newDataSourceCall(functionName string, inputs il.BoundNode) *il.BoundCall {
 				NodeType: il.TypeMap,
 				Value:    inputs,
 			},
+			&il.BoundLiteral{
+				ExprType: il.TypeString,
+				Value:    optionsBag,
+			},
 		},
 	}
 }
 
 // parseDataSourceCall extracts the name of the data source function and the input properties for its invocation from
 // a call to the data source intrinsic.
-func parseDataSourceCall(c *il.BoundCall) (function string, inputs il.BoundNode) {
+func parseDataSourceCall(c *il.BoundCall) (function string, inputs il.BoundNode, optionsBag string) {
 	contract.Assert(c.HILNode.Func == intrinsicDataSource)
-	return c.Args[0].(*il.BoundLiteral).Value.(string), c.Args[1].(*il.BoundPropertyValue).Value
+	function = c.Args[0].(*il.BoundLiteral).Value.(string)
+	inputs = c.Args[1].(*il.BoundPropertyValue).Value
+	optionsBag = c.Args[2].(*il.BoundLiteral).Value.(string)
+	return
 }
 
 // newInterpolateCall creates a new call to the interpolate intrinsic that represents a template literal that uses the

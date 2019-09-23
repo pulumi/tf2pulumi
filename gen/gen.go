@@ -30,6 +30,8 @@ type Generator interface {
 	BeginModule(g *il.Graph) error
 	// EndModule does any work specific to the end of code generation for a module definition.
 	EndModule(g *il.Graph) error
+	// GenerateProvider generates a single provider block in the context of the current module definition.
+	GenerateProvider(p *il.ProviderNode) error
 	// GenerateVariables generates variable definitions in the context of the current module definition.
 	GenerateVariables(vs []*il.VariableNode) error
 	// GenerateModule generates a single module instantiation in the context of the current module definition.
@@ -69,6 +71,8 @@ func generateDependency(n il.Node, lang Generator, inProgress, done map[il.Node]
 		err = lang.GenerateLocal(n)
 	case *il.ModuleNode:
 		err = lang.GenerateModule(n)
+	case *il.ProviderNode:
+		err = lang.GenerateProvider(n)
 	case *il.ResourceNode:
 		err = lang.GenerateResource(n)
 	default:
@@ -114,7 +118,10 @@ func generateModuleDef(g *il.Graph, lang Generator) error {
 	}
 	todo := make([]il.Node, 0)
 
-	localKeys, moduleKeys, resourceKeys := SortedKeys(g.Locals), SortedKeys(g.Modules), SortedKeys(g.Resources)
+	localKeys := SortedKeys(g.Locals)
+	moduleKeys := SortedKeys(g.Modules)
+	providerKeys := SortedKeys(g.Providers)
+	resourceKeys := SortedKeys(g.Resources)
 	for _, k := range localKeys {
 		l := g.Locals[k]
 		if len(l.Deps) == 0 {
@@ -133,6 +140,16 @@ func generateModuleDef(g *il.Graph, lang Generator) error {
 			}
 		} else {
 			todo = append(todo, m)
+		}
+	}
+	for _, k := range providerKeys {
+		p := g.Providers[k]
+		if len(p.Deps) == 0 {
+			if err := generateNode(p, lang, done); err != nil {
+				return err
+			}
+		} else {
+			todo = append(todo, p)
 		}
 	}
 	for _, k := range resourceKeys {

@@ -115,6 +115,13 @@ func (g *generator) GenerateLocal(l *il.LocalNode) error {
 	return errors.New("NYI: Python Locals")
 }
 
+func (g *generator) GenerateProvider(p *il.ProviderNode) error {
+	if p.Config.Alias == "" {
+		return nil
+	}
+	return errors.New("NYI: Python Providers")
+}
+
 func (g *generator) GenerateResource(r *il.ResourceNode) error {
 	pkg, subpkg, class, err := resourceTypeName(r)
 	if err != nil {

@@ -698,7 +698,7 @@ func (b *builder) buildNodes(conf *config.Config) error {
 		b.variables[v.Name] = &VariableNode{Config: v}
 	}
 	for _, p := range conf.ProviderConfigs {
-		b.providers[p.Name] = &ProviderNode{Config: p}
+		b.providers[p.FullName()] = &ProviderNode{Config: p}
 	}
 	for _, m := range conf.Modules {
 		b.modules[m.Name] = &ModuleNode{Config: m}

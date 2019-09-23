@@ -1,6 +1,7 @@
 ## HEAD (Unreleased)
 
 - Fix bad code generation for variable accesses that involve index expressions or optional properties.
+- Support first-class providers when targeting Node.JS.
 
 ## v0.5.1 (Released August 14, 2019)
 
