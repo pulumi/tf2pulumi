@@ -216,6 +216,7 @@ func (test *targetTest) generateCode(t *testing.T) {
 		args = append(args, "--filter-resource-names="+test.convertOpts.FilterName)
 	}
 	args = append(args, "--target-language="+test.language)
+	args = append(args, "--record-locations")
 
 	var stderr bytes.Buffer
 	cmd = exec.Command("tf2pulumi", args...)
