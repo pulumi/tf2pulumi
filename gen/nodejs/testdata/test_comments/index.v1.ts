@@ -5,8 +5,6 @@ const config = new pulumi.Config();
 // Accept the AWS region as input.
 const awsRegion = config.get("awsRegion") || "us-west-2";
 
-// The region, again
-const region = awsRegion; // why not
 // Create a VPC.
 //
 // Note that the VPC has been tagged appropriately.
@@ -19,11 +17,24 @@ const defaultVpc = new aws.ec2.Vpc("default", {
         Name: "test",
     },
 });
+// Use some data sources.
+const defaultSubnetIds = defaultVpc.id.apply(id => aws.ec2.getSubnetIds({
+    vpcId: id,
+}));
+const defaultAvailabilityZones = aws.getAvailabilityZones();
+const defaultAvailabilityZone: aws.GetAvailabilityZoneResult[] = [];
+for (let i = 0; i < defaultAvailabilityZones.ids.length; i++) {
+    defaultAvailabilityZone.push(aws.getAvailabilityZone({
+        zoneId: defaultAvailabilityZones.zoneIds[i],
+    }));
+}
 // The VPC details
 const vpc = [{
     // The ID
     id: defaultVpc.id,
 }];
+// The region, again
+const region = awsRegion; // why not
 // Create a security group.
 //
 // This group should allow SSH and HTTP access.
@@ -57,17 +68,6 @@ const defaultSecurityGroup = new aws.ec2.SecurityGroup("default", {
     },
     vpcId: vpc["id"],
 });
-const defaultAvailabilityZones = aws.getAvailabilityZones();
-const defaultAvailabilityZone: aws.GetAvailabilityZoneResult[] = [];
-for (let i = 0; i < defaultAvailabilityZones.ids.length; i++) {
-    defaultAvailabilityZone.push(aws.getAvailabilityZone({
-        zoneId: defaultAvailabilityZones.zoneIds[i],
-    }));
-}
-// Use some data sources.
-const defaultSubnetIds = defaultVpc.id.apply(id => aws.ec2.getSubnetIds({
-    vpcId: id,
-}));
 
 // Output the SG name.
 //
