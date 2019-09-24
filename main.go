@@ -64,6 +64,8 @@ Pulumi TypeScript program that describes the same resource graph.`,
 		"allows code generation to continue if the config references missing variables")
 	flag.BoolVar(&opts.AllowMissingComments, "allow-missing-comments", true,
 		"allows code generation to continue if there are errors extracting comments")
+	flag.BoolVar(&opts.AnnotateNodesWithLocations, "record-locations", false,
+		"annotate the generated code with original source locations for each resource")
 	flag.StringVar(&resourceNameProperty, "filter-resource-names", "",
 		"when set, the property with the given key will be removed from all resources")
 	flag.BoolVar(&filterAutoNames, "filter-auto-names", false,
