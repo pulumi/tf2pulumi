@@ -147,8 +147,24 @@ func (b *builder) extractVariableComments(item *ast.ObjectItem, path string) {
 // extractProviderComments extracts comments from the given HCL object item and attaches them to the corresponding
 // provider node, if any exists.
 func (b *builder) extractProviderComments(item *ast.ObjectItem, path string) {
+	// We need the provider's alias in order to look up its node. This requires parsing the body of the item.
+	object, ok := item.Val.(*ast.ObjectType)
+	if !ok {
+		return
+	}
+
+	alias := ""
+	for _, property := range object.List.Items {
+		key, ok := property.Keys[0].Token.Value().(string)
+		if ok && key == "alias" {
+			if aliasLiteral, ok := property.Val.(*ast.LiteralType); ok {
+				alias, _ = aliasLiteral.Token.Value().(string)
+			}
+		}
+	}
+
 	name := item.Keys[1].Token.Value().(string)
-	p, ok := b.providers[name]
+	p, ok := b.providers[(&config.ProviderConfig{Name: name, Alias: alias}).FullName()]
 	if !ok {
 		return
 	}

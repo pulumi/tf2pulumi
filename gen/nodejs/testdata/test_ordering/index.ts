@@ -5,6 +5,7 @@ const config = new pulumi.Config();
 // Accept the AWS region as input.
 const awsRegion = config.get("awsRegion") || "us-west-2";
 
+// Create a provider for account data.
 const accountData = new aws.Provider("account_data", {
     region: awsRegion,
 });
