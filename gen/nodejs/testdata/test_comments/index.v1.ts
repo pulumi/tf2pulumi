@@ -5,6 +5,8 @@ const config = new pulumi.Config();
 // Accept the AWS region as input.
 const awsRegion = config.get("awsRegion") || "us-west-2";
 
+// The region, again
+const region = awsRegion; // why not
 // Create a VPC.
 //
 // Note that the VPC has been tagged appropriately.
@@ -17,9 +19,6 @@ const defaultVpc = new aws.ec2.Vpc("default", {
         Name: "test",
     },
 });
-const defaultAvailabilityZones = aws.getAvailabilityZones({});
-// The region, again
-const region = awsRegion; // why not
 // The VPC details
 const vpc = [{
     // The ID
@@ -58,6 +57,7 @@ const defaultSecurityGroup = new aws.ec2.SecurityGroup("default", {
     },
     vpcId: vpc["id"],
 });
+const defaultAvailabilityZones = aws.getAvailabilityZones();
 const defaultAvailabilityZone: aws.GetAvailabilityZoneResult[] = [];
 for (let i = 0; i < defaultAvailabilityZones.ids.length; i++) {
     defaultAvailabilityZone.push(aws.getAvailabilityZone({

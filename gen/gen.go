@@ -88,16 +88,6 @@ func generateDependency(n il.Node, lang Generator, inProgress, done map[il.Node]
 
 // generateModuleDef sequences the generation of a single module definition.
 func generateModuleDef(g *il.Graph, lang Generator) error {
-	// We currently do not support multiple provider instantiations, so fail if any providers have dependencies on
-	// nodes that do not represent config vars.
-	for _, p := range g.Providers {
-		for _, d := range p.Deps {
-			if _, ok := d.(*il.VariableNode); !ok {
-				return errors.Errorf("unsupported provider dependency: %v", d)
-			}
-		}
-	}
-
 	if err := lang.BeginModule(g); err != nil {
 		return err
 	}

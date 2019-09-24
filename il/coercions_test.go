@@ -35,15 +35,17 @@ func TestStringCoercions(t *testing.T) {
 	}
 
 	for _, c := range cases {
-		toType := TypeBool
-		if _, ok := c.expected.(float64); ok {
-			toType = TypeNumber
-		}
+		t.Run(c.input, func(t *testing.T) {
+			toType := TypeBool
+			if _, ok := c.expected.(float64); ok {
+				toType = TypeNumber
+			}
 
-		result := makeCoercion(&BoundLiteral{ExprType: TypeString, Value: c.input}, toType)
-		lit, ok := result.(*BoundLiteral)
-		assert.True(t, ok)
-		assert.Equal(t, c.expected, lit.Value)
+			result := makeCoercion(&BoundLiteral{ExprType: TypeString, Value: c.input}, toType)
+			lit, ok := result.(*BoundLiteral)
+			assert.True(t, ok)
+			assert.Equal(t, c.expected, lit.Value)
+		})
 	}
 
 	type negativeCase struct {

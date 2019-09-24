@@ -630,7 +630,7 @@ func (g *generator) generateResource(r *il.ResourceNode) error {
 
 	optionsBag := ""
 	if len(resourceOptions) != 0 {
-		optionsBag = fmt.Sprintf(", {%s}", strings.Join(resourceOptions, ","))
+		optionsBag = fmt.Sprintf("{%s}", strings.Join(resourceOptions, ","))
 	}
 
 	name := g.nodeName(r)
@@ -641,6 +641,10 @@ func (g *generator) generateResource(r *il.ResourceNode) error {
 	properties := il.BoundNode(r.Properties)
 	if r.Config.Mode != config.ManagedResourceMode {
 		properties = newDataSourceCall(qualifiedMemberName, properties, optionsBag)
+	}
+
+	if optionsBag != "" {
+		optionsBag = ", " + optionsBag
 	}
 
 	if r.Count == nil {
