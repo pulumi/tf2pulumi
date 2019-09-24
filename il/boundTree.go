@@ -130,6 +130,14 @@ func (d *dumper) dump(vs ...interface{}) {
 	}
 }
 
+// Location defines a location in a source file.
+type Location struct {
+	// Path is the path of the file relative to the root of the module.
+	Path string
+	// Line is the line number in the source file.
+	Line int
+}
+
 // Comments represents the set of comments associated with a node.
 type Comments struct {
 	// Leading is the lines of the comment (sans comment tokens) that precedes a node, if any. Line endings (if any)

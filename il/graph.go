@@ -21,6 +21,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/hashicorp/hcl/hcl/token"
 	"github.com/hashicorp/terraform/config"
 	"github.com/hashicorp/terraform/config/module"
 	"github.com/pkg/errors"
@@ -62,6 +63,7 @@ type Graph struct {
 // In general, a node's dependencies are the union from its implicit dependencies (i.e. the nodes referenced by the
 // interpolations in its properties, if any) and its explicit dependencies.
 type Node interface {
+	locatable
 	commentable
 
 	// Dependencies returns the list of nodes the node depends on.
@@ -77,6 +79,8 @@ type Node interface {
 type ModuleNode struct {
 	// Config is the module's raw Terraform configuration.
 	Config *config.Module
+	// Location is the location of this node's definition in the original Terraform configuration.
+	Location token.Pos
 	// Comments is the set of comments associated with this node, if any.
 	Comments *Comments
 	// Deps is the list of the module's dependencies as implied by the nodes referenced by its configuration.
@@ -89,6 +93,8 @@ type ModuleNode struct {
 type ProviderNode struct {
 	// Config is the provider's raw Terraform configuration.
 	Config *config.ProviderConfig
+	// Location is the location of this node's definition in the original Terraform configuration.
+	Location token.Pos
 	// Comments is the set of comments associated with this node, if any.
 	Comments *Comments
 	// Deps is the list of the provider's dependencies as implied by the nodes referenced by its configuration.
@@ -110,6 +116,8 @@ type ProviderNode struct {
 type ResourceNode struct {
 	// Config is the resource's raw Terraform configuration.
 	Config *config.Resource
+	// Location is the location of this node's definition in the original Terraform configuration.
+	Location token.Pos
 	// Comments is the set of comments associated with this node, if any.
 	Comments *Comments
 	// Provider is a reference to the resource's provider. Consumers of this package will never observe a nil value in
@@ -130,6 +138,8 @@ type ResourceNode struct {
 type OutputNode struct {
 	// Config is the output's raw Terraform configuration.
 	Config *config.Output
+	// Location is the location of this node's definition in the original Terraform configuration.
+	Location token.Pos
 	// Comments is the set of comments associated with this node, if any.
 	Comments *Comments
 	// Deps is the list of the output's dependencies as implied by the nodes referenced by its configuration.
@@ -144,6 +154,8 @@ type OutputNode struct {
 type LocalNode struct {
 	// Config is the local value's raw Terraform configuration.
 	Config *config.Local
+	// Location is the location of this node's definition in the original Terraform configuration.
+	Location token.Pos
 	// Comments is the set of comments associated with this node, if any.
 	Comments *Comments
 	// Deps is the list of the local value's dependencies as implied by the nodes referenced by its configuration.
@@ -156,6 +168,8 @@ type LocalNode struct {
 type VariableNode struct {
 	// Config is the variable's raw Terraform configuration.
 	Config *config.Variable
+	// Location is the location of this node's definition in the original Terraform configuration.
+	Location token.Pos
 	// Comments is the set of comments associated with this node, if any.
 	Comments *Comments
 	// DefaultValue is the bound form of the variable's default value (if any).
@@ -175,6 +189,10 @@ func (m *ModuleNode) displayName() string {
 	return "module " + m.Config.Name
 }
 
+func (m *ModuleNode) setLocation(l token.Pos) {
+	m.Location = l
+}
+
 func (m *ModuleNode) setComments(c *Comments) {
 	m.Comments = c
 }
@@ -190,6 +208,10 @@ func (p *ProviderNode) sortKey() string {
 
 func (p *ProviderNode) displayName() string {
 	return "provider " + p.Config.Name
+}
+
+func (p *ProviderNode) setLocation(l token.Pos) {
+	p.Location = l
 }
 
 func (p *ProviderNode) setComments(c *Comments) {
@@ -254,6 +276,10 @@ func (r *ResourceNode) displayName() string {
 	return "resource " + r.Config.Id()
 }
 
+func (r *ResourceNode) setLocation(l token.Pos) {
+	r.Location = l
+}
+
 func (r *ResourceNode) setComments(c *Comments) {
 	r.Comments = c
 }
@@ -269,6 +295,10 @@ func (o *OutputNode) sortKey() string {
 
 func (o *OutputNode) displayName() string {
 	return "output " + o.Config.Name
+}
+
+func (o *OutputNode) setLocation(l token.Pos) {
+	o.Location = l
 }
 
 func (o *OutputNode) setComments(c *Comments) {
@@ -288,6 +318,10 @@ func (l *LocalNode) displayName() string {
 	return "local " + l.Config.Name
 }
 
+func (l *LocalNode) setLocation(loc token.Pos) {
+	l.Location = loc
+}
+
 func (l *LocalNode) setComments(c *Comments) {
 	l.Comments = c
 }
@@ -303,6 +337,10 @@ func (v *VariableNode) sortKey() string {
 
 func (v *VariableNode) displayName() string {
 	return "variable " + v.Config.Name
+}
+
+func (v *VariableNode) setLocation(l token.Pos) {
+	v.Location = l
 }
 
 func (v *VariableNode) setComments(c *Comments) {

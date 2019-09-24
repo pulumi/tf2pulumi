@@ -147,23 +147,33 @@ output "security_group_name" {
 	assert.NoError(t, err)
 
 	v := b.variables["aws_region"]
+	assert.True(t, v.Location.IsValid())
+	assert.Equal(t, "main.tf", v.Location.Filename)
 	assertLeading(t, v.Comments, " Accept the AWS region as input.")
 	assertLeading(t, v.DefaultValue.Comments(), " Default to us-west-2")
 
 	p := b.providers["aws"]
+	assert.True(t, p.Location.IsValid())
+	assert.Equal(t, "main.tf", p.Location.Filename)
 	assertLeading(t, p.Comments, "Specify provider details")
 	assertLeading(t, p.Properties.Elements["region"].Comments(), " Pull the region from a variable")
 
 	l := b.locals["vpc"]
+	assert.True(t, l.Location.IsValid())
+	assert.Equal(t, "main.tf", l.Location.Filename)
 	assertLeading(t, l.Comments, " The VPC details")
 	lval := l.Value.(*BoundListProperty).Elements[0].(*BoundMapProperty)
 	assertLeading(t, lval.Elements["id"].Comments(), " The ID")
 
 	l = b.locals["region"]
+	assert.True(t, l.Location.IsValid())
+	assert.Equal(t, "main.tf", l.Location.Filename)
 	assertLeading(t, l.Comments, " The region, again")
 	assertTrailing(t, l.Comments, " why not")
 
 	vpc := b.resources["aws_vpc.default"]
+	assert.True(t, vpc.Location.IsValid())
+	assert.Equal(t, "main.tf", vpc.Location.Filename)
 	assertLeading(t, vpc.Comments, " Create a VPC.", "", " Note that the VPC has been tagged appropriately.")
 	assertTrailing(t, vpc.Properties.Elements["cidr_block"].Comments(), " Just one CIDR block")
 	assertTrailing(t, vpc.Properties.Elements["enable_dns_hostnames"].Comments(), " Definitely want DNS hostnames.")
@@ -172,6 +182,8 @@ output "security_group_name" {
 	assertLeading(t, tagsProp.Elements["Name"].Comments(), " Ensure that we tag this VPC with a Name.")
 
 	sg := b.resources["aws_security_group.default"]
+	assert.True(t, sg.Location.IsValid())
+	assert.Equal(t, "main.tf", sg.Location.Filename)
 	assertLeading(t, sg.Comments, " Create a security group.", "", " This group should allow SSH and HTTP access.")
 	ingressList := sg.Properties.Elements["ingress"].(*BoundListProperty)
 	sshAccess := ingressList.Elements[0].(*BoundMapProperty)
@@ -186,6 +198,8 @@ output "security_group_name" {
 	assertTrailing(t, outboundAccess.Elements["protocol"].Comments(), " All")
 
 	out := b.outputs["security_group_name"]
+	assert.True(t, out.Location.IsValid())
+	assert.Equal(t, "main.tf", out.Location.Filename)
 	assertLeading(t, out.Comments, " Output the SG name.", "", " We pull the name from the default SG.")
 	assertLeading(t, out.Value.Comments(), " Take the value from the default SG.")
 	assertTrailing(t, out.Value.Comments(), " Neat!")
