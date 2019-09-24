@@ -22,9 +22,15 @@ import (
 
 	"github.com/hashicorp/hcl"
 	"github.com/hashicorp/hcl/hcl/ast"
+	"github.com/hashicorp/hcl/hcl/token"
 	"github.com/hashicorp/terraform/config"
 	"github.com/pulumi/pulumi/pkg/util/contract"
 )
+
+// locatable is an interface shared by the IL's top-level nodes.
+type locatable interface {
+	setLocation(p token.Pos)
+}
 
 // commentable is an interface shared by the IL's top-level nodes (e.g. ResourceNode, OutputNode) and its bound
 // nodes.
@@ -74,8 +80,8 @@ func (b *builder) extractComments(c *config.Config) error {
 }
 
 // extractFileComments extracts comments from a particular HCL source file.
-func (b *builder) extractFileComments(path string) error {
-	t, err := ioutil.ReadFile(path)
+func (b *builder) extractFileComments(filePath string) error {
+	t, err := ioutil.ReadFile(filePath)
 	if err != nil {
 		return err
 	}
@@ -85,12 +91,12 @@ func (b *builder) extractFileComments(path string) error {
 		return err
 	}
 
-	b.extractHCLComments(f)
+	b.extractHCLComments(f, path.Base(filePath))
 	return nil
 }
 
 // extractHCLComments extracts comments from the given HCL file.
-func (b *builder) extractHCLComments(f *ast.File) {
+func (b *builder) extractHCLComments(f *ast.File, path string) {
 	root, ok := f.Node.(*ast.ObjectList)
 	if !ok {
 		b.logf("unexpected type for HCL root node '%T'; skipping file...", f.Node)
@@ -101,71 +107,90 @@ func (b *builder) extractHCLComments(f *ast.File) {
 	for _, n := range root.Items {
 		switch n.Keys[0].Token.Value().(string) {
 		case "variable":
-			b.extractVariableComments(n)
+			b.extractVariableComments(n, path)
 		case "provider":
-			b.extractProviderComments(n)
+			b.extractProviderComments(n, path)
 		case "module":
-			b.extractModuleComments(n)
+			b.extractModuleComments(n, path)
 		case "resource":
-			b.extractResourceComments(n, config.ManagedResourceMode)
+			b.extractResourceComments(n, path, config.ManagedResourceMode)
 		case "data":
-			b.extractResourceComments(n, config.DataResourceMode)
+			b.extractResourceComments(n, path, config.DataResourceMode)
 		case "locals":
 			if object, ok := n.Val.(*ast.ObjectType); ok {
 				for _, ln := range object.List.Items {
-					b.extractLocalComments(ln)
+					b.extractLocalComments(ln, path)
 				}
 			} else {
 				b.logf("unexpected locals type '%T'; skipping node...", n.Val)
 			}
 		case "output":
-			b.extractOutputComments(n)
+			b.extractOutputComments(n, path)
 		}
 	}
 }
 
 // extractVariableComments extracts comments from the given HCL object item and attaches them to the corresponding
 // variable node, if any exists.
-func (b *builder) extractVariableComments(item *ast.ObjectItem) {
+func (b *builder) extractVariableComments(item *ast.ObjectItem, path string) {
 	name := item.Keys[1].Token.Value().(string)
 	v, ok := b.variables[name]
 	if !ok {
 		return
 	}
 
+	attachLocation(v, item.Pos(), path)
 	attachComments(v, item.LeadComment, item.LineComment)
 	b.extractNodeComments(item.Val, &BoundMapProperty{Elements: map[string]BoundNode{"default": v.DefaultValue}})
 }
 
 // extractProviderComments extracts comments from the given HCL object item and attaches them to the corresponding
 // provider node, if any exists.
-func (b *builder) extractProviderComments(item *ast.ObjectItem) {
-	name := item.Keys[1].Token.Value().(string)
-	p, ok := b.providers[name]
+func (b *builder) extractProviderComments(item *ast.ObjectItem, path string) {
+	// We need the provider's alias in order to look up its node. This requires parsing the body of the item.
+	object, ok := item.Val.(*ast.ObjectType)
 	if !ok {
 		return
 	}
 
+	alias := ""
+	for _, property := range object.List.Items {
+		key, ok := property.Keys[0].Token.Value().(string)
+		if ok && key == "alias" {
+			if aliasLiteral, ok := property.Val.(*ast.LiteralType); ok {
+				alias, _ = aliasLiteral.Token.Value().(string)
+			}
+		}
+	}
+
+	name := item.Keys[1].Token.Value().(string)
+	p, ok := b.providers[(&config.ProviderConfig{Name: name, Alias: alias}).FullName()]
+	if !ok {
+		return
+	}
+
+	attachLocation(p, item.Pos(), path)
 	attachComments(p, item.LeadComment, item.LineComment)
 	b.extractNodeComments(item.Val, p.Properties)
 }
 
 // extractModuleComments extracts comments from the given HCL object item and attaches them to the corresponding
 // module node, if any exists.
-func (b *builder) extractModuleComments(item *ast.ObjectItem) {
+func (b *builder) extractModuleComments(item *ast.ObjectItem, path string) {
 	name := item.Keys[1].Token.Value().(string)
 	m, ok := b.modules[name]
 	if !ok {
 		return
 	}
 
+	attachLocation(m, item.Pos(), path)
 	attachComments(m, item.LeadComment, item.LineComment)
 	b.extractNodeComments(item.Val, m.Properties)
 }
 
 // extractResourceComments extracts comments from the given HCL object item and attaches them to the corresponding
 // resource node, if any exists.
-func (b *builder) extractResourceComments(item *ast.ObjectItem, mode config.ResourceMode) {
+func (b *builder) extractResourceComments(item *ast.ObjectItem, path string, mode config.ResourceMode) {
 	cfg := &config.Resource{
 		Mode: mode,
 		Name: item.Keys[2].Token.Value().(string),
@@ -176,32 +201,35 @@ func (b *builder) extractResourceComments(item *ast.ObjectItem, mode config.Reso
 		return
 	}
 
+	attachLocation(r, item.Pos(), path)
 	attachComments(r, item.LeadComment, item.LineComment)
 	b.extractNodeComments(item.Val, r.Properties)
 }
 
 // extractLocalComments extracts comments from the given HCL object item and attaches them to the corresponding
 // local node, if any exists.
-func (b *builder) extractLocalComments(item *ast.ObjectItem) {
+func (b *builder) extractLocalComments(item *ast.ObjectItem, path string) {
 	name := item.Keys[0].Token.Value().(string)
 	l, ok := b.locals[name]
 	if !ok {
 		return
 	}
 
+	attachLocation(l, item.Pos(), path)
 	attachComments(l, item.LeadComment, item.LineComment)
 	b.extractNodeComments(item.Val, l.Value)
 }
 
 // extractOutputComments extracts comments from the given HCL object item and attaches them to the corresponding
 // output node, if any exists.
-func (b *builder) extractOutputComments(item *ast.ObjectItem) {
+func (b *builder) extractOutputComments(item *ast.ObjectItem, path string) {
 	name := item.Keys[1].Token.Value().(string)
 	o, ok := b.outputs[name]
 	if !ok {
 		return
 	}
 
+	attachLocation(o, item.Pos(), path)
 	attachComments(o, item.LeadComment, item.LineComment)
 	b.extractNodeComments(item.Val, &BoundMapProperty{Elements: map[string]BoundNode{"value": o.Value}})
 }
@@ -270,6 +298,12 @@ func (b *builder) extractNodeComments(node ast.Node, context BoundNode) {
 	default:
 		b.logf("unhandled ast type %T (%v)", node, node)
 	}
+}
+
+// attachLocation attaches the indicated location to a node and sets the file path appropriately.
+func attachLocation(n locatable, pos token.Pos, path string) {
+	pos.Filename = path
+	n.setLocation(pos)
 }
 
 // attachComments preprocesses the given leading and trailing comments (if any) and attaches them to the given node.

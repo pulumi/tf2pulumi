@@ -15,12 +15,14 @@
 package convert
 
 import (
+	"fmt"
 	"io"
 	"log"
 	"os"
 	"path/filepath"
 	"strings"
 
+	"github.com/hashicorp/hcl/hcl/token"
 	"github.com/hashicorp/terraform/command"
 	"github.com/hashicorp/terraform/config"
 	"github.com/hashicorp/terraform/config/module"
@@ -43,6 +45,45 @@ const (
 var (
 	ValidLanguages = [...]string{LanguageTypescript, LanguagePython}
 )
+
+func addLocationAnnotation(location token.Pos, comments **il.Comments) {
+	if !location.IsValid() {
+		return
+	}
+
+	c := *comments
+	if c == nil {
+		c = &il.Comments{}
+		*comments = c
+	}
+
+	if len(c.Leading) != 0 {
+		c.Leading = append(c.Leading, "")
+	}
+	c.Leading = append(c.Leading, fmt.Sprintf(" Originally defined at %v:%v", location.Filename, location.Line))
+}
+
+// addLocationAnnotations adds comments that record the original source location of each top-level node in a module.
+func addLocationAnnotations(m *il.Graph) {
+	for _, n := range m.Modules {
+		addLocationAnnotation(n.Location, &n.Comments)
+	}
+	for _, n := range m.Providers {
+		addLocationAnnotation(n.Location, &n.Comments)
+	}
+	for _, n := range m.Resources {
+		addLocationAnnotation(n.Location, &n.Comments)
+	}
+	for _, n := range m.Outputs {
+		addLocationAnnotation(n.Location, &n.Comments)
+	}
+	for _, n := range m.Locals {
+		addLocationAnnotation(n.Location, &n.Comments)
+	}
+	for _, n := range m.Variables {
+		addLocationAnnotation(n.Location, &n.Comments)
+	}
+}
 
 // Convert converts a Terraform module at the provided location into a Pulumi module, written to stdout.
 func Convert(opts Options) error {
@@ -89,6 +130,13 @@ func Convert(opts Options) error {
 		}
 	}
 
+	// Annotate nodes with the location of their original definition if requested.
+	if opts.AnnotateNodesWithLocations {
+		for _, g := range gs {
+			addLocationAnnotations(g)
+		}
+	}
+
 	generator, err := newGenerator("auto", opts)
 	if err != nil {
 		return errors.Wrapf(err, "creating generator")
@@ -109,6 +157,9 @@ type Options struct {
 	AllowMissingVariables bool
 	// AllowMissingComments allows binding to succeed even if there are errors extracting comments from the source.
 	AllowMissingComments bool
+	// AnnotateNodesWithLocations is true if the generated source code should contain comments that annotate top-level
+	// nodes with their original source locations.
+	AnnotateNodesWithLocations bool
 	// FilterResourceNames, if true, removes the property indicated by ResourceNameProperty from all resources in the
 	// graph.
 	FilterResourceNames bool

@@ -3,7 +3,9 @@
 - Fix bad code generation for variable accesses that involve index expressions or optional properties.
 - Support first-class providers when targeting Node.JS.
 - Fix ordering for resources and module instantiations with explicit providers.
-= Do not generate empty argument bags for nilary data source invocations.
+- Do not generate empty argument bags for nilary data source invocations.
+- Add a command line option, `-record-locations`, that indicates that each resource, data source, etc. in the
+  generated code should be annotated with the location of its original definition in the source Terraform config.
 
 ## v0.5.1 (Released August 14, 2019)
 
