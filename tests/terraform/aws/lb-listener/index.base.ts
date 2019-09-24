@@ -4,9 +4,9 @@ import * as aws from "@pulumi/aws";
 const pool = new aws.cognito.UserPool("pool", {});
 const client = new aws.cognito.UserPoolClient("client", {});
 const domain = new aws.cognito.UserPoolDomain("domain", {});
-const frontEndLoadBalancer = new aws.elasticloadbalancingv2.LoadBalancer("front_end", {});
-const frontEndTargetGroup = new aws.elasticloadbalancingv2.TargetGroup("front_end", {});
-const frontEndListener = new aws.elasticloadbalancingv2.Listener("front_end", {
+const frontEndLoadBalancer = new aws.lb.LoadBalancer("front_end", {});
+const frontEndTargetGroup = new aws.lb.TargetGroup("front_end", {});
+const frontEndListener = new aws.lb.Listener("front_end", {
     defaultActions: [
         {
             authenticateCognito: {
