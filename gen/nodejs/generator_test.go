@@ -99,6 +99,14 @@ func TestLowerToLiteral(t *testing.T) {
 	assert.Equal(t, "{\n    key: `module: foo/bar root: .`,\n}", computed)
 }
 
+func loadConfig(t *testing.T, path string) *config.Config {
+	conf, err := config.LoadDir(path)
+	if err != nil {
+		t.Fatalf("could not load config at %s: %v", path, err)
+	}
+	return conf
+}
+
 func readFile(t *testing.T, path string) string {
 	bytes, err := ioutil.ReadFile(path)
 	if err != nil {
@@ -108,10 +116,7 @@ func readFile(t *testing.T, path string) string {
 }
 
 func TestComments(t *testing.T) {
-	conf, err := config.LoadDir("testdata/test_comments")
-	if err != nil {
-		t.Fatalf("could not load config: %v", err)
-	}
+	conf := loadConfig(t, "testdata/test_comments")
 
 	g, err := il.BuildGraph(module.NewTree("main", conf), &il.BuildOptions{
 		AllowMissingProviders: true,
@@ -166,4 +171,23 @@ func TestComments(t *testing.T) {
 
 	expectedText17PromptDataSources := readFile(t, "testdata/test_comments/index.v1.ts")
 	assert.Equal(t, expectedText17PromptDataSources, b.String())
+}
+
+func TestOrdering(t *testing.T) {
+	conf := loadConfig(t, "testdata/test_ordering")
+	g, err := il.BuildGraph(module.NewTree("main", conf), &il.BuildOptions{
+		AllowMissingProviders: true,
+	})
+	if err != nil {
+		t.Fatalf("could not build graph: %v", err)
+	}
+
+	var b bytes.Buffer
+	lang, err := New("main", "1.0.0", true, &b)
+	assert.NoError(t, err)
+	err = gen.Generate([]*il.Graph{g}, lang)
+	assert.NoError(t, err)
+
+	expectedText := readFile(t, "testdata/test_ordering/index.ts")
+	assert.Equal(t, expectedText, b.String())
 }

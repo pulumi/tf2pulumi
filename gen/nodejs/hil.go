@@ -236,7 +236,14 @@ func (g *generator) GenCall(w io.Writer, n *il.BoundCall) {
 		g.Fgenf(w, "pulumi.getStack()")
 	case intrinsicDataSource:
 		function, inputs, optionsBag := parseDataSourceCall(n)
-		g.Fgenf(w, "%s(%s%s)", function, inputs, optionsBag)
+		if m, ok := inputs.(*il.BoundMapProperty); ok && m != nil && len(m.Elements) == 0 {
+			g.Fgenf(w, "%s(%s)", function, optionsBag)
+		} else {
+			if optionsBag != "" {
+				optionsBag = ", " + optionsBag
+			}
+			g.Fgenf(w, "%s(%s%s)", function, inputs, optionsBag)
+		}
 	case intrinsicInterpolate:
 		fmt.Fprint(w, "pulumi.interpolate`")
 		for _, s := range n.Args {

@@ -2,6 +2,8 @@
 
 - Fix bad code generation for variable accesses that involve index expressions or optional properties.
 - Support first-class providers when targeting Node.JS.
+- Fix ordering for resources and module instantiations with explicit providers.
+= Do not generate empty argument bags for nilary data source invocations.
 
 ## v0.5.1 (Released August 14, 2019)
 

@@ -444,7 +444,7 @@ func (sn sortableNodes) Swap(i, j int) {
 // buildDeps calculates the union of a node's implicit and explicit dependencies. It returns this union as a list of
 // Nodes as well as the list of the node's explicit dependencies. This function will fail if a node referenced in the
 // list of explicit dependencies is not present in the graph.
-func (b *builder) buildDeps(deps map[Node]struct{}, dependsOn []string) ([]Node, []Node, error) {
+func (b *builder) buildDeps(deps map[Node]struct{}, dependsOn []string, providers []string) ([]Node, []Node, error) {
 	sort.Strings(dependsOn)
 
 	explicitDeps := make([]Node, len(dependsOn))
@@ -457,6 +457,13 @@ func (b *builder) buildDeps(deps map[Node]struct{}, dependsOn []string) ([]Node,
 			return nil, nil, errors.Errorf("unknown resource %v", name)
 		}
 		deps[r], explicitDeps[i] = struct{}{}, r
+	}
+
+	// Explicitly add the provider as a dependency.
+	for _, providerName := range providers {
+		if p, ok := b.providers[providerName]; ok {
+			deps[p] = struct{}{}
+		}
 	}
 
 	allDeps := make([]Node, 0, len(deps))
@@ -493,7 +500,11 @@ func (b *builder) buildModule(m *ModuleNode) error {
 	if err != nil {
 		return err
 	}
-	allDeps, _, err := b.buildDeps(deps, nil)
+	providers := make([]string, 0, len(m.Config.Providers))
+	for _, p := range m.Config.Providers {
+		providers = append(providers, p)
+	}
+	allDeps, _, err := b.buildDeps(deps, nil, providers)
 	contract.Assert(err == nil)
 
 	m.Properties, m.Deps = props, allDeps
@@ -517,7 +528,7 @@ func (b *builder) buildProvider(p *ProviderNode) error {
 	if err != nil {
 		return err
 	}
-	allDeps, _, err := b.buildDeps(deps, nil)
+	allDeps, _, err := b.buildDeps(deps, nil, nil)
 	contract.Assert(err == nil)
 
 	p.Properties, p.Deps = props, allDeps
@@ -590,7 +601,7 @@ func (b *builder) buildResource(r *ResourceNode) error {
 	for k := range countDeps {
 		deps[k] = struct{}{}
 	}
-	allDeps, explicitDeps, err := b.buildDeps(deps, r.Config.DependsOn)
+	allDeps, explicitDeps, err := b.buildDeps(deps, r.Config.DependsOn, []string{r.Config.ProviderFullName()})
 	if err != nil {
 		return err
 	}
@@ -604,7 +615,7 @@ func (b *builder) buildOutput(o *OutputNode) error {
 	if err != nil {
 		return err
 	}
-	allDeps, explicitDeps, err := b.buildDeps(deps, o.Config.DependsOn)
+	allDeps, explicitDeps, err := b.buildDeps(deps, o.Config.DependsOn, nil)
 	if err != nil {
 		return err
 	}
@@ -628,7 +639,7 @@ func (b *builder) buildLocal(l *LocalNode) error {
 	if err != nil {
 		return err
 	}
-	allDeps, _, err := b.buildDeps(deps, nil)
+	allDeps, _, err := b.buildDeps(deps, nil, nil)
 	contract.Assert(err == nil)
 
 	// In general, a local should have a single property named "value". If this is the case, promote it to the
