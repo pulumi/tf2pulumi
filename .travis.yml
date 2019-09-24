@@ -14,11 +14,11 @@ install:
     - source ${PULUMI_SCRIPTS}/ci/install-common-toolchain.sh
     - curl -L https://get.pulumi.com/ | bash -s -- --version 0.17.9
     - export PATH=$HOME/.pulumi/bin:$PATH
-    - pulumi plugin install resource aws 0.18.3
-    - pulumi plugin install resource azure 0.18.2
-    - pulumi plugin install resource gcp 0.18.5
-    - pulumi plugin install resource terraform-template 0.15.0
-    - pulumi plugin install resource random 0.5.2
+    - pulumi plugin install resource aws 1.2.1
+    - pulumi plugin install resource azure 1.0.0
+    - pulumi plugin install resource gcp 1.0.0
+    - pulumi plugin install resource terraform-template 0.16.0
+    - pulumi plugin install resource random 1.0.0
 
     # Install Terraform.
     - curl -sLo /tmp/terraform.zip https://releases.hashicorp.com/terraform/0.11.8/terraform_0.11.8_linux_amd64.zip
