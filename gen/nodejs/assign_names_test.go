@@ -139,7 +139,7 @@ func TestAssignNames(t *testing.T) {
 		}),
 	}
 
-	names := assignNames(g, true)
+	names := assignNames(g, map[string]bool{}, true)
 
 	assert.Equal(t, "vpcId", names[g.Outputs["vpc_id"]])
 	assert.Equal(t, "securityGroupId", names[g.Outputs["security_group_id"]])
@@ -223,7 +223,7 @@ func TestAssignApplyNames(t *testing.T) {
 		}),
 	}
 
-	g := &generator{nameTable: assignNames(m, true)}
+	g := &generator{nameTable: assignNames(m, map[string]bool{}, true)}
 
 	args := []*il.BoundVariableAccess{
 		boundRef("local.name", il.TypeString.OutputOf(), m.Locals["name"]),

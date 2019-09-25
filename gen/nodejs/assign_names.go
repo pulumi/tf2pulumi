@@ -198,11 +198,16 @@ func (nt *nameTable) assignResource(n *il.ResourceNode) {
 	nt.names[n], nt.assigned[name] = name, true
 }
 
-func assignNames(g *il.Graph, isRootModule bool) map[il.Node]string {
+func assignNames(g *il.Graph, importNames map[string]bool, isRootModule bool) map[il.Node]string {
 	nt := &nameTable{
 		names:        make(map[il.Node]string),
 		assigned:     make(map[string]bool),
 		isRootModule: isRootModule,
+	}
+
+	// Seed the set of assigned names with the names of imported modules.
+	for k := range importNames {
+		nt.assigned[k] = true
 	}
 
 	// Assign output names first: given a conflict between nodes, we always want the output node (if any) to win so
