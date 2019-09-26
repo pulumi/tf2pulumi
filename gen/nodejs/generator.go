@@ -49,6 +49,7 @@ func New(projectName string, targetSDKVersion string, usePromptDataSources bool,
 		ProjectName:          projectName,
 		supportsProxyApplies: v.GTE(semver.MustParse("0.17.0")),
 		usePromptDataSources: usePromptDataSources,
+		importNames:          make(map[string]bool),
 	}
 	g.Emitter = gen.NewEmitter(w, g)
 	return g, nil
@@ -83,6 +84,8 @@ type generator struct {
 	nameTable map[il.Node]string
 	// promptDataSources is a table of datasources that do not contain output-typed inputs.
 	promptDataSources map[*il.ResourceNode]bool
+	// importNames is the set of names used by package imports.
+	importNames map[string]bool
 }
 
 // isLegalIdentifierStart returns true if it is legal for c to be the first character of a JavaScript identifier as per
@@ -316,35 +319,37 @@ func (g *generator) GeneratePreamble(modules []*il.Graph) error {
 				case "http":
 					imports = append(imports,
 						`import rpn = require("request-promise-native");`)
+					g.importNames["rpn"] = true
 				default:
+					importName := cleanName(name)
 					imports = append(imports,
-						fmt.Sprintf(`import * as %s from "@pulumi/%s";`, cleanName(name), name))
+						fmt.Sprintf(`import * as %s from "@pulumi/%s";`, importName, name))
+					g.importNames[importName] = true
 				}
 			}
 		}
 	}
 
 	// Look for additional optional imports, also appending them to the list so we can sort them later on.
-	optionals := make(map[string]bool)
 	findOptionals := func(n il.BoundNode) (il.BoundNode, error) {
 		switch n := n.(type) {
 		case *il.BoundCall:
 			switch n.HILNode.Func {
 			case "file":
-				if !optionals["fs"] {
+				if !g.importNames["fs"] {
 					imports = append(imports, `import * as fs from "fs";`)
-					optionals["fs"] = true
+					g.importNames["fs"] = true
 				}
 			case "format":
-				if !optionals["sprintf"] {
+				if !g.importNames["sprintf"] {
 					imports = append(imports, `import sprintf = require("sprintf-js");`)
-					optionals["sprintf"] = true
+					g.importNames["sprintf"] = true
 				}
 			}
 		case *il.BoundVariableAccess:
-			if v, ok := n.TFVar.(*config.PathVariable); ok && v.Type == config.PathValueCwd && !optionals["process"] {
+			if v, ok := n.TFVar.(*config.PathVariable); ok && v.Type == config.PathValueCwd && !g.importNames["process"] {
 				imports = append(imports, `import * as process from "process";`)
-				optionals["process"] = true
+				g.importNames["process"] = true
 			}
 		}
 		return n, nil
@@ -417,7 +422,7 @@ func (g *generator) BeginModule(m *il.Graph) error {
 	}
 
 	// Compute unambiguous names for this module's top-level nodes.
-	g.nameTable = assignNames(m, g.isRoot())
+	g.nameTable = assignNames(m, g.importNames, g.isRoot())
 	return nil
 }
 
