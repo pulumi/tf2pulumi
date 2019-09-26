@@ -130,6 +130,8 @@ type ResourceNode struct {
 	Count BoundNode
 	// Properties is the bound form of the resource's configuration properties.
 	Properties *BoundMapProperty
+	// Timeouts is the bound set of timeout data, if any.
+	Timeouts *BoundMapProperty
 }
 
 // An OutputNode is the analyzed form of an output in a Terraform configuration. An OutputNode may never be referenced
@@ -635,9 +637,28 @@ func (b *builder) buildResource(r *ResourceNode) error {
 		}
 	}
 
+	// Bind the resource's properties.
 	props, deps, err := b.bindProperties(tfName, r.Config.RawConfig, r.Schemas(), count != nil)
 	if err != nil {
 		return err
+	}
+
+	// Process the `timeouts` property, if any.
+	if timeouts, ok := props.Elements["timeouts"]; ok {
+		delete(props.Elements, "timeouts")
+
+		timeoutsList, ok := timeouts.(*BoundListProperty)
+		if !ok {
+			return errors.Errorf("could not parse timeouts for resource %v: timeouts is not a map", tfName)
+		}
+		if len(timeoutsList.Elements) != 1 {
+			return errors.Errorf("could not parse timeouts for resource %v: timeouts is not a map", tfName)
+		}
+		timeoutsMap, ok := timeoutsList.Elements[0].(*BoundMapProperty)
+		if !ok {
+			return errors.Errorf("could not parse timeouts for resource %v: timeouts is not a map", tfName)
+		}
+		r.Timeouts = timeoutsMap
 	}
 
 	// Merge the count dependencies into the overall dependency set and compute the final dependency lists.
