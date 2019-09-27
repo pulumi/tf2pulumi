@@ -373,7 +373,7 @@ func SimplifyBooleanExpressions(expr BoundExpr) BoundExpr {
 
 			// Otherwise, we can simplify to the condition expression itself if the true leg resolves to the literal
 			// "true" and the false leg resolves to the literal "false".
-			if trueVal == true && falseVal == false {
+			if trueVal && !falseVal {
 				return condExpr
 			}
 		}
