@@ -331,3 +331,62 @@ func MarkConditionalResources(g *Graph) map[*ResourceNode]bool {
 	}
 	return conditionalResources
 }
+
+// isBooleanLiteral checks to see if a BoundExpr is a boolean literal. If so, it returns the BoundLiteral.
+func isBooleanLiteral(expr BoundExpr) (*BoundLiteral, bool) {
+	if lit, ok := expr.(*BoundLiteral); ok {
+		if _, ok = lit.Value.(bool); ok {
+			return lit, ok
+		}
+	}
+	return nil, false
+}
+
+// SimplifyBooleanExpressions recursively simplifies conditional and literal expressions with statically known values.
+//
+// Note that this will convert a top-level literal that is coerceable to a boolean into a boolean literal, so this
+// function should only be called if the resulting expression can be boolean-typed.
+func SimplifyBooleanExpressions(expr BoundExpr) BoundExpr {
+	switch expr := expr.(type) {
+	case *BoundConditional:
+		// If the conditional expression simplifies to a boolean literal, we can replace the entire conditional
+		// expression with the literal value.
+		condExpr := SimplifyBooleanExpressions(expr.CondExpr)
+		if lit, ok := isBooleanLiteral(condExpr); ok {
+			return lit
+		}
+
+		trueExpr := SimplifyBooleanExpressions(expr.TrueExpr)
+		falseExpr := SimplifyBooleanExpressions(expr.FalseExpr)
+
+		trueLit, hasTrueLit := isBooleanLiteral(trueExpr)
+		falseLit, hasFalseLit := isBooleanLiteral(falseExpr)
+
+		if hasTrueLit && hasFalseLit {
+			trueVal, falseVal := trueLit.Value.(bool), falseLit.Value.(bool)
+
+			// If both legs of the conditional resolve to boolean literals and those literals are the same value, we
+			// can simplify the entire expression to the resolved literal.
+			if trueVal == falseVal {
+				return trueLit
+			}
+
+			// Otherwise, we can simplify to the condition expression itself if the true leg resolves to the literal
+			// "true" and the false leg resolves to the literal "false".
+			if trueVal == true && falseVal == false {
+				return condExpr
+			}
+		}
+
+		expr.CondExpr, expr.TrueExpr, expr.FalseExpr = condExpr, trueExpr, falseExpr
+		return expr
+	case *BoundLiteral:
+		// If this literal
+		if boolLit, ok := coerceLiteral(expr, expr.Type(), TypeBool); ok {
+			return boolLit
+		}
+		return expr
+	default:
+		return expr
+	}
+}
