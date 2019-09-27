@@ -15,6 +15,7 @@
 package il
 
 import (
+	"fmt"
 	"log"
 	"reflect"
 	"sort"
@@ -132,6 +133,8 @@ type ResourceNode struct {
 	Properties *BoundMapProperty
 	// Timeouts is the bound set of timeout data, if any.
 	Timeouts *BoundMapProperty
+	// IgnoreChanges is the bound list of properties with ignored changes, if any.
+	IgnoreChanges []string
 }
 
 // An OutputNode is the analyzed form of an output in a Terraform configuration. An OutputNode may never be referenced
@@ -612,6 +615,76 @@ func (b *builder) ensureProvider(r *ResourceNode) error {
 	return nil
 }
 
+// buildIgnoreChanges converts the list of ignored properties from Terraform's ignore_changes syntax to Pulumi's
+// ignoreChanges syntax.
+func buildIgnoreChanges(tfIgnoreChanges []string, schemas Schemas) []string {
+	if len(tfIgnoreChanges) == 0 {
+		return nil
+	}
+
+	ignoreChanges := make([]string, 0, len(tfIgnoreChanges))
+	for _, entry := range tfIgnoreChanges {
+		// Split the ignore_changes entry on '.'
+		elements := strings.Split(entry, ".")
+
+		// If there is one element and that element is "*", ignore all of the top-level properties.
+		if len(elements) == 0 && elements[0] == "*" {
+			if schemas.TFRes == nil {
+				return []string{"*"}
+			}
+
+			ignoreChanges = ignoreChanges[:0]
+			for k, v := range schemas.TFRes.Schema {
+				ignoreChanges = append(ignoreChanges, tfbridge.TerraformToPulumiName(k, v, false))
+			}
+			return ignoreChanges
+		}
+
+		// Otherwise, convert the entry to an appropriate set of ignores. Note that this process is approximate in the
+		// case of Set-typed properties, as we cannot compute set element indices without fully-known configuration and
+		// state.
+		elemSchemas, path := schemas, ""
+		for i, element := range elements {
+			// For the last element, we only need a prefix match. Take care of that here.
+			if i == len(elements)-1 && elemSchemas.TFRes != nil {
+				for k, v := range elemSchemas.TFRes.Schema {
+					if strings.HasPrefix(k, element) {
+						elementKey := tfbridge.TerraformToPulumiName(k, v, false)
+						if path == "" {
+							ignoreChanges = append(ignoreChanges, elementKey)
+						} else {
+							ignoreChanges = append(ignoreChanges, path+"."+elementKey)
+						}
+					}
+				}
+			} else {
+				isListElement := elemSchemas.Type().IsList()
+				projectListElement := isListElement && tfbridge.IsMaxItemsOne(elemSchemas.TF, elemSchemas.Pulumi)
+
+				elemSchemas = elemSchemas.PropertySchemas(element)
+				if isListElement {
+					// If we're projecting the list element, just skip this path element entirely.
+					if !projectListElement {
+						path = fmt.Sprintf("%s[%s]", path, element)
+					}
+				} else {
+					elementKey := tfbridge.TerraformToPulumiName(element, elemSchemas.TF, false)
+					if path == "" {
+						path = elementKey
+					} else {
+						path += "." + elementKey
+					}
+				}
+
+				if i == len(elements)-1 {
+					ignoreChanges = append(ignoreChanges, path)
+				}
+			}
+		}
+	}
+	return ignoreChanges
+}
+
 // buildResource binds a resource's properties (including its count property) and computes its dependency edges.
 func (b *builder) buildResource(r *ResourceNode) error {
 	if err := b.ensureProvider(r); err != nil {
@@ -660,6 +733,9 @@ func (b *builder) buildResource(r *ResourceNode) error {
 		}
 		r.Timeouts = timeoutsMap
 	}
+
+	// Process ignore_changes.
+	r.IgnoreChanges = buildIgnoreChanges(r.Config.Lifecycle.IgnoreChanges, r.Schemas())
 
 	// Merge the count dependencies into the overall dependency set and compute the final dependency lists.
 	for k := range countDeps {

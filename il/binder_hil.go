@@ -331,6 +331,12 @@ func (b *propertyBinder) bindVariableAccess(n *ast.VariableAccess) (BoundExpr, e
 			v.Multi, v.Index = true, 0
 		}
 
+		// If this access refers to a non-counted resource but is a multi-access or an index, treat it as if it is
+		// a normal access.
+		if r.Count == nil && v.Multi {
+			v.Multi = false
+		}
+
 		// Handle multi-references (splats and indexes).
 		exprType = elemSch.Type().OutputOf()
 		if v.Multi && v.Index == -1 {
