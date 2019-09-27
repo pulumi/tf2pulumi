@@ -666,7 +666,7 @@ func (g *generator) generateResource(r *il.ResourceNode) error {
 
 	if r.Timeouts != nil {
 		buf := &bytes.Buffer{}
-		g.Fgenf(buf, "timeouts: %s", r.Timeouts)
+		g.Fgenf(buf, "timeouts: %v", r.Timeouts)
 		resourceOptions = append(resourceOptions, buf.String())
 	}
 
