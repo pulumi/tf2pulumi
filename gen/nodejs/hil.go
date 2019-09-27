@@ -360,7 +360,7 @@ func (g *generator) GenCall(w io.Writer, n *il.BoundCall) {
 		pat := (interface{})(n.Args[1])
 		if lit, ok := pat.(*il.BoundLiteral); ok && lit.Type() == il.TypeString {
 			patStr := lit.Value.(string)
-			if len(patStr) > 1 && patStr[0] == '/' && patStr[1] == '/' {
+			if len(patStr) > 1 && patStr[0] == '/' && patStr[len(patStr)-1] == '/' {
 				pat = patStr
 			}
 		}
