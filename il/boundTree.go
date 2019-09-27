@@ -168,11 +168,13 @@ type BoundArithmetic struct {
 	NodeComments *Comments
 	// Exprs is the bound list of the arithmetic expression's operands.
 	Exprs []BoundExpr
+	// ExprType is the type of the arithmetic expression.
+	ExprType Type
 }
 
-// Type returns the type of the arithmetic expression, which is always TypeNumber.
+// Type returns the type of the arithmetic expression.
 func (n *BoundArithmetic) Type() Type {
-	return TypeNumber
+	return n.ExprType
 }
 
 // Comments returns the comments attached to this node, if any.

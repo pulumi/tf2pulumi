@@ -29,7 +29,18 @@ func (b *propertyBinder) bindArithmetic(n *ast.Arithmetic) (BoundExpr, error) {
 		return nil, err
 	}
 
-	return &BoundArithmetic{HILNode: n, Exprs: exprs}, nil
+	var typ Type
+	switch n.Op {
+	case ast.ArithmeticOpLogicalAnd, ast.ArithmeticOpLogicalOr,
+		ast.ArithmeticOpEqual, ast.ArithmeticOpNotEqual,
+		ast.ArithmeticOpLessThan, ast.ArithmeticOpLessThanOrEqual,
+		ast.ArithmeticOpGreaterThan, ast.ArithmeticOpGreaterThanOrEqual:
+		typ = TypeBool
+	default:
+		typ = TypeNumber
+	}
+
+	return &BoundArithmetic{HILNode: n, Exprs: exprs, ExprType: typ}, nil
 }
 
 // bindCall binds an HIL call expression. This involves binding the call's arguments, then using the name of the called

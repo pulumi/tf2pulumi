@@ -86,6 +86,8 @@ type generator struct {
 	promptDataSources map[*il.ResourceNode]bool
 	// importNames is the set of names used by package imports.
 	importNames map[string]bool
+	// conditionalResources is a table of resources that are instantiated at most once.
+	conditionalResources map[*il.ResourceNode]bool
 }
 
 // isLegalIdentifierStart returns true if it is legal for c to be the first character of a JavaScript identifier as per
@@ -191,6 +193,12 @@ func (g *generator) resourceMode(n *il.BoundVariableAccess) config.ResourceMode 
 	}
 
 	return n.ILNode.(*il.ResourceNode).Config.Mode
+}
+
+// isConditionalResource returns true if the given resource is conditionally-instantiated (i.e. the count is a boolean
+// value).
+func (g *generator) isConditionalResource(r *il.ResourceNode) bool {
+	return g.conditionalResources[r]
 }
 
 // genError generates code for a node that represents a binding error.
@@ -421,6 +429,9 @@ func (g *generator) BeginModule(m *il.Graph) error {
 		g.promptDataSources = il.MarkPromptDataSources(m)
 	}
 
+	// Find all conditional resources.
+	g.conditionalResources = il.MarkConditionalResources(m)
+
 	// Compute unambiguous names for this module's top-level nodes.
 	g.nameTable = assignNames(m, g.importNames, g.isRoot())
 	return nil
@@ -600,6 +611,22 @@ func resourceTypeName(r *il.ResourceNode) (string, string, string, error) {
 	return provider, module, memberName, nil
 }
 
+// makeResourceName returns the expression that should be emitted for a resource's "name" parameter given its base name
+// and the count variable name, if any.
+func (g *generator) makeResourceName(baseName, count string) string {
+	if g.isRoot() {
+		if count == "" {
+			return fmt.Sprintf(`"%s"`, baseName)
+		}
+		return fmt.Sprintf("`%s-${%s}`", baseName, count)
+	}
+	baseName = fmt.Sprintf("${mod_name}_%s", baseName)
+	if count == "" {
+		return fmt.Sprintf("`%s`", baseName)
+	}
+	return fmt.Sprintf("`%s-${%s}`", baseName, count)
+}
+
 // generateResource handles the generation of instantiations of non-builtin resources.
 func (g *generator) generateResource(r *il.ResourceNode) error {
 	provider, module, memberName, err := resourceTypeName(r)
@@ -625,7 +652,11 @@ func (g *generator) generateResource(r *il.ResourceNode) error {
 			}
 			depRes := n.(*il.ResourceNode)
 			if depRes.Count != nil {
-				fmt.Fprintf(buf, "...")
+				if g.isConditionalResource(depRes) {
+					fmt.Fprintf(buf, "!")
+				} else {
+					fmt.Fprintf(buf, "...")
+				}
 			}
 			fmt.Fprintf(buf, "%s", g.nodeName(depRes))
 		}
@@ -660,13 +691,7 @@ func (g *generator) generateResource(r *il.ResourceNode) error {
 		}
 
 		if r.Config.Mode == config.ManagedResourceMode {
-			var resName string
-			if len(g.module.Tree.Path()) == 0 {
-				resName = fmt.Sprintf("\"%s\"", r.Config.Name)
-			} else {
-				resName = fmt.Sprintf("`${mod_name}_%s`", r.Config.Name)
-			}
-
+			resName := g.makeResourceName(r.Config.Name, "")
 			g.Printf("%sconst %s = new %s(%s, %s%s);", g.Indent, name, qualifiedMemberName, resName, inputs, optionsBag)
 		} else {
 			// TODO: explicit dependencies
@@ -681,6 +706,73 @@ func (g *generator) generateResource(r *il.ResourceNode) error {
 
 			g.Printf(fmtstr, g.Indent, name, inputs)
 		}
+	} else if g.isConditionalResource(r) {
+		// If this is a confitional resource, we need to generate a resource that is instantiated inside an if statement.
+
+		// If this resource's properties reference its count, we need to generate its code slightly differently:
+		// a) We need to assign the value of the count to a local s.t. the properties have something to reference
+		// b) We want to avoid changing the type of the count if it is not a boolean so that downstream code does not
+		//    require changes.
+		hasCountReference, countVariableName := false, ""
+		_, err = il.VisitBoundNode(properties, il.IdentityVisitor, func(n il.BoundNode) (il.BoundNode, error) {
+			if n, ok := n.(*il.BoundVariableAccess); ok {
+				_, isCountVar := n.TFVar.(*config.CountVariable)
+				hasCountReference = hasCountReference || isCountVar
+			}
+			return n, nil
+		})
+		contract.Assert(err == nil)
+
+		// If the resource's properties do not reference the count, we can simplify the condition expression for
+		// cleaner-looking code. We don't do this if the count is referenced because it can change the type of the
+		// expression (e.g. from a number to a boolean, if the number is statically coerceable to a boolean).
+		count := r.Count
+		if !hasCountReference {
+			count = il.SimplifyBooleanExpressions(count.(il.BoundExpr))
+		}
+		condition, _, err := g.computeProperty(count, false, "")
+		if err != nil {
+			return err
+		}
+
+		// If the resoure's properties reference the count, assign its value to a local s.t. the properties have
+		// something to refer to.
+		if hasCountReference {
+			countVariableName = fmt.Sprintf("create%s", title(name))
+			g.Printf("%sconst %s = %s;\n", g.Indent, countVariableName, condition)
+			condition = countVariableName
+		}
+
+		inputs, transformed, err := g.computeProperty(properties, true, countVariableName)
+		if err != nil {
+			return err
+		}
+
+		g.Printf("%slet %s: %s | undefined;\n", g.Indent, name, qualifiedMemberName)
+		ifFmt := "%sif (%s) {\n"
+		if count.Type() != il.TypeBool {
+			ifFmt = "%sif (!!(%s)) {\n"
+		}
+		g.Printf(ifFmt, g.Indent, condition)
+		g.Indented(func() {
+			if r.Config.Mode == config.ManagedResourceMode {
+				resName := g.makeResourceName(r.Config.Name, "")
+				g.Printf("%s%s = new %s(%s, %s%s);\n", g.Indent, name, qualifiedMemberName, resName, inputs, optionsBag)
+			} else {
+				// TODO: explicit dependencies
+
+				// If the input properties did not contain any outputs, then we need to wrap the result in a call to pulumi.output.
+				// Otherwise, we are okay as-is: the apply rewrite perfomed by computeProperty will have ensured that the result
+				// is output-typed.
+				fmtstr := "%s%s = pulumi.output(%s);\n"
+				if g.promptDataSources[r] || transformed {
+					fmtstr = "%s%s = %s;\n"
+				}
+
+				g.Printf(fmtstr, g.Indent, name, inputs)
+			}
+		})
+		g.Printf("%s}", g.Indent)
 	} else {
 		// Otherwise we need to Generate multiple resources in a loop.
 		count, _, err := g.computeProperty(r.Count, false, "")
@@ -705,8 +797,9 @@ func (g *generator) generateResource(r *il.ResourceNode) error {
 		g.Printf("%sfor (let i = 0; i < %s; i++) {\n", g.Indent, count)
 		g.Indented(func() {
 			if r.Config.Mode == config.ManagedResourceMode {
-				g.Printf("%s%s.push(new %s(`%s-${i}`, %s%s));\n", g.Indent, name, qualifiedMemberName, r.Config.Name,
-					inputs, optionsBag)
+				resName := g.makeResourceName(r.Config.Name, "i")
+				g.Printf("%s%s.push(new %s(%s, %s%s));\n", g.Indent, name, qualifiedMemberName, resName, inputs,
+					optionsBag)
 			} else {
 				// TODO: explicit dependencies
 

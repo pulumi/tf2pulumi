@@ -7,6 +7,7 @@
 - Add a command line option, `-record-locations`, that indicates that each resource, data source, etc. in the
   generated code should be annotated with the location of its original definition in the source Terraform config.
 - Fix code generation for `replace` when the pattern is a regex.
+- Generate resources that are instantiated at most exactly once using `if` statements rather than `for` loops.
 
 ## v0.5.1 (Released August 14, 2019)
 

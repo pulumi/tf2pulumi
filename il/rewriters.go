@@ -280,3 +280,113 @@ func MarkPromptDataSources(g *Graph) map[*ResourceNode]bool {
 	}
 
 }
+
+// isBooleanValue rerturns true if the given expression produces a value that can be considered to be true or false.
+func isBooleanValue(expr BoundExpr) bool {
+	// Any expression that is boolean-typed is by definition a boolean value.
+	if expr.Type() == TypeBool {
+		return true
+	}
+
+	switch expr := expr.(type) {
+	case *BoundConditional:
+		// The result of a conditional is a boolean value if both legs of the expression are boolean values.
+		return isBooleanValue(expr.TrueExpr) && isBooleanValue(expr.FalseExpr)
+	case *BoundLiteral:
+		// A literal is a boolean value if it can be successfully coerced to a boolean value.
+		_, ok := coerceLiteral(expr, expr.Type(), TypeBool)
+		return ok
+	case *BoundVariableAccess:
+		// A variable access is a boolean value if it is a local whose value is a boolean value.
+		local, ok := expr.ILNode.(*LocalNode)
+		if !ok {
+			return false
+		}
+		if valueExpr, ok := local.Value.(BoundExpr); ok {
+			return isBooleanValue(valueExpr)
+		}
+		return false
+	default:
+		// All other expressions--arithmetic expressions, calls, index expressions, and output expressions--are not
+		// considered as producing boolean values. Note that this could be improved in order to catch additional cases.
+		return false
+	}
+}
+
+// isConditionalResource returns true if the given resource is a counted resource that is instantiated exactly 0 or 1
+// times.
+func isConditionalResource(r *ResourceNode) bool {
+	countExpr, ok := r.Count.(BoundExpr)
+	return ok && isBooleanValue(countExpr)
+}
+
+// MarkConditionalResources finds all resources and data sources with a count that is known to be either 0 or 1
+// (this includes counts that are coerced from boolean values).
+func MarkConditionalResources(g *Graph) map[*ResourceNode]bool {
+	conditionalResources := make(map[*ResourceNode]bool)
+	for _, r := range g.Resources {
+		if isConditionalResource(r) {
+			conditionalResources[r] = true
+		}
+	}
+	return conditionalResources
+}
+
+// isBooleanLiteral checks to see if a BoundExpr is a boolean literal. If so, it returns the BoundLiteral.
+func isBooleanLiteral(expr BoundExpr) (*BoundLiteral, bool) {
+	if lit, ok := expr.(*BoundLiteral); ok {
+		if _, ok = lit.Value.(bool); ok {
+			return lit, ok
+		}
+	}
+	return nil, false
+}
+
+// SimplifyBooleanExpressions recursively simplifies conditional and literal expressions with statically known values.
+//
+// Note that this will convert a top-level literal that is coerceable to a boolean into a boolean literal, so this
+// function should only be called if the resulting expression can be boolean-typed.
+func SimplifyBooleanExpressions(expr BoundExpr) BoundExpr {
+	switch expr := expr.(type) {
+	case *BoundConditional:
+		// If the conditional expression simplifies to a boolean literal, we can replace the entire conditional
+		// expression with the literal value.
+		condExpr := SimplifyBooleanExpressions(expr.CondExpr)
+		if lit, ok := isBooleanLiteral(condExpr); ok {
+			return lit
+		}
+
+		trueExpr := SimplifyBooleanExpressions(expr.TrueExpr)
+		falseExpr := SimplifyBooleanExpressions(expr.FalseExpr)
+
+		trueLit, hasTrueLit := isBooleanLiteral(trueExpr)
+		falseLit, hasFalseLit := isBooleanLiteral(falseExpr)
+
+		if hasTrueLit && hasFalseLit {
+			trueVal, falseVal := trueLit.Value.(bool), falseLit.Value.(bool)
+
+			// If both legs of the conditional resolve to boolean literals and those literals are the same value, we
+			// can simplify the entire expression to the resolved literal.
+			if trueVal == falseVal {
+				return trueLit
+			}
+
+			// Otherwise, we can simplify to the condition expression itself if the true leg resolves to the literal
+			// "true" and the false leg resolves to the literal "false".
+			if trueVal && !falseVal {
+				return condExpr
+			}
+		}
+
+		expr.CondExpr, expr.TrueExpr, expr.FalseExpr = condExpr, trueExpr, falseExpr
+		return expr
+	case *BoundLiteral:
+		// If this literal
+		if boolLit, ok := coerceLiteral(expr, expr.Type(), TypeBool); ok {
+			return boolLit
+		}
+		return expr
+	default:
+		return expr
+	}
+}

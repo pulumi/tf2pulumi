@@ -490,6 +490,14 @@ func (g *generator) GenVariableAccess(w io.Writer, n *il.BoundVariableAccess) {
 	case *config.ResourceVariable:
 		// We only generate up to the "output" part of the path here: the apply transform will take care of the rest.
 		g.Fgen(w, g.variableName(n))
+
+		// If this references a conditional resource, pretend it is not a multi access and generate an assertion
+		// expression.
+		if r, ok := n.ILNode.(*il.ResourceNode); ok && g.isConditionalResource(r) {
+			v.Multi = false
+			g.Fgen(w, "!")
+		}
+
 		if v.Multi && v.Index != -1 {
 			g.Fgenf(w, "[%d]", v.Index)
 		}
