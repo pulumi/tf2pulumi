@@ -1,5 +1,7 @@
 ## HEAD (Unreleased)
 
+## v0.6.0 (Released September 30, 2019)
+
 - Fix bad code generation for variable accesses that involve index expressions or optional properties.
 - Support first-class providers when targeting Node.JS.
 - Fix ordering for resources and module instantiations with explicit providers.
