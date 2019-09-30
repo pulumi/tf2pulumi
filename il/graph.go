@@ -637,6 +637,7 @@ func buildIgnoreChanges(tfIgnoreChanges []string, schemas Schemas) []string {
 			for k, v := range schemas.TFRes.Schema {
 				ignoreChanges = append(ignoreChanges, tfbridge.TerraformToPulumiName(k, v, false))
 			}
+			sort.Strings(ignoreChanges)
 			return ignoreChanges
 		}
 
@@ -682,6 +683,7 @@ func buildIgnoreChanges(tfIgnoreChanges []string, schemas Schemas) []string {
 			}
 		}
 	}
+	sort.Strings(ignoreChanges)
 	return ignoreChanges
 }
 
