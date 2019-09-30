@@ -68,9 +68,8 @@ type Node interface {
 
 	// Dependencies returns the list of nodes the node depends on.
 	Dependencies() []Node
-	// sortKey returns the key that should be used when sorting this node (e.g. to ensure a stable order for code
-	// generation).
-	sortKey() string
+	// ID returns the unique ID for this node.
+	ID() string
 	// displayName returns the display name of this node
 	displayName() string
 }
@@ -181,12 +180,16 @@ func (m *ModuleNode) Dependencies() []Node {
 	return m.Deps
 }
 
-func (m *ModuleNode) sortKey() string {
+func (m *ModuleNode) ID() string {
 	return "m" + m.Config.Name
 }
 
 func (m *ModuleNode) displayName() string {
 	return "module " + m.Config.Name
+}
+
+func (m *ModuleNode) GetLocation() token.Pos {
+	return m.Location
 }
 
 func (m *ModuleNode) setLocation(l token.Pos) {
@@ -202,12 +205,16 @@ func (p *ProviderNode) Dependencies() []Node {
 	return p.Deps
 }
 
-func (p *ProviderNode) sortKey() string {
-	return "p" + p.Config.Name
+func (p *ProviderNode) ID() string {
+	return "p" + p.Config.FullName()
 }
 
 func (p *ProviderNode) displayName() string {
-	return "provider " + p.Config.Name
+	return "provider " + p.Config.FullName()
+}
+
+func (p *ProviderNode) GetLocation() token.Pos {
+	return p.Location
 }
 
 func (p *ProviderNode) setLocation(l token.Pos) {
@@ -268,12 +275,16 @@ func (r *ResourceNode) Tok() (string, bool) {
 	}
 }
 
-func (r *ResourceNode) sortKey() string {
+func (r *ResourceNode) ID() string {
 	return "r" + r.Config.Id()
 }
 
 func (r *ResourceNode) displayName() string {
 	return "resource " + r.Config.Id()
+}
+
+func (r *ResourceNode) GetLocation() token.Pos {
+	return r.Location
 }
 
 func (r *ResourceNode) setLocation(l token.Pos) {
@@ -289,12 +300,16 @@ func (o *OutputNode) Dependencies() []Node {
 	return o.Deps
 }
 
-func (o *OutputNode) sortKey() string {
+func (o *OutputNode) ID() string {
 	return "o" + o.Config.Name
 }
 
 func (o *OutputNode) displayName() string {
 	return "output " + o.Config.Name
+}
+
+func (o *OutputNode) GetLocation() token.Pos {
+	return o.Location
 }
 
 func (o *OutputNode) setLocation(l token.Pos) {
@@ -310,12 +325,16 @@ func (l *LocalNode) Dependencies() []Node {
 	return l.Deps
 }
 
-func (l *LocalNode) sortKey() string {
+func (l *LocalNode) ID() string {
 	return "l" + l.Config.Name
 }
 
 func (l *LocalNode) displayName() string {
 	return "local " + l.Config.Name
+}
+
+func (l *LocalNode) GetLocation() token.Pos {
+	return l.Location
 }
 
 func (l *LocalNode) setLocation(loc token.Pos) {
@@ -331,12 +350,16 @@ func (v *VariableNode) Dependencies() []Node {
 	return nil
 }
 
-func (v *VariableNode) sortKey() string {
+func (v *VariableNode) ID() string {
 	return "v" + v.Config.Name
 }
 
 func (v *VariableNode) displayName() string {
 	return "variable " + v.Config.Name
+}
+
+func (v *VariableNode) GetLocation() token.Pos {
+	return v.Location
 }
 
 func (v *VariableNode) setLocation(l token.Pos) {
@@ -463,22 +486,6 @@ func (b *builder) bindProperties(name string, raw *config.RawConfig, sch Schemas
 	return v.(*BoundMapProperty), deps, nil
 }
 
-// sortableNodes is a helper type that allows a slice of nodes to be passed to sort.Sort. This is used e.g. to ensure a
-// consistent order for a node's dependency list.
-type sortableNodes []Node
-
-func (sn sortableNodes) Len() int {
-	return len(sn)
-}
-
-func (sn sortableNodes) Less(i, j int) bool {
-	return sn[i].sortKey() < sn[j].sortKey()
-}
-
-func (sn sortableNodes) Swap(i, j int) {
-	sn[i], sn[j] = sn[j], sn[i]
-}
-
 // buildDeps calculates the union of a node's implicit and explicit dependencies. It returns this union as a list of
 // Nodes as well as the list of the node's explicit dependencies. This function will fail if a node referenced in the
 // list of explicit dependencies is not present in the graph.
@@ -508,8 +515,6 @@ func (b *builder) buildDeps(deps map[Node]struct{}, dependsOn []string, provider
 	for n := range deps {
 		allDeps = append(allDeps, n)
 	}
-
-	sort.Sort(sortableNodes(allDeps))
 
 	return allDeps, explicitDeps, nil
 }

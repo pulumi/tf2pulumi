@@ -8,6 +8,8 @@
   generated code should be annotated with the location of its original definition in the source Terraform config.
 - Fix code generation for `replace` when the pattern is a regex.
 - Generate resources that are instantiated at most exactly once using `if` statements rather than `for` loops.
+- Improve the generated code so that resources are generated in source order except where their dependencies dictate
+  otherwise.
 
 ## v0.5.1 (Released August 14, 2019)
 

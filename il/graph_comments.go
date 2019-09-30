@@ -29,6 +29,7 @@ import (
 
 // locatable is an interface shared by the IL's top-level nodes.
 type locatable interface {
+	GetLocation() token.Pos
 	setLocation(p token.Pos)
 }
 
