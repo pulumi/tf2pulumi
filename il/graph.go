@@ -628,7 +628,7 @@ func buildIgnoreChanges(tfIgnoreChanges []string, schemas Schemas) []string {
 		elements := strings.Split(entry, ".")
 
 		// If there is one element and that element is "*", ignore all of the top-level properties.
-		if len(elements) == 0 && elements[0] == "*" {
+		if len(elements) == 1 && elements[0] == "*" {
 			if schemas.TFRes == nil {
 				return []string{"*"}
 			}
