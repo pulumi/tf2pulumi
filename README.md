@@ -180,27 +180,33 @@ import * as aws from "@pulumi/aws";
 import * as fs from "fs";
 
 const config = new pulumi.Config();
-const var_aws_amis = config.get("awsAmis") || {
+const awsRegion = config.get("awsRegion") || "us-east-1";
+// Amazon Linux 2018.03
+const awsAmis = config.get("awsAmis") || {
     "us-east-1": "ami-0ff8a91507f77f867",
     "us-west-2": "ami-a0cfeed8",
 };
-const var_aws_region = config.get("awsRegion") || "us-east-1";
 
-const aws_security_group_default = new aws.ec2.SecurityGroup("default", {
+// Our default security group to access
+// the instances over SSH and HTTP
+const defaultSecurityGroup = new aws.ec2.SecurityGroup("default", {
     description: "Used in the terraform",
+    // outbound internet access
     egress: [{
         cidrBlocks: ["0.0.0.0/0"],
         fromPort: 0,
         protocol: "-1",
         toPort: 0,
     }],
-    ingress: 
+    ingress: [
+        // SSH access from anywhere
         {
             cidrBlocks: ["0.0.0.0/0"],
             fromPort: 22,
             protocol: "tcp",
             toPort: 22,
         },
+        // HTTP access from anywhere
         {
             cidrBlocks: ["0.0.0.0/0"],
             fromPort: 80,
@@ -208,23 +214,31 @@ const aws_security_group_default = new aws.ec2.SecurityGroup("default", {
             toPort: 80,
         },
     ],
+    name: "eip_example",
 });
-const aws_instance_web = new aws.ec2.Instance("web", {
-    ami: (<any>var_aws_amis)[var_aws_region],
+const web = new aws.ec2.Instance("web", {
+    // Lookup the correct AMI based on the region
+    // we specified
+    ami: (<any>awsAmis)[awsRegion],
     instanceType: "t2.micro",
-    securityGroups: [aws_security_group_default.name],
+    // Our Security group to allow HTTP and SSH access
+    securityGroups: [defaultSecurityGroup.name],
+    //Instance tags
     tags: {
         Name: "eip-example",
     },
+    // We run a remote provisioner on the instance after creating it.
+    // In this case, we just install nginx and start it. By default,
+    // this should be on port 80
     userData: fs.readFileSync("userdata.sh", "utf-8"),
 });
-const aws_eip_default = new aws.ec2.Eip("default", {
-    instance: aws_instance_web.id,
+const defaultEip = new aws.ec2.Eip("default", {
+    instance: web.id,
     vpc: true,
 });
 
-export const address = aws_instance_web.privateIp;
-export const elastic_ip = aws_eip_default.publicIp;
+export const address = web.privateIp;
+export const elastic_ip = defaultEip.publicIp;
 ```
 
 The Terraform variables have been converted to Pulumi config values, the resources to calls to the
