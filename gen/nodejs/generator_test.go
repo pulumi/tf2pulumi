@@ -210,3 +210,22 @@ func TestConditionals(t *testing.T) {
 	expectedText := readFile(t, "testdata/test_conditionals/index.ts")
 	assert.Equal(t, expectedText, b.String())
 }
+
+func TestMetaProperties(t *testing.T) {
+	conf := loadConfig(t, "testdata/test_meta_properties")
+	g, err := il.BuildGraph(module.NewTree("main", conf), &il.BuildOptions{
+		AllowMissingProviders: true,
+	})
+	if err != nil {
+		t.Fatalf("could not build graph: %v", err)
+	}
+
+	var b bytes.Buffer
+	lang, err := New("main", "1.0.0", true, &b)
+	assert.NoError(t, err)
+	err = gen.Generate([]*il.Graph{g}, lang)
+	assert.NoError(t, err)
+
+	expectedText := readFile(t, "testdata/test_meta_properties/index.ts")
+	assert.Equal(t, expectedText, b.String())
+}

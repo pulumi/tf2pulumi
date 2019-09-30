@@ -10,6 +10,7 @@
 - Generate resources that are instantiated at most exactly once using `if` statements rather than `for` loops.
 - Improve the generated code so that resources are generated in source order except where their dependencies dictate
   otherwise.
+- Add support for the `timeouts` and `ignore_changes` properties.
 
 ## v0.5.1 (Released August 14, 2019)
 

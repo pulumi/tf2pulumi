@@ -664,6 +664,25 @@ func (g *generator) generateResource(r *il.ResourceNode) error {
 		resourceOptions = append(resourceOptions, buf.String())
 	}
 
+	if r.Timeouts != nil {
+		buf := &bytes.Buffer{}
+		g.Fgenf(buf, "timeouts: %v", r.Timeouts)
+		resourceOptions = append(resourceOptions, buf.String())
+	}
+
+	if len(r.IgnoreChanges) != 0 {
+		buf := &bytes.Buffer{}
+		fmt.Fprintf(buf, "ignoreChanges: [")
+		for i, ic := range r.IgnoreChanges {
+			if i > 0 {
+				fmt.Fprintf(buf, ", ")
+			}
+			fmt.Fprintf(buf, "\"%s\"", ic)
+		}
+		fmt.Fprintf(buf, "]")
+		resourceOptions = append(resourceOptions, buf.String())
+	}
+
 	optionsBag := ""
 	if len(resourceOptions) != 0 {
 		optionsBag = fmt.Sprintf("{%s}", strings.Join(resourceOptions, ","))
