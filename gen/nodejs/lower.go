@@ -38,7 +38,7 @@ func (g *generator) lowerToLiterals(prop il.BoundNode) (il.BoundNode, error) {
 
 		switch pv.Type {
 		case config.PathValueModule:
-			path := g.module.Tree.Config().Dir
+			path := g.module.Path
 
 			// Attempt to make this path relative to that of the root module.
 			rel, err := filepath.Rel(g.rootPath, path)

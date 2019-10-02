@@ -24,7 +24,6 @@ import (
 
 	"github.com/hashicorp/hcl/hcl/token"
 	"github.com/hashicorp/terraform/command"
-	"github.com/hashicorp/terraform/config"
 	"github.com/hashicorp/terraform/config/module"
 	"github.com/hashicorp/terraform/svchost"
 	"github.com/hashicorp/terraform/svchost/auth"
@@ -117,7 +116,7 @@ func Convert(opts Options) error {
 		filterAutoNames := opts.ResourceNameProperty == ""
 		for _, g := range gs {
 			for _, r := range g.Resources {
-				if r.Config.Mode == config.ManagedResourceMode {
+				if !r.IsDataSource {
 					il.FilterProperties(r, func(key string, _ il.BoundNode) bool {
 						if filterAutoNames {
 							sch := r.Schemas().PropertySchemas(key).Pulumi

@@ -184,15 +184,15 @@ func (g *generator) variableName(n *il.BoundVariableAccess) string {
 	}
 }
 
-func (g *generator) resourceMode(n *il.BoundVariableAccess) config.ResourceMode {
+func (g *generator) isDataSourceAccess(n *il.BoundVariableAccess) bool {
 	contract.Assert(n.TFVar.(*config.ResourceVariable) != nil)
 
 	// If this access refers to a missing variable, assume that we are dealing with a managed resource.
 	if n.IsMissingVariable() {
-		return config.ManagedResourceMode
+		return false
 	}
 
-	return n.ILNode.(*il.ResourceNode).Config.Mode
+	return n.ILNode.(*il.ResourceNode).IsDataSource
 }
 
 // isConditionalResource returns true if the given resource is conditionally-instantiated (i.e. the count is a boolean
@@ -268,7 +268,7 @@ func (g *generator) computeProperty(prop il.BoundNode, indent bool, count string
 
 // isRoot returns true if we are generating code for the root module.
 func (g *generator) isRoot() bool {
-	return len(g.module.Tree.Path()) == 0
+	return g.module.IsRoot
 }
 
 // genLeadingComment generates a leading comment into the output.
@@ -301,8 +301,8 @@ func (g *generator) genTrailingComment(w io.Writer, comments *il.Comments) {
 func (g *generator) GeneratePreamble(modules []*il.Graph) error {
 	// Find the root module and stash its path.
 	for _, m := range modules {
-		if len(m.Tree.Path()) == 0 {
-			g.rootPath = m.Tree.Config().Dir
+		if m.IsRoot {
+			g.rootPath = m.Path
 			break
 		}
 	}
@@ -383,7 +383,7 @@ func (g *generator) BeginModule(m *il.Graph) error {
 	g.module = m
 	if !g.isRoot() {
 		g.Printf("const new_mod_%s = function(mod_name: string, mod_args: pulumi.Inputs) {\n",
-			cleanName(m.Tree.Name()))
+			cleanName(m.Name))
 		g.Indent += "    "
 
 		// Discover the set of input variables that may have unknown values. This is the complete set of inputs minus
@@ -462,7 +462,7 @@ func (g *generator) GenerateVariables(vs []*il.VariableNode) error {
 		g.Printf("const config = new pulumi.Config();\n")
 	}
 	for _, v := range vs {
-		configName := tsName(v.Config.Name, nil, nil, false)
+		configName := tsName(v.Name, nil, nil, false)
 		_, isUnknown := g.unknownInputs[v]
 
 		g.genLeadingComment(g, v.Comments)
@@ -535,7 +535,7 @@ func (g *generator) GenerateModule(m *il.ModuleNode) error {
 		return err
 	}
 
-	instanceName, modName := g.nodeName(m), cleanName(m.Config.Name)
+	instanceName, modName := g.nodeName(m), cleanName(m.Name)
 	g.genLeadingComment(g, m.Comments)
 	g.Printf("%sconst %s = new_mod_%s(\"%s\", %s);", g.Indent, instanceName, modName, instanceName, args)
 	g.genTrailingComment(g, m.Comments)
@@ -548,7 +548,7 @@ func (g *generator) GenerateModule(m *il.ModuleNode) error {
 // the appropriate provider constructor that is assigned to a local variable.
 func (g *generator) GenerateProvider(p *il.ProviderNode) error {
 	// If this provider has no alias, ignore it.
-	if p.Config.Alias == "" {
+	if p.Alias == "" {
 		return nil
 	}
 
@@ -563,10 +563,10 @@ func (g *generator) GenerateProvider(p *il.ProviderNode) error {
 	}
 
 	var resName string
-	if len(g.module.Tree.Path()) == 0 {
-		resName = fmt.Sprintf("\"%s\"", p.Config.Alias)
+	if g.isRoot() {
+		resName = fmt.Sprintf("\"%s\"", p.Alias)
 	} else {
-		resName = fmt.Sprintf("`${mod_name}_%s`", p.Config.Alias)
+		resName = fmt.Sprintf("`${mod_name}_%s`", p.Alias)
 	}
 
 	g.Printf("%sconst %s = new %s(%s, %s);", g.Indent, name, qualifiedMemberName, resName, inputs)
@@ -578,11 +578,11 @@ func (g *generator) GenerateProvider(p *il.ProviderNode) error {
 // resourceTypeName computes the NodeJS package, module, and type name for the given resource.
 func resourceTypeName(r *il.ResourceNode) (string, string, string, error) {
 	// Compute the resource type from the Terraform type.
-	underscore := strings.IndexRune(r.Config.Type, '_')
+	underscore := strings.IndexRune(r.Type, '_')
 	if underscore == -1 {
 		return "", "", "", errors.New("NYI: single-resource providers")
 	}
-	provider, resourceType := cleanName(r.Provider.PluginName), r.Config.Type[underscore+1:]
+	provider, resourceType := cleanName(r.Provider.PluginName), r.Type[underscore+1:]
 
 	// Convert the TF resource type into its Pulumi name.
 	memberName := tfbridge.TerraformToPulumiName(resourceType, nil, true)
@@ -638,12 +638,12 @@ func (g *generator) generateResource(r *il.ResourceNode) error {
 	}
 
 	var resourceOptions []string
-	if r.Provider.Config.Alias != "" {
+	if r.Provider.Alias != "" {
 		resourceOptions = append(resourceOptions, "provider: "+g.nodeName(r.Provider))
 	}
 
 	// Build the list of explicit deps, if any.
-	if len(r.ExplicitDeps) != 0 && r.Config.Mode == config.ManagedResourceMode {
+	if len(r.ExplicitDeps) != 0 && !r.IsDataSource {
 		buf := &bytes.Buffer{}
 		fmt.Fprintf(buf, "dependsOn: [")
 		for i, n := range r.ExplicitDeps {
@@ -694,7 +694,7 @@ func (g *generator) generateResource(r *il.ResourceNode) error {
 	// Because data sources are treated as normal function calls, we treat them a little bit differently by first
 	// rewriting them into calls to the `__dataSource` intrinsic.
 	properties := il.BoundNode(r.Properties)
-	if r.Config.Mode != config.ManagedResourceMode {
+	if r.IsDataSource {
 		properties = newDataSourceCall(qualifiedMemberName, properties, optionsBag)
 	}
 
@@ -709,8 +709,8 @@ func (g *generator) generateResource(r *il.ResourceNode) error {
 			return err
 		}
 
-		if r.Config.Mode == config.ManagedResourceMode {
-			resName := g.makeResourceName(r.Config.Name, "")
+		if !r.IsDataSource {
+			resName := g.makeResourceName(r.Name, "")
 			g.Printf("%sconst %s = new %s(%s, %s%s);", g.Indent, name, qualifiedMemberName, resName, inputs, optionsBag)
 		} else {
 			// TODO: explicit dependencies
@@ -774,8 +774,8 @@ func (g *generator) generateResource(r *il.ResourceNode) error {
 		}
 		g.Printf(ifFmt, g.Indent, condition)
 		g.Indented(func() {
-			if r.Config.Mode == config.ManagedResourceMode {
-				resName := g.makeResourceName(r.Config.Name, "")
+			if !r.IsDataSource {
+				resName := g.makeResourceName(r.Name, "")
 				g.Printf("%s%s = new %s(%s, %s%s);\n", g.Indent, name, qualifiedMemberName, resName, inputs, optionsBag)
 			} else {
 				// TODO: explicit dependencies
@@ -804,7 +804,7 @@ func (g *generator) generateResource(r *il.ResourceNode) error {
 		}
 
 		arrElementType := qualifiedMemberName
-		if r.Config.Mode == config.DataResourceMode {
+		if r.IsDataSource {
 			fmtStr := "pulumi.Output<%s%s.%sResult>"
 			if g.promptDataSources[r] {
 				fmtStr = "%s%s.%sResult"
@@ -815,8 +815,8 @@ func (g *generator) generateResource(r *il.ResourceNode) error {
 		g.Printf("%sconst %s: %s[] = [];\n", g.Indent, name, arrElementType)
 		g.Printf("%sfor (let i = 0; i < %s; i++) {\n", g.Indent, count)
 		g.Indented(func() {
-			if r.Config.Mode == config.ManagedResourceMode {
-				resName := g.makeResourceName(r.Config.Name, "i")
+			if !r.IsDataSource {
+				resName := g.makeResourceName(r.Name, "i")
 				g.Printf("%s%s.push(new %s(%s, %s%s));\n", g.Indent, name, qualifiedMemberName, resName, inputs,
 					optionsBag)
 			} else {
@@ -849,7 +849,7 @@ func (g *generator) GenerateResource(r *il.ResourceNode) error {
 	// If this resource's provider is one of the built-ins, perform whatever provider-specific code generation is
 	// required.
 	var err error
-	switch r.Provider.Config.Name {
+	switch r.Provider.Name {
 	case "archive":
 		err = g.generateArchive(r)
 	case "http":

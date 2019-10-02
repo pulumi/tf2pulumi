@@ -29,7 +29,7 @@ import (
 func (g *generator) computeHTTPInputs(r *il.ResourceNode, indent bool, count string) (string, error) {
 	urlProperty, ok := r.Properties.Elements["url"]
 	if !ok {
-		return "", errors.Errorf("missing required property \"url\" in resource %s", r.Config.Name)
+		return "", errors.Errorf("missing required property \"url\" in resource %s", r.Name)
 	}
 	url, _, err := g.computeProperty(urlProperty, indent, count)
 	if err != nil {
@@ -56,7 +56,7 @@ func (g *generator) computeHTTPInputs(r *il.ResourceNode, indent bool, count str
 
 // generateHTTP generates the given http resource as a call to request-promise-native's single exported function.
 func (g *generator) generateHTTP(r *il.ResourceNode) error {
-	contract.Require(r.Provider.Config.Name == "http", "r")
+	contract.Require(r.Provider.Name == "http", "r")
 
 	name := g.nodeName(r)
 
