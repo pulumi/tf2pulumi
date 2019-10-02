@@ -268,7 +268,7 @@ func (g *generator) computeProperty(prop il.BoundNode, indent bool, count string
 
 // isRoot returns true if we are generating code for the root module.
 func (g *generator) isRoot() bool {
-	return len(g.module.Tree.Path()) == 0
+	return g.module.IsRoot
 }
 
 // genLeadingComment generates a leading comment into the output.
@@ -301,8 +301,8 @@ func (g *generator) genTrailingComment(w io.Writer, comments *il.Comments) {
 func (g *generator) GeneratePreamble(modules []*il.Graph) error {
 	// Find the root module and stash its path.
 	for _, m := range modules {
-		if len(m.Tree.Path()) == 0 {
-			g.rootPath = m.Tree.Config().Dir
+		if m.IsRoot {
+			g.rootPath = m.Path
 			break
 		}
 	}
@@ -383,7 +383,7 @@ func (g *generator) BeginModule(m *il.Graph) error {
 	g.module = m
 	if !g.isRoot() {
 		g.Printf("const new_mod_%s = function(mod_name: string, mod_args: pulumi.Inputs) {\n",
-			cleanName(m.Tree.Name()))
+			cleanName(m.Name))
 		g.Indent += "    "
 
 		// Discover the set of input variables that may have unknown values. This is the complete set of inputs minus
@@ -563,7 +563,7 @@ func (g *generator) GenerateProvider(p *il.ProviderNode) error {
 	}
 
 	var resName string
-	if len(g.module.Tree.Path()) == 0 {
+	if g.isRoot() {
 		resName = fmt.Sprintf("\"%s\"", p.Config.Alias)
 	} else {
 		resName = fmt.Sprintf("`${mod_name}_%s`", p.Config.Alias)

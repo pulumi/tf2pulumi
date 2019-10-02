@@ -36,8 +36,12 @@ import (
 
 // A Graph is the analyzed form of the configuration for a single Terraform module.
 type Graph struct {
-	// Tree is the module's entry in the module tree. The tree is used e.g. to determine the module's name.
-	Tree *module.Tree
+	// Name is the name of the module. May be the empty string when IsRoot is true.
+	Name string
+	// IsRoot is true if this is the root module.
+	IsRoot bool
+	// Path is the path to this module's directory.
+	Path string
 	// Modules maps from module name to module node for this module's module instantiations. This map is used to
 	// bind a module variable access in an interpolation to the corresponding module node.
 	Modules map[string]*ModuleNode
@@ -936,7 +940,9 @@ func BuildGraph(tree *module.Tree, opts *BuildOptions) (*Graph, error) {
 
 	// Put the graph together
 	return &Graph{
-		Tree:      tree,
+		Name:      tree.Name(),
+		IsRoot:    len(tree.Path()) == 0,
+		Path:      conf.Dir,
 		Modules:   b.modules,
 		Providers: b.providers,
 		Resources: b.resources,

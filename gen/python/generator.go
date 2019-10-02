@@ -89,7 +89,7 @@ func (g *generator) GeneratePreamble(modules []*il.Graph) error {
 }
 
 func (g *generator) BeginModule(mod *il.Graph) error {
-	if len(mod.Tree.Path()) != 0 {
+	if !mod.IsRoot {
 		return errors.New("NYI: Python Modules")
 	}
 	return nil
