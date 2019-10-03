@@ -51,7 +51,6 @@ func TestLowerToLiteral(t *testing.T) {
 	prop := &il.BoundMapProperty{
 		Elements: map[string]il.BoundNode{
 			"key": &il.BoundOutput{
-				HILNode: nil,
 				Exprs: []il.BoundExpr{
 					&il.BoundLiteral{
 						ExprType: il.TypeString,

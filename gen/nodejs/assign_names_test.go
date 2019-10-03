@@ -18,7 +18,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/hashicorp/hil/ast"
 	"github.com/hashicorp/terraform/config"
 	"github.com/pulumi/pulumi-terraform/pkg/tfbridge"
 	"github.com/pulumi/pulumi/pkg/tokens"
@@ -195,7 +194,7 @@ func boundRef(v string, typ il.Type, node il.Node) *il.BoundVariableAccess {
 
 func applyArgRef(arg il.BoundExpr, index int) *il.BoundCall {
 	return &il.BoundCall{
-		HILNode:  &ast.Call{Func: "__applyArg"},
+		Func:     "__applyArg",
 		ExprType: arg.Type().ElementType(),
 		Args:     []il.BoundExpr{&il.BoundLiteral{ExprType: il.TypeNumber, Value: index}},
 	}

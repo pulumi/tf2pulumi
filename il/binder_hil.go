@@ -40,7 +40,7 @@ func (b *propertyBinder) bindArithmetic(n *ast.Arithmetic) (BoundExpr, error) {
 		typ = TypeNumber
 	}
 
-	return &BoundArithmetic{HILNode: n, Exprs: exprs, ExprType: typ}, nil
+	return &BoundArithmetic{Op: n.Op, Exprs: exprs, ExprType: typ}, nil
 }
 
 // bindCall binds an HIL call expression. This involves binding the call's arguments, then using the name of the called
@@ -117,7 +117,7 @@ func (b *propertyBinder) bindCall(n *ast.Call) (BoundExpr, error) {
 		err = errors.Errorf("NYI: call to %s", n.Func)
 	}
 
-	boundCall := &BoundCall{HILNode: n, ExprType: exprType, Args: args}
+	boundCall := &BoundCall{Func: n.Func, ExprType: exprType, Args: args}
 	if err != nil {
 		return &BoundError{Value: boundCall, NodeType: exprType, Error: err}, nil
 	}
@@ -147,7 +147,6 @@ func (b *propertyBinder) bindConditional(n *ast.Conditional) (BoundExpr, error) 
 	}
 
 	return &BoundConditional{
-		HILNode:   n,
 		ExprType:  exprType,
 		CondExpr:  condExpr,
 		TrueExpr:  trueExpr,
@@ -175,7 +174,6 @@ func (b *propertyBinder) bindIndex(n *ast.Index) (BoundExpr, error) {
 	}
 
 	return &BoundIndex{
-		HILNode:    n,
 		ExprType:   exprType,
 		TargetExpr: boundTarget,
 		KeyExpr:    boundKey,
@@ -214,7 +212,7 @@ func (b *propertyBinder) bindOutput(n *ast.Output) (BoundExpr, error) {
 		return exprs[0], nil
 	}
 
-	return &BoundOutput{HILNode: n, Exprs: exprs}, nil
+	return &BoundOutput{Exprs: exprs}, nil
 }
 
 // bindVariableAccess binds an HIL variable access expression. This involves first interpreting the variable name as a
@@ -246,7 +244,6 @@ func (b *propertyBinder) bindVariableAccess(n *ast.VariableAccess) (BoundExpr, e
 		if !ok {
 			if b.builder.allowMissingVariables {
 				return &BoundVariableAccess{
-					HILNode:  n,
 					ExprType: TypeUnknown,
 					TFVar:    v,
 				}, nil
@@ -267,7 +264,6 @@ func (b *propertyBinder) bindVariableAccess(n *ast.VariableAccess) (BoundExpr, e
 		if !ok {
 			if b.builder.allowMissingVariables {
 				return &BoundVariableAccess{
-					HILNode:  n,
 					ExprType: TypeUnknown.OutputOf(),
 					TFVar:    v,
 				}, nil
@@ -291,7 +287,6 @@ func (b *propertyBinder) bindVariableAccess(n *ast.VariableAccess) (BoundExpr, e
 		if !ok {
 			if b.builder.allowMissingVariables {
 				return &BoundVariableAccess{
-					HILNode:  n,
 					Elements: elements,
 					ExprType: TypeUnknown.OutputOf(),
 					TFVar:    v,
@@ -364,7 +359,6 @@ func (b *propertyBinder) bindVariableAccess(n *ast.VariableAccess) (BoundExpr, e
 		if !ok {
 			if b.builder.allowMissingVariables {
 				return &BoundVariableAccess{
-					HILNode:  n,
 					ExprType: TypeString,
 					TFVar:    v,
 				}, nil
@@ -384,7 +378,6 @@ func (b *propertyBinder) bindVariableAccess(n *ast.VariableAccess) (BoundExpr, e
 	}
 
 	return &BoundVariableAccess{
-		HILNode:  n,
 		Elements: elements,
 		Schemas:  sch,
 		ExprType: exprType,

@@ -44,7 +44,7 @@ func (g *generator) GenArithmetic(w io.Writer, v *il.BoundArithmetic) {
 }
 
 func (g *generator) GenCall(w io.Writer, v *il.BoundCall) {
-	switch v.HILNode.Func {
+	switch v.Func {
 	case intrinsicDataSource:
 		g.genDataSourceCall(w, v)
 	case intrinsicResource:

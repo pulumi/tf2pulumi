@@ -29,7 +29,7 @@ func TestIntrinsicApply(t *testing.T) {
 	then := &BoundLiteral{}
 
 	c := NewApplyCall(args, then)
-	assert.Equal(t, IntrinsicApply, c.HILNode.Func)
+	assert.Equal(t, IntrinsicApply, c.Func)
 	assert.Equal(t, then.Type().OutputOf(), c.ExprType)
 	assert.Equal(t, len(args)+1, len(c.Args))
 
@@ -42,7 +42,7 @@ func TestIntrinsicApplyArg(t *testing.T) {
 	idx, typ := 3, TypeString
 
 	c := NewApplyArgCall(idx, typ)
-	assert.Equal(t, IntrinsicApplyArg, c.HILNode.Func)
+	assert.Equal(t, IntrinsicApplyArg, c.Func)
 	assert.Equal(t, typ, c.Type())
 	assert.Equal(t, 1, len(c.Args))
 
@@ -53,7 +53,7 @@ func TestIntrinsicArchive(t *testing.T) {
 	arg := &BoundLiteral{}
 
 	c := NewArchiveCall(arg)
-	assert.Equal(t, IntrinsicArchive, c.HILNode.Func)
+	assert.Equal(t, IntrinsicArchive, c.Func)
 	assert.Equal(t, TypeUnknown, c.Type())
 	assert.Equal(t, 1, len(c.Args))
 
@@ -64,7 +64,7 @@ func TestIntrinsicAsset(t *testing.T) {
 	arg := &BoundLiteral{}
 
 	c := NewAssetCall(arg)
-	assert.Equal(t, IntrinsicAsset, c.HILNode.Func)
+	assert.Equal(t, IntrinsicAsset, c.Func)
 	assert.Equal(t, TypeUnknown, c.Type())
 	assert.Equal(t, 1, len(c.Args))
 
@@ -75,7 +75,7 @@ func TestIntrinsicCoerce(t *testing.T) {
 	value, toType := &BoundLiteral{}, TypeNumber
 
 	c := NewCoerceCall(value, toType)
-	assert.Equal(t, IntrinsicCoerce, c.HILNode.Func)
+	assert.Equal(t, IntrinsicCoerce, c.Func)
 	assert.Equal(t, toType, c.Type())
 	assert.Equal(t, 1, len(c.Args))
 
@@ -86,7 +86,7 @@ func TestIntrinsicCoerce(t *testing.T) {
 
 func TestIntrinsicGetStack(t *testing.T) {
 	c := NewGetStackCall()
-	assert.Equal(t, IntrinsicGetStack, c.HILNode.Func)
+	assert.Equal(t, IntrinsicGetStack, c.Func)
 	assert.Equal(t, TypeString, c.Type())
 	assert.Equal(t, 0, len(c.Args))
 }

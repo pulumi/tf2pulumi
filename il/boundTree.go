@@ -17,6 +17,7 @@ package il
 import (
 	"fmt"
 	"io"
+	"strings"
 
 	"github.com/hashicorp/hil/ast"
 	"github.com/hashicorp/terraform/config"
@@ -162,8 +163,8 @@ type BoundExpr interface {
 
 // BoundArithmetic is the bound form of an HIL arithmetic expression (e.g. `${a + b}`).
 type BoundArithmetic struct {
-	// HILNode is the HIL node associated with this arithmetic expression.
-	HILNode *ast.Arithmetic
+	// Op is the arithmetic operation used by this expression.
+	Op ast.ArithmeticOp
 	// Comments is the set of comments associated with this node, if any.
 	NodeComments *Comments
 	// Exprs is the bound list of the arithmetic expression's operands.
@@ -188,7 +189,7 @@ func (n *BoundArithmetic) setComments(c *Comments) {
 }
 
 func (n *BoundArithmetic) dump(d *dumper) {
-	d.dump("(", fmt.Sprintf("%v %v", n.Type(), n.HILNode.Op))
+	d.dump("(", fmt.Sprintf("%v %v", n.Type(), n.Op))
 	d.indented(func() {
 		for _, e := range n.Exprs {
 			d.dump("\n", d.indent, e)
@@ -202,8 +203,8 @@ func (n *BoundArithmetic) isExpr() {}
 
 // BoundCall is the bound form of an HIL call expression (e.g. `${foo(bar, baz)}`).
 type BoundCall struct {
-	// HILNode is the HIL node associated with this call.
-	HILNode *ast.Call
+	// Func is the name of the function to call.
+	Func string
 	// Comments is the set of comments associated with this node, if any.
 	NodeComments *Comments
 	// ExprType is the type of the call expression.
@@ -228,7 +229,7 @@ func (n *BoundCall) setComments(c *Comments) {
 }
 
 func (n *BoundCall) dump(d *dumper) {
-	d.dump("(call ", fmt.Sprintf("%v %s", n.Type(), n.HILNode.Func))
+	d.dump("(call ", fmt.Sprintf("%v %s", n.Type(), n.Func))
 	d.indented(func() {
 		for _, e := range n.Args {
 			d.dump("\n", d.indent, e)
@@ -242,8 +243,6 @@ func (n *BoundCall) isExpr() {}
 
 // BoundConditional is the bound form of an HIL conditional expression (e.g. `foo ? bar : baz`).
 type BoundConditional struct {
-	// HILNode is the HIL node associated with this conditional expression.
-	HILNode *ast.Conditional
 	// Comments is the set of comments associated with this node, if any.
 	NodeComments *Comments
 	// ExprType is the type of the conditional expression.
@@ -286,8 +285,6 @@ func (n *BoundConditional) isExpr() {}
 
 // BoundIndex is the bound form of an HIL index expression (e.g. `${foo[bar]}`).
 type BoundIndex struct {
-	// HILNode is the HIL node associated with this index expression.
-	HILNode *ast.Index
 	// Comments is the set of comments associated with this node, if any.
 	NodeComments *Comments
 	// ExprType is the type of the index expression.
@@ -365,8 +362,6 @@ func (n *BoundLiteral) isExpr() {}
 
 // BoundOutput is the bound form of an HIL output expression (e.g. `foo ${bar} baz`).
 type BoundOutput struct {
-	// HILNode is the HIL node associated with this output expression.
-	HILNode *ast.Output
 	// Comments is the set of comments associated with this node, if any.
 	NodeComments *Comments
 	// Exprs is the bound list of the output's operands.
@@ -403,8 +398,6 @@ func (n *BoundOutput) isExpr() {}
 
 // BoundVariableAccess is the bound form of an HIL variable access expression (e.g. `${foo.bar}`).
 type BoundVariableAccess struct {
-	// HILNode is the HIL node associated with this variable access expression.
-	HILNode *ast.VariableAccess
 	// Comments is the set of comments associated with this node, if any.
 	NodeComments *Comments
 	// Elements are the path elements that comprise the variable access expression.
@@ -435,7 +428,7 @@ func (n *BoundVariableAccess) setComments(c *Comments) {
 }
 
 func (n *BoundVariableAccess) dump(d *dumper) {
-	d.dump(fmt.Sprintf("(%s %s %T)", n.HILNode.Name, n.Type(), n.TFVar))
+	d.dump(fmt.Sprintf("(%s %s %T)", strings.Join(n.Elements, "."), n.Type(), n.TFVar))
 }
 
 func (n *BoundVariableAccess) isNode() {}

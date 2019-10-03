@@ -15,7 +15,6 @@
 package nodejs
 
 import (
-	"github.com/hashicorp/hil/ast"
 	"github.com/pulumi/pulumi/pkg/util/contract"
 
 	"github.com/pulumi/tf2pulumi/il"
@@ -32,7 +31,7 @@ const (
 // data source function with the given input properties.
 func newDataSourceCall(functionName string, inputs il.BoundNode, optionsBag string) *il.BoundCall {
 	return &il.BoundCall{
-		HILNode:  &ast.Call{Func: intrinsicDataSource},
+		Func:     intrinsicDataSource,
 		ExprType: il.TypeMap,
 		Args: []il.BoundExpr{
 			&il.BoundLiteral{
@@ -54,7 +53,7 @@ func newDataSourceCall(functionName string, inputs il.BoundNode, optionsBag stri
 // parseDataSourceCall extracts the name of the data source function and the input properties for its invocation from
 // a call to the data source intrinsic.
 func parseDataSourceCall(c *il.BoundCall) (function string, inputs il.BoundNode, optionsBag string) {
-	contract.Assert(c.HILNode.Func == intrinsicDataSource)
+	contract.Assert(c.Func == intrinsicDataSource)
 	function = c.Args[0].(*il.BoundLiteral).Value.(string)
 	inputs = c.Args[1].(*il.BoundPropertyValue).Value
 	optionsBag = c.Args[2].(*il.BoundLiteral).Value.(string)
@@ -65,7 +64,7 @@ func parseDataSourceCall(c *il.BoundCall) (function string, inputs il.BoundNode,
 // pulumi.interpolate function.
 func newInterpolateCall(args []il.BoundExpr) *il.BoundCall {
 	return &il.BoundCall{
-		HILNode:  &ast.Call{Func: intrinsicInterpolate},
+		Func:     intrinsicInterpolate,
 		ExprType: il.TypeString.OutputOf(),
 		Args:     args,
 	}
