@@ -34,7 +34,7 @@ import (
 // GenArithmetic generates code for the given arithmetic expression.
 func (g *generator) GenArithmetic(w io.Writer, n *il.BoundArithmetic) {
 	op := ""
-	switch n.HILNode.Op {
+	switch n.Op {
 	case ast.ArithmeticOpAdd:
 		op = "+"
 	case ast.ArithmeticOpSub:
@@ -220,7 +220,7 @@ func (g *generator) genCoercion(w io.Writer, n il.BoundExpr, toType il.Type) {
 
 // GenCall generates code for a call expression.
 func (g *generator) GenCall(w io.Writer, n *il.BoundCall) {
-	switch n.HILNode.Func {
+	switch n.Func {
 	case il.IntrinsicApply:
 		g.genApply(w, n)
 	case il.IntrinsicApplyArg:
@@ -375,7 +375,7 @@ func (g *generator) GenCall(w io.Writer, n *il.BoundCall) {
 		g.Fgenf(w, "((keys, values) => Object.assign.apply({}, keys.map((k: any, i: number) => ({[k]: values[i]}))))(%v, %v)",
 			n.Args[0], n.Args[1])
 	default:
-		g.Fgenf(w, "(() => { throw \"NYI: call to %v\"; })()", n.HILNode.Func)
+		g.Fgenf(w, "(() => { throw \"NYI: call to %v\"; })()", n.Func)
 	}
 }
 

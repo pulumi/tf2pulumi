@@ -81,7 +81,7 @@ func (g *generator) parseProxyApply(args []*il.BoundVariableAccess, then il.Boun
 	}
 
 	thenCall, ok := then.(*il.BoundCall)
-	if !ok || thenCall.HILNode.Func != il.IntrinsicApplyArg {
+	if !ok || thenCall.Func != il.IntrinsicApplyArg {
 		return nil, false
 	}
 
@@ -103,7 +103,7 @@ func (g *generator) parseProxyApply(args []*il.BoundVariableAccess, then il.Boun
 func hasApplyArgDescendant(expr il.BoundExpr) bool {
 	has := false
 	_, err := il.VisitBoundNode(expr, il.IdentityVisitor, func(n il.BoundNode) (il.BoundNode, error) {
-		if c, ok := n.(*il.BoundCall); ok && c.HILNode.Func == il.IntrinsicApplyArg {
+		if c, ok := n.(*il.BoundCall); ok && c.Func == il.IntrinsicApplyArg {
 			has = true
 		}
 		return n, nil
@@ -129,7 +129,7 @@ func (g *generator) parseInterpolate(args []*il.BoundVariableAccess, then il.Bou
 	for i, expr := range thenOutput.Exprs {
 		call, isCall := expr.(*il.BoundCall)
 		switch {
-		case isCall && call.HILNode.Func == il.IntrinsicApplyArg:
+		case isCall && call.Func == il.IntrinsicApplyArg:
 			v := args[il.ParseApplyArgCall(call)]
 			if !g.canLiftVariableAccess(v) {
 				return nil, false
@@ -158,7 +158,7 @@ func (g *generator) lowerProxyApplies(prop il.BoundNode) (il.BoundNode, error) {
 	rewriter := func(n il.BoundNode) (il.BoundNode, error) {
 		// Ignore the node if it is not a call to the apply intrinsic.
 		apply, ok := n.(*il.BoundCall)
-		if !ok || apply.HILNode.Func != il.IntrinsicApply {
+		if !ok || apply.Func != il.IntrinsicApply {
 			return n, nil
 		}
 

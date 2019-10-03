@@ -21,12 +21,12 @@ import (
 type trivialApplyRewriter struct{}
 
 func (t trivialApplyRewriter) rewriteNode(n il.BoundNode) (il.BoundNode, error) {
-	if e, ok := n.(*il.BoundCall); ok && e.HILNode.Func == il.IntrinsicApply {
+	if e, ok := n.(*il.BoundCall); ok && e.Func == il.IntrinsicApply {
 		args, access := il.ParseApplyCall(e)
 		if len(args) != 1 {
 			return n, nil
 		}
-		if applyArg, ok := access.(*il.BoundCall); ok && applyArg.HILNode.Func == il.IntrinsicApplyArg {
+		if applyArg, ok := access.(*il.BoundCall); ok && applyArg.Func == il.IntrinsicApplyArg {
 			index := il.ParseApplyArgCall(applyArg)
 			if index != 0 {
 				// Not sure what this is - leave it alone.

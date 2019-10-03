@@ -15,8 +15,6 @@
 package python
 
 import (
-	"github.com/hashicorp/hil/ast"
-
 	"github.com/pulumi/pulumi/pkg/util/contract"
 	"github.com/pulumi/tf2pulumi/il"
 )
@@ -28,7 +26,7 @@ const (
 
 func newResourceCall(resourceType, resourceName string, inputs *il.BoundMapProperty) *il.BoundCall {
 	return &il.BoundCall{
-		HILNode:  &ast.Call{Func: intrinsicResource},
+		Func:     intrinsicResource,
 		ExprType: il.TypeMap,
 		Args: []il.BoundExpr{
 			&il.BoundLiteral{
@@ -49,7 +47,7 @@ func newResourceCall(resourceType, resourceName string, inputs *il.BoundMapPrope
 
 func newDataSourceCall(functionName string, inputs *il.BoundMapProperty) *il.BoundCall {
 	return &il.BoundCall{
-		HILNode:  &ast.Call{Func: intrinsicDataSource},
+		Func:     intrinsicDataSource,
 		ExprType: il.TypeMap,
 		Args: []il.BoundExpr{
 			&il.BoundLiteral{
@@ -67,14 +65,14 @@ func newDataSourceCall(functionName string, inputs *il.BoundMapProperty) *il.Bou
 // parseDataSourceCall extracts the name of the data source function and the input properties for its invocation from
 // a call to the data source intrinsic.
 func parseDataSourceCall(c *il.BoundCall) (function string, inputs *il.BoundMapProperty) {
-	contract.Assert(c.HILNode.Func == intrinsicDataSource)
+	contract.Assert(c.Func == intrinsicDataSource)
 	return c.Args[0].(*il.BoundLiteral).Value.(string), c.Args[1].(*il.BoundPropertyValue).Value.(*il.BoundMapProperty)
 }
 
 // parseResourceCall extracts the type of the resource, the name of the resource, and the resource's input properties
 // from a call to the resource intrinsic.
 func parseResourceCall(c *il.BoundCall) (resource, name string, inputs *il.BoundMapProperty) {
-	contract.Assert(c.HILNode.Func == intrinsicResource)
+	contract.Assert(c.Func == intrinsicResource)
 	return c.Args[0].(*il.BoundLiteral).Value.(string),
 		c.Args[1].(*il.BoundLiteral).Value.(string),
 		c.Args[2].(*il.BoundPropertyValue).Value.(*il.BoundMapProperty)

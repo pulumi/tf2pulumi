@@ -342,7 +342,7 @@ func (g *generator) GeneratePreamble(modules []*il.Graph) error {
 	findOptionals := func(n il.BoundNode) (il.BoundNode, error) {
 		switch n := n.(type) {
 		case *il.BoundCall:
-			switch n.HILNode.Func {
+			switch n.Func {
 			case "file":
 				if !g.importNames["fs"] {
 					imports = append(imports, `import * as fs from "fs";`)

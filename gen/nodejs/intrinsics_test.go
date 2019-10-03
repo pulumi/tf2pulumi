@@ -27,7 +27,7 @@ func TestIntrinsicDataSource(t *testing.T) {
 	optionsBag := ", {}"
 
 	c := newDataSourceCall(function, inputs, optionsBag)
-	assert.Equal(t, intrinsicDataSource, c.HILNode.Func)
+	assert.Equal(t, intrinsicDataSource, c.Func)
 	assert.Equal(t, il.TypeMap, c.ExprType)
 	assert.Equal(t, 3, len(c.Args))
 
