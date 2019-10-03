@@ -131,7 +131,7 @@ func generateDependency(n il.Node, lang Generator, inProgress, done map[il.Node]
 // This function goes to some length to ensure that definitions are grouped by source file to the greatest possible
 // extent. It does so by picking the file to generate that has the fewest references to nodes that have not yet been
 // generated and are defined in other files and iterating until all files have been generated. Inside a file, nodes
-// are generated in order by their appeareance in their original source file. Any nodes that are out-of-order must be
+// are generated in order by their appearance in their original source file. Any nodes that are out-of-order must be
 // out-of-order to satisfy the requirement that nodes are generated in a valid topological order.
 func generateInnerNodes(g *il.Graph, lang Generator) error {
 	type file struct {

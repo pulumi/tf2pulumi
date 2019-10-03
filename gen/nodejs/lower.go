@@ -17,9 +17,10 @@ package nodejs
 import (
 	"path/filepath"
 
-	"github.com/hashicorp/terraform/config"
 	"github.com/pulumi/pulumi/pkg/util/contract"
+
 	"github.com/pulumi/tf2pulumi/il"
+	"github.com/pulumi/tf2pulumi/internal/config"
 )
 
 // lowerToLiterals lowers certain elements--namely Module and Root path references--to bound literals. This allows the
@@ -112,7 +113,8 @@ func hasApplyArgDescendant(expr il.BoundExpr) bool {
 	return has
 }
 
-// parseInterpolate attempts to match the given parsed apply against the pattern (output /* mix of expressions and calls to __applyArg).
+// parseInterpolate attempts to match the given parsed apply against the pattern (output /* mix of expressions and
+// calls to __applyArg).
 //
 // A legal expression for the match is any expression that does not contain any calls to __applyArg: an expression that
 // does contain such calls requires an apply.
@@ -148,7 +150,8 @@ func (g *generator) parseInterpolate(args []*il.BoundVariableAccess, then il.Bou
 // lowerProxyApplies lowers certain calls to the apply intrinsic into proxied property accesses and/or calls to the
 // pulumi.interpolate function. Concretely, this boils down to rewriting the following shapes
 // - (call __apply (resource variable access) (call __applyArg 0))
-// - (call __apply (resource variable access 0) ... (resource variable access n) (output /* some mix of expressions and calls to __applyArg))
+// - (call __apply (resource variable access 0) ... (resource variable access n)
+//       (output /* some mix of expressions and calls to __applyArg))
 // into (respectively)
 // - (resource variable access)
 // - (call __interpolate /* mix of literals and variable accesses that correspond to the __applyArg calls)

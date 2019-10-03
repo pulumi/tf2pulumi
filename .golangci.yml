@@ -1,0 +1,22 @@
+run:
+  skip-dirs:
+    - internal/config
+
+linters:
+  enable-all: false
+  enable:
+    - deadcode
+    - errcheck
+    - gofmt
+    - golint
+    - gosec
+    - govet
+    - ineffassign
+    - interfacer
+    - lll
+    - megacheck
+    - misspell
+    - nakedret
+    - structcheck
+    - unconvert
+    - varcheck

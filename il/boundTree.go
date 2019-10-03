@@ -20,8 +20,9 @@ import (
 	"strings"
 
 	"github.com/hashicorp/hil/ast"
-	"github.com/hashicorp/terraform/config"
 	"github.com/pulumi/pulumi/pkg/util/contract"
+
+	"github.com/pulumi/tf2pulumi/internal/config"
 )
 
 // Type represents the type of a single node in a bound property tree. Types are fairly simplistic: in addition to the

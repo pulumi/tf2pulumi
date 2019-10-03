@@ -18,8 +18,9 @@ import (
 	"strings"
 
 	"github.com/hashicorp/hil/ast"
-	"github.com/hashicorp/terraform/config"
 	"github.com/pkg/errors"
+
+	"github.com/pulumi/tf2pulumi/internal/config"
 )
 
 // bindArithmetic binds an HIL arithmetic expression.

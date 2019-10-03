@@ -6,9 +6,10 @@ import (
 	"path"
 	"testing"
 
-	"github.com/hashicorp/terraform/config"
 	"github.com/pulumi/pulumi/pkg/util/contract"
 	"github.com/stretchr/testify/assert"
+
+	"github.com/pulumi/tf2pulumi/internal/config"
 )
 
 func TestMarkPromptDataSources(t *testing.T) {

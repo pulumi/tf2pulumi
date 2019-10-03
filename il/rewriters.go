@@ -17,9 +17,10 @@ package il
 import (
 	"sort"
 
-	"github.com/hashicorp/terraform/config"
-	"github.com/pulumi/pulumi-terraform/pkg/tfbridge"
+	"github.com/pulumi/pulumi-terraform-bridge/pkg/tfbridge"
 	"github.com/pulumi/pulumi/pkg/util/contract"
+
+	"github.com/pulumi/tf2pulumi/internal/config"
 )
 
 // The applyRewriter is responsible for transforming expressions involving Pulumi output properties into a call to the
@@ -224,7 +225,7 @@ func RewriteAssets(n BoundNode) (BoundNode, error) {
 	return VisitBoundNode(n, IdentityVisitor, rewriter)
 }
 
-// FilterProperties removes any properties at the root of the given resource for which the given filter fucntion
+// FilterProperties removes any properties at the root of the given resource for which the given filter function
 // returns false.
 func FilterProperties(r *ResourceNode, filter func(key string, property BoundNode) bool) {
 	for key, prop := range r.Properties.Elements {

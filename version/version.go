@@ -1,4 +1,4 @@
 package version
 
-// The version of this tool.
+// Version is the version of this tool.
 var Version string
