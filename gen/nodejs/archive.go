@@ -27,7 +27,7 @@ import (
 // computeArchiveInputs computes the inputs for a call to the pulumi.AssetArchive constructor based on the values
 // present in the given resource's bound input properties.
 func (g *generator) computeArchiveInputs(r *il.ResourceNode, indent bool, count string) (string, error) {
-	contract.Require(r.Provider.Config.Name == "archive", "r")
+	contract.Require(r.Provider.Name == "archive", "r")
 
 	buf := &bytes.Buffer{}
 	buf.WriteString("{\n")
@@ -48,7 +48,7 @@ func (g *generator) computeArchiveInputs(r *il.ResourceNode, indent bool, count 
 	} else if sourceContent, ok := r.Properties.Elements["source_content"]; ok {
 		filename, ok := r.Properties.Elements["source_filename"]
 		if !ok {
-			return "", errors.Errorf("missing source_filename property in archive %s", r.Config.Id())
+			return "", errors.Errorf("missing source_filename property in archive %s", r.Name)
 		}
 
 		path, _, err := g.computeProperty(filename, indent, count)
@@ -64,22 +64,22 @@ func (g *generator) computeArchiveInputs(r *il.ResourceNode, indent bool, count 
 	} else if source, ok := r.Properties.Elements["source"]; ok {
 		list, ok := source.(*il.BoundListProperty)
 		if !ok {
-			return "", errors.Errorf("unexpected type for source in archive %s", r.Config.Id())
+			return "", errors.Errorf("unexpected type for source in archive %s", r.Name)
 		}
 
 		for _, e := range list.Elements {
 			m, ok := e.(*il.BoundMapProperty)
 			if !ok {
-				return "", errors.Errorf("unexpected type for source in archive %s", r.Config.Id())
+				return "", errors.Errorf("unexpected type for source in archive %s", r.Name)
 			}
 
 			sourceContent, ok := m.Elements["content"]
 			if !ok {
-				return "", errors.Errorf("missing property \"content\" in archive %s", r.Config.Id())
+				return "", errors.Errorf("missing property \"content\" in archive %s", r.Name)
 			}
 			sourceFilename, ok := m.Elements["filename"]
 			if !ok {
-				return "", errors.Errorf("missing property \"filename\" in archive %s", r.Config.Id())
+				return "", errors.Errorf("missing property \"filename\" in archive %s", r.Name)
 			}
 
 			content, _, err := g.computeProperty(sourceContent, indent, count)
@@ -100,7 +100,7 @@ func (g *generator) computeArchiveInputs(r *il.ResourceNode, indent bool, count 
 
 // generateArchive generates a call to the pulumi.AssetArchive constructor for the given archive resource.
 func (g *generator) generateArchive(r *il.ResourceNode) error {
-	contract.Require(r.Provider.Config.Name == "archive", "r")
+	contract.Require(r.Provider.Name == "archive", "r")
 
 	// TODO: explicit dependencies (or any dependencies at all, really)
 

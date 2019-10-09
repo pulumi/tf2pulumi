@@ -29,7 +29,7 @@ import (
 func outputs(names []string) map[string]*il.OutputNode {
 	m := make(map[string]*il.OutputNode)
 	for _, name := range names {
-		m[name] = &il.OutputNode{Config: &config.Output{Name: name}}
+		m[name] = &il.OutputNode{Name: name}
 	}
 	return m
 }
@@ -37,7 +37,7 @@ func outputs(names []string) map[string]*il.OutputNode {
 func locals(names []string) map[string]*il.LocalNode {
 	m := make(map[string]*il.LocalNode)
 	for _, name := range names {
-		m[name] = &il.LocalNode{Config: &config.Local{Name: name}}
+		m[name] = &il.LocalNode{Name: name}
 	}
 	return m
 }
@@ -45,7 +45,7 @@ func locals(names []string) map[string]*il.LocalNode {
 func variables(names []string) map[string]*il.VariableNode {
 	m := make(map[string]*il.VariableNode)
 	for _, name := range names {
-		m[name] = &il.VariableNode{Config: &config.Variable{Name: name}}
+		m[name] = &il.VariableNode{Name: name}
 	}
 	return m
 }
@@ -53,7 +53,7 @@ func variables(names []string) map[string]*il.VariableNode {
 func modules(names []string) map[string]*il.ModuleNode {
 	m := make(map[string]*il.ModuleNode)
 	for _, name := range names {
-		m[name] = &il.ModuleNode{Config: &config.Module{Name: name}}
+		m[name] = &il.ModuleNode{Name: name}
 	}
 	return m
 }
@@ -65,9 +65,9 @@ func resources(toks []string) map[string]*il.ResourceNode {
 		components := strings.Split(tok, "::")
 		typ, name := tokens.Type(components[0]), components[1]
 
-		mode := config.ManagedResourceMode
+		isDataSource := false
 		if strings.HasPrefix(string(typ.Name()), "get") {
-			mode = config.DataResourceMode
+			isDataSource = true
 		}
 
 		tfType := string(typ.Package()) + "_" +
@@ -87,12 +87,10 @@ func resources(toks []string) map[string]*il.ResourceNode {
 		}
 
 		m[tok] = &il.ResourceNode{
-			Config: &config.Resource{
-				Name: name,
-				Type: tfType,
-				Mode: mode,
-			},
-			Provider: provider,
+			Name:         name,
+			Type:         tfType,
+			IsDataSource: isDataSource,
+			Provider:     provider,
 		}
 	}
 	return m

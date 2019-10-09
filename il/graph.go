@@ -36,8 +36,12 @@ import (
 
 // A Graph is the analyzed form of the configuration for a single Terraform module.
 type Graph struct {
-	// Tree is the module's entry in the module tree. The tree is used e.g. to determine the module's name.
-	Tree *module.Tree
+	// Name is the name of the module. May be the empty string when IsRoot is true.
+	Name string
+	// IsRoot is true if this is the root module.
+	IsRoot bool
+	// Path is the path to this module's directory.
+	Path string
 	// Modules maps from module name to module node for this module's module instantiations. This map is used to
 	// bind a module variable access in an interpolation to the corresponding module node.
 	Modules map[string]*ModuleNode
@@ -77,28 +81,34 @@ type Node interface {
 
 // A ModuleNode is the analyzed form of a module instantiation in a Terraform configuration.
 type ModuleNode struct {
-	// Config is the module's raw Terraform configuration.
-	Config *config.Module
+	config moduleConfig
+
 	// Location is the location of this node's definition in the original Terraform configuration.
 	Location token.Pos
 	// Comments is the set of comments associated with this node, if any.
 	Comments *Comments
 	// Deps is the list of the module's dependencies as implied by the nodes referenced by its configuration.
 	Deps []Node
+	// Name is the name of the module.
+	Name string
 	// Properties is the bound form of the module's configuration properties.
 	Properties *BoundMapProperty
 }
 
 // A ProviderNode is the analyzed form of a provider instantiation in a Terraform configuration.
 type ProviderNode struct {
-	// Config is the provider's raw Terraform configuration.
-	Config *config.ProviderConfig
+	config providerConfig
+
 	// Location is the location of this node's definition in the original Terraform configuration.
 	Location token.Pos
 	// Comments is the set of comments associated with this node, if any.
 	Comments *Comments
 	// Deps is the list of the provider's dependencies as implied by the nodes referenced by its configuration.
 	Deps []Node
+	// Name is the name of the provider.
+	Name string
+	// Alias is the provider's alias, if any.
+	Alias string
 	// Properties is the bound form of the provider's configuration properties.
 	Properties *BoundMapProperty
 	// Info is the set of Pulumi-specific information about this particular resource provider. Of particular interest
@@ -114,19 +124,25 @@ type ProviderNode struct {
 // is necessary to differentiate between the two, the former are referred to as "managed resources" and the latter as
 // "data resources".
 type ResourceNode struct {
-	// Config is the resource's raw Terraform configuration.
-	Config *config.Resource
+	config resourceConfig
+
 	// Location is the location of this node's definition in the original Terraform configuration.
 	Location token.Pos
 	// Comments is the set of comments associated with this node, if any.
 	Comments *Comments
-	// Provider is a reference to the resource's provider. Consumers of this package will never observe a nil value in
-	// this field.
-	Provider *ProviderNode
 	// Deps is the list of the resource's dependencies as implied by the nodes referenced by its configuration.
 	Deps []Node
 	// ExplicitDeps is the list of the resource's explicit dependencies. This is a subset of Deps.
 	ExplicitDeps []Node
+	// Type is the type of the resource.
+	Type string
+	// Name is the name of the resource.
+	Name string
+	// IsDataSource is true if this resource represents a data source invocation.
+	IsDataSource bool
+	// Provider is a reference to the resource's provider. Consumers of this package will never observe a nil value in
+	// this field.
+	Provider *ProviderNode
 	// Count is the bound form of the resource's count property.
 	Count BoundNode
 	// Properties is the bound form of the resource's configuration properties.
@@ -140,8 +156,8 @@ type ResourceNode struct {
 // An OutputNode is the analyzed form of an output in a Terraform configuration. An OutputNode may never be referenced
 // by another node, as its value is not nameable in a Terraform configuration.
 type OutputNode struct {
-	// Config is the output's raw Terraform configuration.
-	Config *config.Output
+	config outputConfig
+
 	// Location is the location of this node's definition in the original Terraform configuration.
 	Location token.Pos
 	// Comments is the set of comments associated with this node, if any.
@@ -150,32 +166,38 @@ type OutputNode struct {
 	Deps []Node
 	// ExplicitDeps is the list of the output's explicit dependencies. This is a subset of Deps.
 	ExplicitDeps []Node
+	// Name is the name of this output.
+	Name string
 	// Value is the bound from of the output's value.
 	Value BoundNode
 }
 
 // A LocalNode is the analyzed form of a local value in a Terraform configuration.
 type LocalNode struct {
-	// Config is the local value's raw Terraform configuration.
-	Config *config.Local
+	config localConfig
+
 	// Location is the location of this node's definition in the original Terraform configuration.
 	Location token.Pos
 	// Comments is the set of comments associated with this node, if any.
 	Comments *Comments
 	// Deps is the list of the local value's dependencies as implied by the nodes referenced by its configuration.
 	Deps []Node
+	// Name is the name of this local.
+	Name string
 	// Value is the bound form of the local value's value.
 	Value BoundNode
 }
 
 // A VariableNode is the analyzed form of a Terraform variable. A VariableNode's list of dependencies is always empty.
 type VariableNode struct {
-	// Config is the variable's raw Terraform configuration.
-	Config *config.Variable
+	config variableConfig
+
 	// Location is the location of this node's definition in the original Terraform configuration.
 	Location token.Pos
 	// Comments is the set of comments associated with this node, if any.
 	Comments *Comments
+	// Name is the name of this variable.
+	Name string
 	// DefaultValue is the bound form of the variable's default value (if any).
 	DefaultValue BoundNode
 }
@@ -186,11 +208,11 @@ func (m *ModuleNode) Dependencies() []Node {
 }
 
 func (m *ModuleNode) ID() string {
-	return "m" + m.Config.Name
+	return "m" + m.Name
 }
 
 func (m *ModuleNode) displayName() string {
-	return "module " + m.Config.Name
+	return "module " + m.Name
 }
 
 func (m *ModuleNode) GetLocation() token.Pos {
@@ -205,17 +227,25 @@ func (m *ModuleNode) setComments(c *Comments) {
 	m.Comments = c
 }
 
+// fullName returns the full name (name + alias) of this provider.
+func (p *ProviderNode) fullName() string {
+	if p.Alias == "" {
+		return p.Name
+	}
+	return fmt.Sprintf("%s.%s", p.Name, p.Alias)
+}
+
 // Depdendencies returns the list of nodes the provider depends on.
 func (p *ProviderNode) Dependencies() []Node {
 	return p.Deps
 }
 
 func (p *ProviderNode) ID() string {
-	return "p" + p.Config.FullName()
+	return "p" + p.fullName()
 }
 
 func (p *ProviderNode) displayName() string {
-	return "provider " + p.Config.FullName()
+	return "provider " + p.fullName()
 }
 
 func (p *ProviderNode) GetLocation() token.Pos {
@@ -241,22 +271,22 @@ func (r *ResourceNode) Schemas() Schemas {
 	switch {
 	case r.Provider == nil || r.Provider.Info == nil:
 		return Schemas{}
-	case r.Config.Mode == config.ManagedResourceMode:
+	case !r.IsDataSource:
 		schemaInfo := &tfbridge.SchemaInfo{}
-		if resInfo, ok := r.Provider.Info.Resources[r.Config.Type]; ok {
+		if resInfo, ok := r.Provider.Info.Resources[r.Type]; ok {
 			schemaInfo.Fields = resInfo.Fields
 		}
 		return Schemas{
-			TFRes:  r.Provider.Info.P.ResourcesMap[r.Config.Type],
+			TFRes:  r.Provider.Info.P.ResourcesMap[r.Type],
 			Pulumi: schemaInfo,
 		}
 	default:
 		schemaInfo := &tfbridge.SchemaInfo{}
-		if dsInfo, ok := r.Provider.Info.DataSources[r.Config.Type]; ok {
+		if dsInfo, ok := r.Provider.Info.DataSources[r.Type]; ok {
 			schemaInfo.Fields = dsInfo.Fields
 		}
 		return Schemas{
-			TFRes:  r.Provider.Info.P.DataSourcesMap[r.Config.Type],
+			TFRes:  r.Provider.Info.P.DataSourcesMap[r.Type],
 			Pulumi: schemaInfo,
 		}
 	}
@@ -267,25 +297,32 @@ func (r *ResourceNode) Tok() (string, bool) {
 	switch {
 	case r.Provider == nil || r.Provider.Info == nil:
 		return "", false
-	case r.Config.Mode == config.ManagedResourceMode:
-		if resInfo, ok := r.Provider.Info.Resources[r.Config.Type]; ok {
+	case !r.IsDataSource:
+		if resInfo, ok := r.Provider.Info.Resources[r.Type]; ok {
 			return string(resInfo.Tok), true
 		}
 		return "", false
 	default:
-		if dsInfo, ok := r.Provider.Info.DataSources[r.Config.Type]; ok {
+		if dsInfo, ok := r.Provider.Info.DataSources[r.Type]; ok {
 			return string(dsInfo.Tok), true
 		}
 		return "", false
 	}
 }
 
+func (r *ResourceNode) resourceID() string {
+	if r.IsDataSource {
+		return fmt.Sprintf("data.%s.%s", r.Type, r.Name)
+	}
+	return fmt.Sprintf("%s.%s", r.Type, r.Name)
+}
+
 func (r *ResourceNode) ID() string {
-	return "r" + r.Config.Id()
+	return "r" + r.resourceID()
 }
 
 func (r *ResourceNode) displayName() string {
-	return "resource " + r.Config.Id()
+	return "resource " + r.resourceID()
 }
 
 func (r *ResourceNode) GetLocation() token.Pos {
@@ -306,11 +343,11 @@ func (o *OutputNode) Dependencies() []Node {
 }
 
 func (o *OutputNode) ID() string {
-	return "o" + o.Config.Name
+	return "o" + o.Name
 }
 
 func (o *OutputNode) displayName() string {
-	return "output " + o.Config.Name
+	return "output " + o.Name
 }
 
 func (o *OutputNode) GetLocation() token.Pos {
@@ -331,11 +368,11 @@ func (l *LocalNode) Dependencies() []Node {
 }
 
 func (l *LocalNode) ID() string {
-	return "l" + l.Config.Name
+	return "l" + l.Name
 }
 
 func (l *LocalNode) displayName() string {
-	return "local " + l.Config.Name
+	return "local " + l.Name
 }
 
 func (l *LocalNode) GetLocation() token.Pos {
@@ -356,11 +393,11 @@ func (v *VariableNode) Dependencies() []Node {
 }
 
 func (v *VariableNode) ID() string {
-	return "v" + v.Config.Name
+	return "v" + v.Name
 }
 
 func (v *VariableNode) displayName() string {
-	return "variable " + v.Config.Name
+	return "variable " + v.Name
 }
 
 func (v *VariableNode) GetLocation() token.Pos {
@@ -444,7 +481,7 @@ func (b *builder) logf(format string, arguments ...interface{}) {
 // In addition to the bound property, this function returns the set of nodes referenced by the property's
 // interpolations. If v is nil, the returned BoundNode will also be nil.
 func (b *builder) bindProperty(
-	path string, v interface{}, sch Schemas, hasCountIndex bool) (BoundNode, map[Node]struct{}, error) {
+	path string, v interface{}, sch Schemas, hasCountIndex bool) (BoundNode, nodeSet, error) {
 
 	if v == nil {
 		return nil, nil, nil
@@ -461,11 +498,11 @@ func (b *builder) bindProperty(
 	}
 
 	// Walk the bound value and collect its dependencies.
-	deps := make(map[Node]struct{})
+	deps := make(nodeSet)
 	_, err = VisitBoundNode(prop, IdentityVisitor, func(n BoundNode) (BoundNode, error) {
 		if v, ok := n.(*BoundVariableAccess); ok {
 			if v.ILNode != nil {
-				deps[v.ILNode] = struct{}{}
+				deps.add(v.ILNode)
 			}
 		}
 		return n, nil
@@ -482,7 +519,7 @@ func (b *builder) bindProperty(
 // In addition to the bound property, this function returns the set of nodes referenced by the property's
 // interpolations.
 func (b *builder) bindProperties(name string, raw *config.RawConfig, sch Schemas,
-	hasCountIndex bool) (*BoundMapProperty, map[Node]struct{}, error) {
+	hasCountIndex bool) (*BoundMapProperty, nodeSet, error) {
 
 	v, deps, err := b.bindProperty(name, raw.Raw, sch, hasCountIndex)
 	if err != nil {
@@ -494,7 +531,7 @@ func (b *builder) bindProperties(name string, raw *config.RawConfig, sch Schemas
 // buildDeps calculates the union of a node's implicit and explicit dependencies. It returns this union as a list of
 // Nodes as well as the list of the node's explicit dependencies. This function will fail if a node referenced in the
 // list of explicit dependencies is not present in the graph.
-func (b *builder) buildDeps(deps map[Node]struct{}, dependsOn []string, providers []string) ([]Node, []Node, error) {
+func (b *builder) buildDeps(deps nodeSet, dependsOn []string, providers []string) ([]Node, []Node, error) {
 	sort.Strings(dependsOn)
 
 	explicitDeps := make([]Node, len(dependsOn))
@@ -506,13 +543,14 @@ func (b *builder) buildDeps(deps map[Node]struct{}, dependsOn []string, provider
 		if !ok {
 			return nil, nil, errors.Errorf("unknown resource %v", name)
 		}
-		deps[r], explicitDeps[i] = struct{}{}, r
+		deps.add(r)
+		explicitDeps[i] = r
 	}
 
 	// Explicitly add the provider as a dependency.
 	for _, providerName := range providers {
 		if p, ok := b.providers[providerName]; ok {
-			deps[p] = struct{}{}
+			deps.add(p)
 		}
 	}
 
@@ -527,32 +565,29 @@ func (b *builder) buildDeps(deps map[Node]struct{}, dependsOn []string, provider
 // getProviderInfo fetches the tfbridge information for a particular provider. It does so by launching the provider
 // plugin with the "-get-provider-info" flag and deserializing the JSON representation dumped to stdout.
 func (b *builder) getProviderInfo(p *ProviderNode) (*tfbridge.ProviderInfo, string, error) {
-	if info, ok := builtinProviderInfo[p.Config.Name]; ok {
-		return info, p.Config.Name, nil
+	if info, ok := builtinProviderInfo[p.Name]; ok {
+		return info, p.Name, nil
 	}
 
-	info, err := b.providerInfo.GetProviderInfo(p.Config.Name)
+	info, err := b.providerInfo.GetProviderInfo(p.Name)
 	if err != nil {
 		return nil, "", err
 	}
-	packageName, ok := pluginNames[p.Config.Name]
+	packageName, ok := pluginNames[p.Name]
 	if !ok {
-		packageName = p.Config.Name
+		packageName = p.Name
 	}
 	return info, packageName, nil
 }
 
 // buildModule binds the given module node's properties and computes its dependency edges.
 func (b *builder) buildModule(m *ModuleNode) error {
-	props, deps, err := b.bindProperties(m.Config.Name, m.Config.RawConfig, Schemas{}, false)
+	props, deps, err := m.config.bind(b, m.Name)
 	if err != nil {
 		return err
 	}
-	providers := make([]string, 0, len(m.Config.Providers))
-	for _, p := range m.Config.Providers {
-		providers = append(providers, p)
-	}
-	allDeps, _, err := b.buildDeps(deps, nil, providers)
+
+	allDeps, _, err := b.buildDeps(deps, nil, m.config.providers())
 	contract.Assert(err == nil)
 
 	m.Properties, m.Deps = props, allDeps
@@ -568,11 +603,11 @@ func (b *builder) buildProvider(p *ProviderNode) error {
 		}
 
 		b.logf("warning: %v\ngenerated code for resources using this provider may be incorrect", err)
-		pluginName = p.Config.Name
+		pluginName = p.Name
 	}
 	p.Info, p.PluginName = info, pluginName
 
-	props, deps, err := b.bindProperties(p.Config.Name, p.Config.RawConfig, Schemas{}, false)
+	props, deps, err := p.config.bind(b, p.Name)
 	if err != nil {
 		return err
 	}
@@ -590,7 +625,7 @@ func (b *builder) ensureProvider(r *ResourceNode) error {
 		return nil
 	}
 
-	providerName := r.Config.ProviderFullName()
+	providerName := r.config.providerName()
 	p, ok := b.providers[providerName]
 	if !ok {
 		// It is possible to reference a provider that is not present in the Terraform configuration. In this case,
@@ -601,10 +636,13 @@ func (b *builder) ensureProvider(r *ResourceNode) error {
 		}
 
 		p = &ProviderNode{
-			Config: &config.ProviderConfig{
-				Name:      providerName,
-				RawConfig: rawConfig,
+			config: &tf11ProviderConfig{
+				config: &config.ProviderConfig{
+					Name:      providerName,
+					RawConfig: rawConfig,
+				},
 			},
+			Name: providerName,
 		}
 		b.providers[providerName] = p
 		if err = b.buildProvider(p); err != nil {
@@ -693,9 +731,9 @@ func (b *builder) buildResource(r *ResourceNode) error {
 		return err
 	}
 
-	tfName := r.Config.Type + "." + r.Config.Name
+	tfName := r.Type + "." + r.Name
 
-	count, countDeps, err := b.bindProperty(tfName+".count", r.Config.RawCount.Value(), Schemas{}, false)
+	count, countDeps, err := r.config.bindCount(b, tfName+".count")
 	if err != nil {
 		return err
 	}
@@ -713,7 +751,7 @@ func (b *builder) buildResource(r *ResourceNode) error {
 	}
 
 	// Bind the resource's properties.
-	props, deps, err := b.bindProperties(tfName, r.Config.RawConfig, r.Schemas(), count != nil)
+	props, deps, err := r.config.bindProperties(b, tfName, r.Schemas(), count != nil)
 	if err != nil {
 		return err
 	}
@@ -737,13 +775,13 @@ func (b *builder) buildResource(r *ResourceNode) error {
 	}
 
 	// Process ignore_changes.
-	r.IgnoreChanges = buildIgnoreChanges(r.Config.Lifecycle.IgnoreChanges, r.Schemas())
+	r.IgnoreChanges = buildIgnoreChanges(r.config.ignoreChanges(), r.Schemas())
 
 	// Merge the count dependencies into the overall dependency set and compute the final dependency lists.
 	for k := range countDeps {
-		deps[k] = struct{}{}
+		deps.add(k)
 	}
-	allDeps, explicitDeps, err := b.buildDeps(deps, r.Config.DependsOn, []string{r.Config.ProviderFullName()})
+	allDeps, explicitDeps, err := b.buildDeps(deps, r.config.dependsOn(), []string{r.config.providerName()})
 	if err != nil {
 		return err
 	}
@@ -753,11 +791,11 @@ func (b *builder) buildResource(r *ResourceNode) error {
 
 // buildOutput binds an output's value and computes its dependency edges.
 func (b *builder) buildOutput(o *OutputNode) error {
-	props, deps, err := b.bindProperties(o.Config.Name, o.Config.RawConfig, Schemas{}, false)
+	props, deps, err := o.config.bind(b, o.Name)
 	if err != nil {
 		return err
 	}
-	allDeps, explicitDeps, err := b.buildDeps(deps, o.Config.DependsOn, nil)
+	allDeps, explicitDeps, err := b.buildDeps(deps, o.config.dependsOn(), nil)
 	if err != nil {
 		return err
 	}
@@ -777,7 +815,7 @@ func (b *builder) buildOutput(o *OutputNode) error {
 
 // buildLocal binds a local value's value and computes its dependency edges.
 func (b *builder) buildLocal(l *LocalNode) error {
-	props, deps, err := b.bindProperties(l.Config.Name, l.Config.RawConfig, Schemas{}, false)
+	props, deps, err := l.config.bind(b, l.Name)
 	if err != nil {
 		return err
 	}
@@ -801,12 +839,12 @@ func (b *builder) buildLocal(l *LocalNode) error {
 
 // buildVariable builds a variable's default value (if any). This value must not depend on any other nodes.
 func (b *builder) buildVariable(v *VariableNode) error {
-	defaultValue, deps, err := b.bindProperty(v.Config.Name+".default", v.Config.Default, Schemas{}, false)
+	defaultValue, deps, err := v.config.bind(b, v.Name+".default")
 	if err != nil {
 		return err
 	}
 	if len(deps) != 0 {
-		return errors.Errorf("variables may not depend on other nodes (%v)", v.Config.Name)
+		return errors.Errorf("variables may not depend on other nodes (%v)", v.Name)
 	}
 	v.DefaultValue = defaultValue
 	return nil
@@ -848,22 +886,43 @@ func (b *builder) ensureBound(n Node) error {
 func (b *builder) buildNodes(conf *config.Config) error {
 	// Next create our nodes.
 	for _, v := range conf.Variables {
-		b.variables[v.Name] = &VariableNode{Config: v}
+		b.variables[v.Name] = &VariableNode{
+			config: &tf11VariableConfig{v},
+			Name:   v.Name,
+		}
 	}
 	for _, p := range conf.ProviderConfigs {
-		b.providers[p.FullName()] = &ProviderNode{Config: p}
+		b.providers[p.FullName()] = &ProviderNode{
+			config: &tf11ProviderConfig{p},
+			Name:   p.Name,
+			Alias:  p.Alias,
+		}
 	}
 	for _, m := range conf.Modules {
-		b.modules[m.Name] = &ModuleNode{Config: m}
+		b.modules[m.Name] = &ModuleNode{
+			config: &tf11ModuleConfig{m},
+			Name:   m.Name,
+		}
 	}
 	for _, r := range conf.Resources {
-		b.resources[r.Id()] = &ResourceNode{Config: r}
+		b.resources[r.Id()] = &ResourceNode{
+			config:       &tf11ResourceConfig{r},
+			Name:         r.Name,
+			Type:         r.Type,
+			IsDataSource: r.Mode == config.DataResourceMode,
+		}
 	}
 	for _, l := range conf.Locals {
-		b.locals[l.Name] = &LocalNode{Config: l}
+		b.locals[l.Name] = &LocalNode{
+			config: &tf11LocalConfig{l},
+			Name:   l.Name,
+		}
 	}
 	for _, o := range conf.Outputs {
-		b.outputs[o.Name] = &OutputNode{Config: o}
+		b.outputs[o.Name] = &OutputNode{
+			config: &tf11OutputConfig{o},
+			Name:   o.Name,
+		}
 	}
 
 	// Now bind each node's properties and compute any dependency edges.
@@ -936,7 +995,9 @@ func BuildGraph(tree *module.Tree, opts *BuildOptions) (*Graph, error) {
 
 	// Put the graph together
 	return &Graph{
-		Tree:      tree,
+		Name:      tree.Name(),
+		IsRoot:    len(tree.Path()) == 0,
+		Path:      conf.Dir,
 		Modules:   b.modules,
 		Providers: b.providers,
 		Resources: b.resources,

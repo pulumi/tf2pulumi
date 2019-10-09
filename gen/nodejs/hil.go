@@ -122,9 +122,9 @@ func (g *generator) genApply(w io.Writer, n *il.BoundCall) {
 // examine the type and name of each property accessed by the expression.
 func (g *generator) getNestedPropertyAccessElementInfo(v *il.BoundVariableAccess) (il.Schemas, []string) {
 	sch, elements := v.Schemas, v.Elements
-	if g.resourceMode(v) == config.ManagedResourceMode {
+	if !g.isDataSourceAccess(v) {
 		return sch.PropertySchemas(elements[0]), elements[1:]
-	} else if r, ok := v.ILNode.(*il.ResourceNode); ok && r.Provider.Config.Name == "http" {
+	} else if r, ok := v.ILNode.(*il.ResourceNode); ok && r.Provider.Name == "http" {
 		return sch, nil
 	}
 	return sch, elements
@@ -509,7 +509,7 @@ func (g *generator) GenVariableAccess(w io.Writer, n *il.BoundVariableAccess) {
 
 		// Otherwise, we will generate different code depending on whether or not we have a managed resource or a data
 		// source. The former are bags of outputs while the latter are outputs.
-		if g.resourceMode(n) == config.ManagedResourceMode {
+		if !g.isDataSourceAccess(n) {
 			// Because a managed resource is a bag of outputs, we must generate the first portion of this access. If we
 			// are _not_ within an apply, we generate the entire access.
 			element := n.Elements[0]

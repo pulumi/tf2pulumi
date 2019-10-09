@@ -50,7 +50,7 @@ func TestMarkPromptDataSources(t *testing.T) {
 
 		actual := make(map[string]bool)
 		for n := range set {
-			actual[n.Config.Id()] = true
+			actual[n.resourceID()] = true
 		}
 
 		assert.Equal(t, expected, actual)

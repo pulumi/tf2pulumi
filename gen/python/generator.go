@@ -25,7 +25,6 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/hashicorp/terraform/config"
 	"github.com/pkg/errors"
 	"github.com/pulumi/pulumi-terraform/pkg/tfbridge"
 	"github.com/pulumi/pulumi/pkg/util/contract"
@@ -89,7 +88,7 @@ func (g *generator) GeneratePreamble(modules []*il.Graph) error {
 }
 
 func (g *generator) BeginModule(mod *il.Graph) error {
-	if len(mod.Tree.Path()) != 0 {
+	if !mod.IsRoot {
 		return errors.New("NYI: Python Modules")
 	}
 	return nil
@@ -116,7 +115,7 @@ func (g *generator) GenerateLocal(l *il.LocalNode) error {
 }
 
 func (g *generator) GenerateProvider(p *il.ProviderNode) error {
-	if p.Config.Alias == "" {
+	if p.Alias == "" {
 		return nil
 	}
 	return errors.New("NYI: Python Providers")
@@ -139,7 +138,7 @@ func (g *generator) GenerateResource(r *il.ResourceNode) error {
 	name := g.nodeName(r)
 	// Prepare the inputs by lifting them into applies, as necessary. If this is a data source, we must also lift the
 	// data source call itself into the apply.
-	if r.Config.Mode != config.ManagedResourceMode {
+	if r.IsDataSource {
 		// Qualified member names are snake cased for data sources.
 		qualifiedMemberName := fmt.Sprintf("%s%s.%s", pkg, subpkg, pyName(class))
 		properties := newDataSourceCall(qualifiedMemberName, r.Properties)
@@ -170,7 +169,7 @@ func (g *generator) GenerateResource(r *il.ResourceNode) error {
 		// keyword arguments to a constructor.
 		//
 		// hil.go is responsible for rewriting the __resource intrinsic into a call to a resource's constructor.
-		resCall := newResourceCall(qualifiedMemberName, r.Config.Name, inputs.(*il.BoundMapProperty))
+		resCall := newResourceCall(qualifiedMemberName, r.Name, inputs.(*il.BoundMapProperty))
 		buf := &bytes.Buffer{}
 		g.Fgen(buf, resCall)
 		g.Printf("%s%s = %s\n", g.Indent, name, buf.String())
@@ -199,7 +198,7 @@ func (g *generator) lowerToLiterals(prop il.BoundNode) (il.BoundNode, error) {
 // resource, which may not be unique.
 func (g *generator) nodeName(n il.Node) string {
 	if res, ok := n.(*il.ResourceNode); ok {
-		return res.Config.Name
+		return res.Name
 	}
 
 	// Obviously not great...
@@ -321,11 +320,11 @@ func (g *generator) computeProperty(prop il.BoundNode, indent bool, count string
 // resourceTypeName computes the Python package, subpackage, and class name for a given resource.
 func resourceTypeName(r *il.ResourceNode) (string, string, string, error) {
 	// Compute the resource type from the Terraform type.
-	underscore := strings.IndexRune(r.Config.Type, '_')
+	underscore := strings.IndexRune(r.Type, '_')
 	if underscore == -1 {
 		return "", "", "", errors.New("NYI: single-resource providers")
 	}
-	provider, resourceType := cleanName(r.Provider.PluginName), r.Config.Type[underscore+1:]
+	provider, resourceType := cleanName(r.Provider.PluginName), r.Type[underscore+1:]
 
 	// Convert the TF resource type into its Pulumi name.
 	memberName := tfbridge.TerraformToPulumiName(resourceType, nil, true)

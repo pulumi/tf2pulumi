@@ -68,7 +68,7 @@ func (nt *applyNameTable) bestArgName(n *il.BoundVariableAccess) string {
 		return nt.tsName(fields[0])
 	case *config.ResourceVariable:
 		// If dealing with a data source or a broken access, use the resource's variable name.
-		if nt.g.resourceMode(n) != config.ManagedResourceMode || len(n.Elements) == 0 {
+		if nt.g.isDataSourceAccess(n) || len(n.Elements) == 0 {
 			return nt.g.variableName(n)
 		}
 
@@ -92,7 +92,7 @@ func (nt *applyNameTable) disambiguateArgName(n *il.BoundVariableAccess, bestNam
 	case *config.ResourceVariable:
 		// If dealing with a data source, hand off to the generic disambiguator. Otherwise, attempt to disambiguate
 		// by prepending the resource's variable name.
-		if nt.g.resourceMode(n) != config.ManagedResourceMode || len(n.Elements) == 0 {
+		if nt.g.isDataSourceAccess(n) || len(n.Elements) == 0 {
 			return nt.disambiguate(bestName)
 		}
 		return nt.disambiguate(nt.g.variableName(n) + title(bestName))

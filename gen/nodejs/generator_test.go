@@ -75,7 +75,7 @@ func TestLowerToLiteral(t *testing.T) {
 
 	g := &generator{
 		rootPath: ".",
-		module:   &il.Graph{Tree: module.NewTree("foo", &config.Config{Dir: "./foo/bar"})},
+		module:   &il.Graph{IsRoot: true, Path: "./foo/bar"},
 	}
 	g.Emitter = gen.NewEmitter(nil, g)
 

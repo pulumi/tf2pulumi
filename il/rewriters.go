@@ -197,7 +197,7 @@ func RewriteAssets(n BoundNode) (BoundNode, error) {
 			// pass the variable directly.
 			isArchiveResource := false
 			if v, ok := e.(*BoundVariableAccess); ok {
-				if r, ok := v.ILNode.(*ResourceNode); ok && r.Provider.Config.Name == "archive" {
+				if r, ok := v.ILNode.(*ResourceNode); ok && r.Provider.Name == "archive" {
 					v.Elements = nil
 					isArchiveResource = true
 				}
@@ -245,7 +245,7 @@ func MarkPromptDataSources(g *Graph) map[*ResourceNode]bool {
 
 		// First, check all data sources for output-typed inputs.
 		for _, r := range g.Resources {
-			if r.Config.Mode == config.DataResourceMode {
+			if r.IsDataSource {
 				containsOutputs := false
 				_, err := VisitBoundNode(r.Properties, IdentityVisitor, func(n BoundNode) (BoundNode, error) {
 					containsOutputs = containsOutputs || n.Type().IsOutput()

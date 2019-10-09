@@ -20,7 +20,6 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"github.com/hashicorp/terraform/config"
 	"github.com/pulumi/pulumi/pkg/util/contract"
 	"github.com/pulumi/tf2pulumi/gen"
 	"github.com/pulumi/tf2pulumi/il"
@@ -91,7 +90,7 @@ func (nt *nameTable) disambiguate(name string) string {
 // assignOutput assigns an unambiguous name to an output node.
 func (nt *nameTable) assignOutput(n *il.OutputNode) {
 	// We use the global tsName function here so that we can pass an argument for isObjectKey.
-	name := tsName(n.Config.Name, nil, nil, !nt.isRootModule)
+	name := tsName(n.Name, nil, nil, !nt.isRootModule)
 	contract.Assert(!nt.assigned[name])
 
 	nt.names[n] = name
@@ -104,7 +103,7 @@ func (nt *nameTable) assignOutput(n *il.OutputNode) {
 
 // assignLocal assigns an unambiguous name to a local node.
 func (nt *nameTable) assignLocal(n *il.LocalNode) {
-	name, isReserved := nt.tsName(n.Config.Name)
+	name, isReserved := nt.tsName(n.Name)
 
 	// If the raw name is reserved or ambiguous, first attempt to disambiguate by prepending "my".
 	if isReserved || nt.assigned[name] {
@@ -116,7 +115,7 @@ func (nt *nameTable) assignLocal(n *il.LocalNode) {
 
 // assignVariable assigns an unambiguous name to a variable node.
 func (nt *nameTable) assignVariable(n *il.VariableNode) {
-	name, isReserved := nt.tsName(n.Config.Name)
+	name, isReserved := nt.tsName(n.Name)
 
 	// If the raw name is reserved or ambiguous, first attempt to disambiguate by appending "Input".
 	if isReserved || nt.assigned[name] {
@@ -128,7 +127,7 @@ func (nt *nameTable) assignVariable(n *il.VariableNode) {
 
 // assignModule assigns an unambiguous name to a module node.
 func (nt *nameTable) assignModule(n *il.ModuleNode) {
-	name, isReserved := nt.tsName(n.Config.Name)
+	name, isReserved := nt.tsName(n.Name)
 
 	// If the raw name is ambiguous, first attempt to disambiguate by appending "Instance"
 	if isReserved || nt.assigned[name] {
@@ -140,7 +139,7 @@ func (nt *nameTable) assignModule(n *il.ModuleNode) {
 
 // assignProvider assigns an unambiguous name to a provider node.
 func (nt *nameTable) assignProvider(n *il.ProviderNode) {
-	name, isReserved := nt.tsName(n.Config.Alias)
+	name, isReserved := nt.tsName(n.Alias)
 
 	// If the raw name is ambiguous, first attempt to disambiguate by prepending the package name.
 	if isReserved || nt.assigned[name] {
@@ -152,7 +151,7 @@ func (nt *nameTable) assignProvider(n *il.ProviderNode) {
 
 // disambiguateResourceName computes an unambiguous name for the given resource node.
 func (nt *nameTable) disambiguateResourceName(n *il.ResourceNode) string {
-	name, isReserved := nt.tsName(n.Config.Name)
+	name, isReserved := nt.tsName(n.Name)
 
 	if len(name) == 1 {
 		// If the name is a single character, ignore it and fall through to the disambiguator.
@@ -166,12 +165,12 @@ func (nt *nameTable) disambiguateResourceName(n *il.ResourceNode) string {
 	// process. If these names cannot be determined, return an ugly name comprised of the TF type and name.
 	packageName, moduleName, typeName, err := resourceTypeName(n)
 	if err != nil {
-		return cleanName(n.Config.Type + "_" + n.Config.Name)
+		return cleanName(n.Type + "_" + n.Name)
 	}
 	packageName, moduleName = title(packageName), title(moduleName)
 
 	// If we're dealing with a data source, strip any leading "get" from the typeName.
-	if n.Config.Mode == config.DataResourceMode && strings.HasPrefix(typeName, "get") {
+	if n.IsDataSource && strings.HasPrefix(typeName, "get") {
 		typeName = typeName[len("get"):]
 	}
 
@@ -240,7 +239,7 @@ func assignNames(g *il.Graph, importNames map[string]bool, isRootModule bool) ma
 	resourceGroups := make(map[string][]*il.ResourceNode)
 	for _, k := range gen.SortedKeys(g.Resources) {
 		n := g.Resources[k]
-		name, _ := nt.tsName(n.Config.Name)
+		name, _ := nt.tsName(n.Name)
 		resourceGroups[name] = append(resourceGroups[name], n)
 	}
 	for name, group := range resourceGroups {
