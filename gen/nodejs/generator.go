@@ -23,14 +23,14 @@ import (
 	"unicode"
 
 	"github.com/blang/semver"
-	"github.com/hashicorp/terraform/config"
-	"github.com/hashicorp/terraform/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
 	"github.com/pkg/errors"
-	"github.com/pulumi/pulumi-terraform/pkg/tfbridge"
+	"github.com/pulumi/pulumi-terraform-bridge/pkg/tfbridge"
 	"github.com/pulumi/pulumi/pkg/util/contract"
 
 	"github.com/pulumi/tf2pulumi/gen"
 	"github.com/pulumi/tf2pulumi/il"
+	"github.com/pulumi/tf2pulumi/internal/config"
 )
 
 // Options defines parameters that are specific to the NodeJS code generator.

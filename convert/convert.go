@@ -24,7 +24,6 @@ import (
 
 	"github.com/hashicorp/hcl/hcl/token"
 	"github.com/hashicorp/terraform/command"
-	"github.com/hashicorp/terraform/config/module"
 	"github.com/hashicorp/terraform/svchost"
 	"github.com/hashicorp/terraform/svchost/auth"
 	"github.com/hashicorp/terraform/svchost/disco"
@@ -34,6 +33,7 @@ import (
 	"github.com/pulumi/tf2pulumi/gen/nodejs"
 	"github.com/pulumi/tf2pulumi/gen/python"
 	"github.com/pulumi/tf2pulumi/il"
+	"github.com/pulumi/tf2pulumi/internal/config/module"
 )
 
 const (
@@ -186,6 +186,14 @@ type noCredentials struct{}
 
 func (noCredentials) ForHost(host svchost.Hostname) (auth.HostCredentials, error) {
 	return nil, nil
+}
+
+func (noCredentials) StoreForHost(host svchost.Hostname, credentials auth.HostCredentialsWritable) error {
+	return nil
+}
+
+func (noCredentials) ForgetForHost(host svchost.Hostname) error {
+	return nil
 }
 
 func buildGraphs(tree *module.Tree, isRoot bool, opts Options) ([]*il.Graph, error) {

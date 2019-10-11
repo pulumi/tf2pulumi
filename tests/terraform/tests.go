@@ -269,6 +269,14 @@ func Skip(reason string) TestOptionsFunc {
 	return func(_ *testing.T, test *Test) { test.Options.Skip = reason }
 }
 
+// AllowChanges allows changes on the empty preview and update for the given test.
+func AllowChanges() TestOptionsFunc {
+	return func(_ *testing.T, test *Test) {
+		test.RunOptions.AllowEmptyPreviewChanges = true
+		test.RunOptions.AllowEmptyUpdateChanges = true
+	}
+}
+
 // Python sets up a new context that also accepts any number of test options, but applies those test options only when
 // running with the Python target. Options that affect the Pulumi CLI integration test framework are ignored.
 func Python(opts ...TestOptionsFunc) TestOptionsFunc {

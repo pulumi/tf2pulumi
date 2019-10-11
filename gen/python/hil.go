@@ -18,12 +18,11 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/hashicorp/terraform/config"
-
 	"github.com/pulumi/pulumi/pkg/util/contract"
 
 	"github.com/pulumi/tf2pulumi/gen"
 	"github.com/pulumi/tf2pulumi/il"
+	"github.com/pulumi/tf2pulumi/internal/config"
 )
 
 const (

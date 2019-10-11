@@ -18,7 +18,7 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/hashicorp/terraform/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
 
 	"github.com/pulumi/tf2pulumi/gen"
 	"github.com/pulumi/tf2pulumi/il"

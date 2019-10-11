@@ -18,12 +18,13 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/hashicorp/terraform/config"
-	"github.com/pulumi/pulumi-terraform/pkg/tfbridge"
+	"github.com/pulumi/pulumi-terraform-bridge/pkg/tfbridge"
 	"github.com/pulumi/pulumi/pkg/tokens"
 	"github.com/pulumi/pulumi/pkg/util/contract"
-	"github.com/pulumi/tf2pulumi/il"
 	"github.com/stretchr/testify/assert"
+
+	"github.com/pulumi/tf2pulumi/il"
+	"github.com/pulumi/tf2pulumi/internal/config"
 )
 
 func outputs(names []string) map[string]*il.OutputNode {
@@ -78,10 +79,10 @@ func resources(toks []string) map[string]*il.ResourceNode {
 			PluginName: string(typ.Package()),
 			Info: &tfbridge.ProviderInfo{
 				Resources: map[string]*tfbridge.ResourceInfo{
-					tfType: &tfbridge.ResourceInfo{Tok: typ},
+					tfType: {Tok: typ},
 				},
 				DataSources: map[string]*tfbridge.DataSourceInfo{
-					tfType: &tfbridge.DataSourceInfo{Tok: tokens.ModuleMember(typ)},
+					tfType: {Tok: tokens.ModuleMember(typ)},
 				},
 			},
 		}

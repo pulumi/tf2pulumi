@@ -22,9 +22,9 @@ import (
 
 func TestIntrinsicApply(t *testing.T) {
 	args := []*BoundVariableAccess{
-		&BoundVariableAccess{},
-		&BoundVariableAccess{},
-		&BoundVariableAccess{},
+		{},
+		{},
+		{},
 	}
 	then := &BoundLiteral{}
 

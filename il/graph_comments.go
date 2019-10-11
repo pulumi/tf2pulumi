@@ -23,8 +23,9 @@ import (
 	"github.com/hashicorp/hcl"
 	"github.com/hashicorp/hcl/hcl/ast"
 	"github.com/hashicorp/hcl/hcl/token"
-	"github.com/hashicorp/terraform/config"
 	"github.com/pulumi/pulumi/pkg/util/contract"
+
+	"github.com/pulumi/tf2pulumi/internal/config"
 )
 
 // locatable is an interface shared by the IL's top-level nodes.

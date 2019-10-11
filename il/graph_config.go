@@ -1,6 +1,6 @@
 package il
 
-import "github.com/hashicorp/terraform/config"
+import "github.com/pulumi/tf2pulumi/internal/config"
 
 // nodeSet is a set of Node values.
 type nodeSet map[Node]struct{}

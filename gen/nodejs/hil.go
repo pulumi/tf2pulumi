@@ -20,11 +20,11 @@ import (
 	"strings"
 
 	"github.com/hashicorp/hil/ast"
-	"github.com/hashicorp/terraform/config"
-	"github.com/pulumi/pulumi-terraform/pkg/tfbridge"
+	"github.com/pulumi/pulumi-terraform-bridge/pkg/tfbridge"
 	"github.com/pulumi/pulumi/pkg/util/contract"
 
 	"github.com/pulumi/tf2pulumi/il"
+	"github.com/pulumi/tf2pulumi/internal/config"
 )
 
 // This file contains the code necessary to generate code for bound expression trees. It is the responsibility of each

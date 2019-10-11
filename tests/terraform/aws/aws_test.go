@@ -47,7 +47,7 @@ func TestASG(t *testing.T) {
 }
 
 func TestCognitoUserPool(t *testing.T) {
-	RunAWSTest(t, "cognito-user-pool", terraform.SkipPython())
+	RunAWSTest(t, "cognito-user-pool", terraform.SkipPython(), terraform.AllowChanges())
 }
 
 func TestCount(t *testing.T) {

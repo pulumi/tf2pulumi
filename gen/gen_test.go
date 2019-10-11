@@ -3,8 +3,8 @@ package gen
 import (
 	"testing"
 
-	"github.com/hashicorp/terraform/config"
-	"github.com/hashicorp/terraform/config/module"
+	"github.com/pulumi/tf2pulumi/internal/config"
+	"github.com/pulumi/tf2pulumi/internal/config/module"
 	"github.com/stretchr/testify/assert"
 
 	"github.com/pulumi/tf2pulumi/il"

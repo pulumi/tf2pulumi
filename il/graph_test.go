@@ -3,9 +3,10 @@ package il
 import (
 	"testing"
 
-	"github.com/hashicorp/terraform/config"
-	"github.com/hashicorp/terraform/config/module"
 	"github.com/stretchr/testify/assert"
+
+	"github.com/pulumi/tf2pulumi/internal/config"
+	"github.com/pulumi/tf2pulumi/internal/config/module"
 )
 
 func newLocal(t *testing.T, name, value string) *config.Local {
