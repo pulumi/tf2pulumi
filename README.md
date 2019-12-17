@@ -56,6 +56,30 @@ references files or directories with paths relative to the location of the Terra
 will most likely need to update these paths such that they are relative to the generated `index.ts`
 file.
 
+If you would like to adopt resources from an existing `.tfstate` file under management of a Pulumi
+stack, copy the [`import.ts`](./misc/import/import.ts) file from this repo into your project folder,
+and add the following in your generated `index.ts` file before any resource creations:
+
+```ts
+...
+import "./import";
+...
+```
+
+Then set the `importFromStatefile` config setting on your project to a valid location of a
+`.tfstate` file to import resources from that state.
+
+```
+pulumi config set importFromStatefile ./terraform.tfstate
+```
+
+After doing this, the first `pulumi up` for a new stack with this configuration variable set will
+`import` instead of `create` all of the resources defined in the code. Once imported, the existing
+resources in your cloud provider can now be managed by Pulumi going forward.  See the [Adopting
+Existing Cloud Resources into
+Pulumi](https://www.pulumi.com/blog/adopting-existing-cloud-resources-into-pulumi/) blog post for
+more details on importing existing resources.
+
 ## Limitations
 
 While the majority of Terraform constructs are already supported, there are some gaps. Most
