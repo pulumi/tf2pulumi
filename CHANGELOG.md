@@ -1,5 +1,7 @@
 ## HEAD (Unreleased)
 
+- Support importing resources from existing `.tfstate` files. [#142](https://github.com/pulumi/tf2pulumi/pull/142)
+
 ## v0.6.0 (Released September 30, 2019)
 
 - Fix bad code generation for variable accesses that involve index expressions or optional properties.
