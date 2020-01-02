@@ -1,5 +1,7 @@
 ## HEAD (Unreleased)
 
+- Change default to generate asynchronous data source calls instead of synchronous.
+  [#146](https://github.com/pulumi/tf2pulumi/pull/146)
 - Support importing resources from existing `.tfstate` files. [#142](https://github.com/pulumi/tf2pulumi/pull/142)
 
 ## v0.6.0 (Released September 30, 2019)
