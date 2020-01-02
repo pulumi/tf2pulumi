@@ -4,3 +4,7 @@
 Pulumi.*.yaml
 
 **/command-output/
+
+.terraform
+package-lock.json
+terraform.tfstate
