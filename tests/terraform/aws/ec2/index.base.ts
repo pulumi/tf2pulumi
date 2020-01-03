@@ -2,7 +2,7 @@ import * as pulumi from "@pulumi/pulumi";
 import * as aws from "@pulumi/aws";
 
 // Originally defined at main.tf:5
-const ubuntu = aws.getAmi({
+const ubuntu = pulumi.output(aws.getAmi({
     filters: [
         {
             name: "name",
@@ -15,7 +15,7 @@ const ubuntu = aws.getAmi({
     ],
     mostRecent: true,
     owners: ["099720109477"],
-});
+}, { async: true }));
 // Originally defined at main.tf:21
 const web = new aws.ec2.Instance("web", {
     ami: ubuntu.id,
