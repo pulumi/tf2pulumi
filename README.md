@@ -15,16 +15,15 @@ time, it will also translate Terraform state files into Pulumi checkpoint files.
 If you wish to use `tf2pulumi` without developing the tool itself, you can use one of the [binary
 releases](https://github.com/pulumi/tf2pulumi/releases) hosted on GitHub.
 
-If you want to develop `tf2pulumi` itself, you need to have [Go](https://golang.org/) and
-[`dep`](https://github.com/golang/dep) installed in order to build. Once those prerequisites are
-installed, run the following to build the `tf2pulumi` binary and install it into `$GOPATH/bin`:
+
+tf2pulumi uses [Go modules](https://github.com/golang/go/wiki/Modules) to manage dependencies. If you want to develop `tf2pulumi2` itself, you'll need to have [Go](https://golang.org/)  installed in order to build.
+Once this prerequisite is installed, run the following to build the `tf2pulumi` binary and install it into `$GOPATH/bin`:
 
 ```console
-$ go get -d github.com/pulumi/tf2pulumi/...
-$ cd $(go env GOPATH)/src/github.com/pulumi/tf2pulumi
-$ dep ensure
-$ go install github.com/pulumi/tf2pulumi
+$ go build -o $GOPATH/bin/tf2pulumi main.go
 ```
+
+Go should automatically handle pulling the dependencies for you.
 
 If `$GOPATH/bin` is not on your path, you may want to move the `tf2pulumi` binary from `$GOPATH/bin`
 into a directory that is on your path.
