@@ -3,6 +3,9 @@
 - Support importing resources from existing `.tfstate` files. [#142](https://github.com/pulumi/tf2pulumi/pull/142)
 - Update documentation.
 
+- Defaulting `typescript.synchronous-data-sources` to `false` as sync data sources are being
+  deprecated in Pulumi 2.0.
+
 ## v0.6.0 (Released September 30, 2019)
 
 - Fix bad code generation for variable accesses that involve index expressions or optional properties.
@@ -44,7 +47,7 @@
 ## Improvements
 
 - Allow references to `terraform.workspace` (tf2pulumi#68)
-- Allow normal references to counted resources. Terraform allows this when a resource's count evaluates to 1, so 
+- Allow normal references to counted resources. Terraform allows this when a resource's count evaluates to 1, so
   we code generate this as a reference to the first resource in the counted resource's list.
 - Data sources with inputs that are outputs of other resources and data sources are now generated correctly.
 

@@ -74,7 +74,7 @@ Pulumi TypeScript program that describes the same resource graph.`,
 		"sets the language to target")
 	flag.StringVar(&opts.TargetSDKVersion, "target-sdk-version", "0.17.28",
 		"sets the language SDK version to target")
-	flag.BoolVar(&nodeJSOpts.UsePromptDataSources, "typescript.synchronous-data-sources", true,
+	flag.BoolVar(&nodeJSOpts.UsePromptDataSources, "typescript.synchronous-data-sources", false,
 		"enables or disables synchronous data sources in generated TypeScript code")
 	rootCmd.AddCommand(&cobra.Command{
 		Use:   "version",
