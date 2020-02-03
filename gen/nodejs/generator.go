@@ -683,7 +683,7 @@ func (g *generator) generateResource(r *il.ResourceNode) error {
 		resourceOptions = append(resourceOptions, buf.String())
 	}
 
-	if r.IsDataSource {
+	if r.IsDataSource && !g.promptDataSources[r] {
 		resourceOptions = append(resourceOptions, "async: true")
 	}
 

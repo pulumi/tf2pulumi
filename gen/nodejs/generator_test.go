@@ -145,7 +145,7 @@ func TestComments(t *testing.T) {
 	}
 
 	b.Reset()
-	lang, err = New("main", "0.17.1", false, &b)
+	lang, err = New("main", "0.17.1", false /*prompt*/, &b)
 	assert.NoError(t, err)
 	err = gen.Generate([]*il.Graph{g}, lang)
 	assert.NoError(t, err)
@@ -172,7 +172,7 @@ func TestComments(t *testing.T) {
 	assert.Equal(t, expectedText17PromptDataSources, b.String())
 }
 
-func TestOrdering(t *testing.T) {
+func TestOrderingPrompt(t *testing.T) {
 	conf := loadConfig(t, "testdata/test_ordering")
 	g, err := il.BuildGraph(module.NewTree("main", conf), &il.BuildOptions{
 		AllowMissingProviders: true,
@@ -182,12 +182,31 @@ func TestOrdering(t *testing.T) {
 	}
 
 	var b bytes.Buffer
-	lang, err := New("main", "1.0.0", true, &b)
+	lang, err := New("main", "1.0.0", true /*prompt*/, &b)
 	assert.NoError(t, err)
 	err = gen.Generate([]*il.Graph{g}, lang)
 	assert.NoError(t, err)
 
-	expectedText := readFile(t, "testdata/test_ordering/index.ts")
+	expectedText := readFile(t, "testdata/test_ordering/index_prompt.ts")
+	assert.Equal(t, expectedText, b.String())
+}
+
+func TestOrderingNotPrompt(t *testing.T) {
+	conf := loadConfig(t, "testdata/test_ordering")
+	g, err := il.BuildGraph(module.NewTree("main", conf), &il.BuildOptions{
+		AllowMissingProviders: true,
+	})
+	if err != nil {
+		t.Fatalf("could not build graph: %v", err)
+	}
+
+	var b bytes.Buffer
+	lang, err := New("main", "1.0.0", false /*prompt*/, &b)
+	assert.NoError(t, err)
+	err = gen.Generate([]*il.Graph{g}, lang)
+	assert.NoError(t, err)
+
+	expectedText := readFile(t, "testdata/test_ordering/index_notprompt.ts")
 	assert.Equal(t, expectedText, b.String())
 }
 
