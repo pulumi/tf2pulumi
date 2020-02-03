@@ -19,6 +19,7 @@ require (
 	github.com/hashicorp/terraform v0.12.9
 	github.com/hashicorp/terraform-plugin-sdk v1.0.0
 	github.com/hashicorp/vault v1.2.0 // indirect
+	github.com/kr/pty v1.1.3 // indirect
 	github.com/mitchellh/cli v1.0.0
 	github.com/mitchellh/copystructure v1.0.0
 	github.com/mitchellh/go-homedir v1.1.0
