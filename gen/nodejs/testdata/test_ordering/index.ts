@@ -10,4 +10,4 @@ const accountData = new aws.Provider("account_data", {
     region: awsRegion,
 });
 // Get the caller's identity.
-const accountDataCallerIdentity = aws.getCallerIdentity({provider: accountData});
+const accountDataCallerIdentity = aws.getCallerIdentity({provider: accountData,async: true});

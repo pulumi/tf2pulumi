@@ -683,6 +683,10 @@ func (g *generator) generateResource(r *il.ResourceNode) error {
 		resourceOptions = append(resourceOptions, buf.String())
 	}
 
+	if r.IsDataSource {
+		resourceOptions = append(resourceOptions, "async: true")
+	}
+
 	optionsBag := ""
 	if len(resourceOptions) != 0 {
 		optionsBag = fmt.Sprintf("{%s}", strings.Join(resourceOptions, ","))
