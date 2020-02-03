@@ -685,7 +685,7 @@ func (g *generator) generateResource(r *il.ResourceNode) error {
 
 	optionsBag := ""
 	if len(resourceOptions) != 0 {
-		optionsBag = fmt.Sprintf("{%s}", strings.Join(resourceOptions, ","))
+		optionsBag = fmt.Sprintf("{ %s }", strings.Join(resourceOptions, ", "))
 	}
 
 	name := g.nodeName(r)
