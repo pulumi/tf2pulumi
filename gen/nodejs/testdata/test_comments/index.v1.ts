@@ -20,7 +20,7 @@ const defaultVpc = new aws.ec2.Vpc("default", {
 // Use some data sources.
 const defaultSubnetIds = defaultVpc.id.apply(id => aws.ec2.getSubnetIds({
     vpcId: id,
-}, {async: true}));
+}, { async: true }));
 const defaultAvailabilityZones = aws.getAvailabilityZones();
 const defaultAvailabilityZone: aws.GetAvailabilityZoneResult[] = [];
 for (let i = 0; i < defaultAvailabilityZones.ids.length; i++) {

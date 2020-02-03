@@ -20,13 +20,13 @@ const defaultVpc = new aws.ec2.Vpc("default", {
 // Use some data sources.
 const defaultSubnetIds = defaultVpc.id.apply(id => aws.ec2.getSubnetIds({
     vpcId: id,
-}, {async: true}));
-const defaultAvailabilityZones = pulumi.output(aws.getAvailabilityZones({async: true}));
+}, { async: true }));
+const defaultAvailabilityZones = pulumi.output(aws.getAvailabilityZones({ async: true }));
 const defaultAvailabilityZone: pulumi.Output<aws.GetAvailabilityZoneResult>[] = [];
 for (let i = 0; i < defaultAvailabilityZones.apply(defaultAvailabilityZones => defaultAvailabilityZones.ids.length); i++) {
     defaultAvailabilityZone.push(defaultAvailabilityZones.apply(defaultAvailabilityZones => aws.getAvailabilityZone({
         zoneId: defaultAvailabilityZones.zoneIds[i],
-    }, {async: true})));
+    }, { async: true })));
 }
 // The VPC details
 const vpc = [{
