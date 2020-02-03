@@ -22,7 +22,6 @@ require (
 	github.com/hashicorp/terraform v0.12.9
 	github.com/hashicorp/terraform-plugin-sdk v1.0.0
 	github.com/hashicorp/vault v1.2.0 // indirect
-	github.com/kr/pty v1.1.3 // indirect
 	github.com/mitchellh/cli v1.0.0
 	github.com/mitchellh/copystructure v1.0.0
 	github.com/mitchellh/go-homedir v1.1.0
@@ -36,7 +35,6 @@ require (
 	github.com/stretchr/testify v1.4.0
 	github.com/terraform-providers/terraform-provider-archive v1.3.0
 	github.com/terraform-providers/terraform-provider-http v1.1.1
-	github.com/ugorji/go v1.1.4 // indirect
 	github.com/zclconf/go-cty v1.1.0
 	golang.org/x/crypto v0.0.0-20190820162420-60c769a6c586
 )
@@ -44,6 +42,4 @@ require (
 replace (
 	github.com/Azure/go-autorest => github.com/Azure/go-autorest v12.4.3+incompatible
 	github.com/hashicorp/terraform-plugin-sdk => github.com/pulumi/terraform-plugin-sdk v0.0.0-20191008233500-a54d0e1d3c67
-	github.com/ugorji/go v1.1.4 => github.com/ugorji/go/codec v0.0.0-20181012064053-8333dd449516
-	github.com/ugorji/go/codec => github.com/ugorji/go/codec v0.0.0-20181012064053-8333dd449516
 )
