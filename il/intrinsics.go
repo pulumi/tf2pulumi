@@ -15,7 +15,8 @@
 package il
 
 import (
-	"github.com/pulumi/pulumi/pkg/util/contract"
+	"github.com/hashicorp/hil/ast"
+	"github.com/pulumi/pulumi/sdk/go/common/util/contract"
 )
 
 const (
@@ -42,7 +43,7 @@ func NewApplyCall(args []*BoundVariableAccess, then BoundExpr) *BoundCall {
 	exprs[len(exprs)-1] = then
 
 	return &BoundCall{
-		Func:     IntrinsicApply,
+		HILNode:  &ast.Call{Func: IntrinsicApply},
 		ExprType: then.Type().OutputOf(),
 		Args:     exprs,
 	}
@@ -50,7 +51,7 @@ func NewApplyCall(args []*BoundVariableAccess, then BoundExpr) *BoundCall {
 
 // ParseApplyCall extracts the apply arguments and the continuation from a call to the apply intrinsic.
 func ParseApplyCall(c *BoundCall) (applyArgs []*BoundVariableAccess, then BoundExpr) {
-	contract.Assert(c.Func == IntrinsicApply)
+	contract.Assert(c.HILNode.Func == IntrinsicApply)
 
 	args := make([]*BoundVariableAccess, len(c.Args)-1)
 	for i, a := range c.Args[:len(args)] {
@@ -64,7 +65,7 @@ func ParseApplyCall(c *BoundCall) (applyArgs []*BoundVariableAccess, then BoundE
 func NewApplyArgCall(argIndex int, argType Type) *BoundCall {
 	contract.Assert(!argType.IsOutput())
 	return &BoundCall{
-		Func:     IntrinsicApplyArg,
+		HILNode:  &ast.Call{Func: IntrinsicApplyArg},
 		ExprType: argType,
 		Args:     []BoundExpr{&BoundLiteral{ExprType: TypeNumber, Value: argIndex}},
 	}
@@ -72,14 +73,14 @@ func NewApplyArgCall(argIndex int, argType Type) *BoundCall {
 
 // ParseapplyArgCall extracts the argument index from a call to the apply arg intrinsic.
 func ParseApplyArgCall(c *BoundCall) int {
-	contract.Assert(c.Func == IntrinsicApplyArg)
+	contract.Assert(c.HILNode.Func == IntrinsicApplyArg)
 	return c.Args[0].(*BoundLiteral).Value.(int)
 }
 
 // NewArchiveCall creates a call to IntrinsicArchive.
 func NewArchiveCall(arg BoundExpr) *BoundCall {
 	return &BoundCall{
-		Func:     IntrinsicArchive,
+		HILNode:  &ast.Call{Func: IntrinsicArchive},
 		ExprType: TypeUnknown,
 		Args:     []BoundExpr{arg},
 	}
@@ -87,14 +88,14 @@ func NewArchiveCall(arg BoundExpr) *BoundCall {
 
 // ParseArchiveCall extracts the single argument expression from a call to the archive intrinsic.
 func ParseArchiveCall(c *BoundCall) (arg BoundExpr) {
-	contract.Assert(c.Func == IntrinsicArchive)
+	contract.Assert(c.HILNode.Func == IntrinsicArchive)
 	return c.Args[0]
 }
 
 // NewAssetCall creates a call to IntrinsicArchive.
 func NewAssetCall(arg BoundExpr) *BoundCall {
 	return &BoundCall{
-		Func:     IntrinsicAsset,
+		HILNode:  &ast.Call{Func: IntrinsicAsset},
 		ExprType: TypeUnknown,
 		Args:     []BoundExpr{arg},
 	}
@@ -102,7 +103,7 @@ func NewAssetCall(arg BoundExpr) *BoundCall {
 
 // ParseAssetCall extracts the single argument expression from a call to the asset intrinsic.
 func ParseAssetCall(c *BoundCall) (arg BoundExpr) {
-	contract.Assert(c.Func == IntrinsicAsset)
+	contract.Assert(c.HILNode.Func == IntrinsicAsset)
 	return c.Args[0]
 }
 
@@ -110,7 +111,7 @@ func ParseAssetCall(c *BoundCall) (arg BoundExpr) {
 // another.
 func NewCoerceCall(value BoundExpr, toType Type) *BoundCall {
 	return &BoundCall{
-		Func:     IntrinsicCoerce,
+		HILNode:  &ast.Call{Func: IntrinsicCoerce},
 		ExprType: toType,
 		Args:     []BoundExpr{value},
 	}
@@ -119,11 +120,11 @@ func NewCoerceCall(value BoundExpr, toType Type) *BoundCall {
 // ParseCoerceCall extracts the value being coerced and the type to which it is being coerced from a call to the coerce
 // intrinsic.
 func ParseCoerceCall(c *BoundCall) (value BoundExpr, toType Type) {
-	contract.Assert(c.Func == IntrinsicCoerce)
+	contract.Assert(c.HILNode.Func == IntrinsicCoerce)
 	return c.Args[0], c.ExprType
 }
 
 // NewGetStackCall creates a call to IntrinsicGetStack.
 func NewGetStackCall() *BoundCall {
-	return &BoundCall{Func: IntrinsicGetStack, ExprType: TypeString}
+	return &BoundCall{HILNode: &ast.Call{Func: IntrinsicGetStack}, ExprType: TypeString}
 }

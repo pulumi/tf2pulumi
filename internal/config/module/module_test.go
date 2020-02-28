@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/hashicorp/terraform/svchost/disco"
+	"github.com/hashicorp/terraform-svchost/disco"
 	"github.com/pulumi/tf2pulumi/internal/config"
 )
 

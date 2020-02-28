@@ -22,8 +22,8 @@ import (
 
 	"github.com/pkg/errors"
 	"github.com/pulumi/pulumi-terraform-bridge/pkg/tfbridge"
-	"github.com/pulumi/pulumi/pkg/util/contract"
-	"github.com/pulumi/pulumi/pkg/workspace"
+	"github.com/pulumi/pulumi/sdk/go/common/util/contract"
+	"github.com/pulumi/pulumi/sdk/go/common/workspace"
 )
 
 // ProviderInfoSource abstracts the ability to fetch tfbridge information for a Terraform provider. This is abstracted
