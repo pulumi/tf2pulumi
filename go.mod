@@ -29,7 +29,7 @@ require (
 	github.com/pkg/errors v0.9.1
 	github.com/pulumi/pulumi-terraform-bridge v1.8.1-0.20200304180844-d15f6454d830
 	github.com/pulumi/pulumi-terraform-bridge/v2 v2.0.0
-	github.com/pulumi/pulumi/pkg/v2 v2.0.0
+	github.com/pulumi/pulumi/pkg/v2 v2.0.1-0.20200416234434-398878de31e4
 	github.com/pulumi/pulumi/sdk/v2 v2.0.0
 	github.com/spf13/cobra v0.0.6
 	github.com/stretchr/testify v1.5.1
@@ -45,5 +45,3 @@ replace (
 	github.com/coreos/etcd => github.com/pulumi/etcd v3.3.18+incompatible
 	github.com/hashicorp/terraform-plugin-sdk => github.com/pulumi/terraform-plugin-sdk v0.0.0-20200416232118-ec806f20dbeb
 )
-
-replace github.com/pulumi/pulumi/pkg/v2 => ../pulumi/pkg
