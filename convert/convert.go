@@ -15,25 +15,17 @@
 package convert
 
 import (
-	"fmt"
+	"bytes"
 	"io"
 	"log"
-	"os"
-	"path/filepath"
-	"strings"
 
-	"github.com/hashicorp/hcl/hcl/token"
-	"github.com/hashicorp/terraform/command"
-	"github.com/hashicorp/terraform/svchost"
-	"github.com/hashicorp/terraform/svchost/auth"
-	"github.com/hashicorp/terraform/svchost/disco"
-	"github.com/pkg/errors"
+	"github.com/hashicorp/hcl/v2"
+	"github.com/pulumi/pulumi/pkg/v2/codegen/hcl2/syntax"
+	hcl2nodejs "github.com/pulumi/pulumi/pkg/v2/codegen/nodejs"
+	hcl2python "github.com/pulumi/pulumi/pkg/v2/codegen/python"
+	"github.com/pulumi/pulumi/sdk/v2/go/common/util/contract"
 
-	"github.com/pulumi/tf2pulumi/gen"
-	"github.com/pulumi/tf2pulumi/gen/nodejs"
-	"github.com/pulumi/tf2pulumi/gen/python"
 	"github.com/pulumi/tf2pulumi/il"
-	"github.com/pulumi/tf2pulumi/internal/config/module"
 )
 
 const (
@@ -45,107 +37,83 @@ var (
 	ValidLanguages = [...]string{LanguageTypescript, LanguagePython}
 )
 
-func addLocationAnnotation(location token.Pos, comments **il.Comments) {
-	if !location.IsValid() {
-		return
-	}
-
-	c := *comments
-	if c == nil {
-		c = &il.Comments{}
-		*comments = c
-	}
-
-	if len(c.Leading) != 0 {
-		c.Leading = append(c.Leading, "")
-	}
-	c.Leading = append(c.Leading, fmt.Sprintf(" Originally defined at %v:%v", location.Filename, location.Line))
+type Diagnostics struct {
+	All   hcl.Diagnostics
+	files []*syntax.File
 }
 
-// addLocationAnnotations adds comments that record the original source location of each top-level node in a module.
-func addLocationAnnotations(m *il.Graph) {
-	for _, n := range m.Modules {
-		addLocationAnnotation(n.Location, &n.Comments)
-	}
-	for _, n := range m.Providers {
-		addLocationAnnotation(n.Location, &n.Comments)
-	}
-	for _, n := range m.Resources {
-		addLocationAnnotation(n.Location, &n.Comments)
-	}
-	for _, n := range m.Outputs {
-		addLocationAnnotation(n.Location, &n.Comments)
-	}
-	for _, n := range m.Locals {
-		addLocationAnnotation(n.Location, &n.Comments)
-	}
-	for _, n := range m.Variables {
-		addLocationAnnotation(n.Location, &n.Comments)
-	}
+func (d *Diagnostics) NewDiagnosticWriter(w io.Writer, width uint, color bool) hcl.DiagnosticWriter {
+	return syntax.NewDiagnosticWriter(w, d.files, width, color)
 }
 
 // Convert converts a Terraform module at the provided location into a Pulumi module, written to stdout.
-func Convert(opts Options) error {
+func Convert(opts Options) (map[string][]byte, Diagnostics) {
 	// Set default options where appropriate.
 	if opts.Path == "" {
 		opts.Path = "."
 	}
-	if opts.Writer == nil {
-		opts.Writer = os.Stdout
+
+	// Attempt to load the config as TF11 first. If this succeeds, use TF11 semantics unless either the config
+	// or the options specify otherwise.
+	generatedFiles, useTF12, tf11Err := convertTF11(opts.Path, opts)
+	if !useTF12 {
+		if tf11Err != nil {
+			return nil, Diagnostics{All: hcl.Diagnostics{{
+				Severity: hcl.DiagError,
+				Summary:  tf11Err.Error(),
+			}}}
+		}
+		return generatedFiles, Diagnostics{}
 	}
 
-	services := disco.NewWithCredentialsSource(noCredentials{})
-	moduleStorage := module.NewStorage(filepath.Join(command.DefaultDataDir, "modules"), services)
+	var tf12Files []*syntax.File
+	var diagnostics hcl.Diagnostics
 
-	mod, err := module.NewTreeModule("", opts.Path)
-	if err != nil {
-		return errors.Wrapf(err, "creating tree module")
-	}
-
-	if err = mod.Load(moduleStorage); err != nil {
-		return errors.Wrapf(err, "loading module")
-	}
-
-	gs, err := buildGraphs(mod, true, opts)
-	if err != nil {
-		return errors.Wrapf(err, "importing Terraform project graphs")
-	}
-
-	// Filter resource name properties if requested.
-	if opts.FilterResourceNames {
-		filterAutoNames := opts.ResourceNameProperty == ""
-		for _, g := range gs {
-			for _, r := range g.Resources {
-				if !r.IsDataSource {
-					il.FilterProperties(r, func(key string, _ il.BoundNode) bool {
-						if filterAutoNames {
-							sch := r.Schemas().PropertySchemas(key).Pulumi
-							return sch == nil || sch.Default == nil || !sch.Default.AutoNamed
-						}
-						return key != opts.ResourceNameProperty
-					})
-				}
-			}
+	if tf11Err == nil {
+		// Parse the config.
+		parser := syntax.NewParser()
+		for filename, contents := range generatedFiles {
+			err := parser.ParseFile(bytes.NewReader(contents), filename)
+			contract.Assert(err == nil)
+		}
+		if parser.Diagnostics.HasErrors() {
+			return nil, Diagnostics{All: diagnostics, files: parser.Files}
+		}
+		tf12Files, diagnostics = parser.Files, append(diagnostics, parser.Diagnostics...)
+	} else {
+		files, diags := parseTF12(opts.Path, opts)
+		if !diags.HasErrors() {
+			tf12Files, diagnostics = files, append(diagnostics, diags...)
+		} else {
+			diagnostics = append(diagnostics, &hcl.Diagnostic{
+				Severity: hcl.DiagError,
+				Summary:  tf11Err.Error(),
+			})
+			return nil, Diagnostics{All: diagnostics}
 		}
 	}
 
-	// Annotate nodes with the location of their original definition if requested.
-	if opts.AnnotateNodesWithLocations {
-		for _, g := range gs {
-			addLocationAnnotations(g)
-		}
+	program, programDiags := convertTF12(tf12Files, opts)
+	diagnostics = append(diagnostics, programDiags...)
+
+	if diagnostics.HasErrors() {
+		return nil, Diagnostics{All: diagnostics, files: tf12Files}
 	}
 
-	generator, err := newGenerator("auto", opts)
-	if err != nil {
-		return errors.Wrapf(err, "creating generator")
+	switch opts.TargetLanguage {
+	case LanguageTypescript:
+		tsFiles, genDiags, _ := hcl2nodejs.GenerateProgram(program)
+		generatedFiles, diagnostics = tsFiles, append(diagnostics, genDiags...)
+	case LanguagePython:
+		pyFiles, genDiags, _ := hcl2python.GenerateProgram(program)
+		generatedFiles, diagnostics = pyFiles, append(diagnostics, genDiags...)
 	}
 
-	if err = gen.Generate(gs, generator); err != nil {
-		return errors.Wrapf(err, "generating code")
+	if diagnostics.HasErrors() {
+		return nil, Diagnostics{All: diagnostics, files: tf12Files}
 	}
 
-	return nil
+	return generatedFiles, Diagnostics{All: diagnostics, files: tf12Files}
 }
 
 type Options struct {
@@ -167,8 +135,6 @@ type Options struct {
 	ResourceNameProperty string
 	// Path, when set, overrides the default path (".") to load the source Terraform module from.
 	Path string
-	// Writer can be set to override the default behavior of writing the resulting code to stdout.
-	Writer io.Writer
 	// Optional source for provider schema information.
 	ProviderInfoSource il.ProviderInfoSource
 	// Optional logger for diagnostic information.
@@ -177,64 +143,9 @@ type Options struct {
 	TargetLanguage string
 	// The target SDK version.
 	TargetSDKVersion string
+	// The version of Terraform targeteds by the input configuration.
+	TerraformVersion string
 
 	// TargetOptions captures any target-specific options.
 	TargetOptions interface{}
-}
-
-type noCredentials struct{}
-
-func (noCredentials) ForHost(host svchost.Hostname) (auth.HostCredentials, error) {
-	return nil, nil
-}
-
-func (noCredentials) StoreForHost(host svchost.Hostname, credentials auth.HostCredentialsWritable) error {
-	return nil
-}
-
-func (noCredentials) ForgetForHost(host svchost.Hostname) error {
-	return nil
-}
-
-func buildGraphs(tree *module.Tree, isRoot bool, opts Options) ([]*il.Graph, error) {
-	// TODO: move this into the il package and unify modules based on path
-
-	children := []*il.Graph{}
-	for _, c := range tree.Children() {
-		cc, err := buildGraphs(c, false, opts)
-		if err != nil {
-			return nil, err
-		}
-		children = append(children, cc...)
-	}
-
-	buildOpts := il.BuildOptions{
-		AllowMissingProviders: opts.AllowMissingProviders,
-		AllowMissingVariables: opts.AllowMissingVariables,
-		AllowMissingComments:  opts.AllowMissingComments,
-		ProviderInfoSource:    opts.ProviderInfoSource,
-		Logger:                opts.Logger,
-	}
-	g, err := il.BuildGraph(tree, &buildOpts)
-	if err != nil {
-		return nil, err
-	}
-
-	return append(children, g), nil
-}
-
-func newGenerator(projectName string, opts Options) (gen.Generator, error) {
-	switch opts.TargetLanguage {
-	case LanguageTypescript:
-		nodeOpts, ok := opts.TargetOptions.(nodejs.Options)
-		if !ok {
-			return nil, errors.Errorf("invalid target options of type %T", opts.TargetOptions)
-		}
-		return nodejs.New(projectName, opts.TargetSDKVersion, nodeOpts.UsePromptDataSources, opts.Writer)
-	case LanguagePython:
-		return python.New(projectName, opts.Writer), nil
-	default:
-		return nil, errors.Errorf("invalid language '%s', expected one of %s",
-			opts.TargetLanguage, strings.Join(ValidLanguages[:], ", "))
-	}
 }

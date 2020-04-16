@@ -9,9 +9,9 @@ import (
 	"path/filepath"
 
 	getter "github.com/hashicorp/go-getter"
+	"github.com/hashicorp/terraform-svchost/disco"
 	"github.com/hashicorp/terraform/registry"
 	"github.com/hashicorp/terraform/registry/regsrc"
-	"github.com/hashicorp/terraform/svchost/disco"
 	"github.com/mitchellh/cli"
 )
 

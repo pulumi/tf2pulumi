@@ -93,6 +93,7 @@ func TestMetaProperties(t *testing.T) {
 		"ebsOptimized",
 		"ephemeralBlockDevices",
 		"getPasswordData",
+		"hibernation",
 		"hostId",
 		"iamInstanceProfile",
 		"instanceInitiatedShutdownBehavior",

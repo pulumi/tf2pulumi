@@ -20,8 +20,8 @@ import (
 	"strings"
 
 	"github.com/hashicorp/hil/ast"
-	"github.com/pulumi/pulumi-terraform-bridge/pkg/tfbridge"
-	"github.com/pulumi/pulumi/pkg/util/contract"
+	"github.com/pulumi/pulumi-terraform-bridge/v2/pkg/tfbridge"
+	"github.com/pulumi/pulumi/sdk/v2/go/common/util/contract"
 
 	"github.com/pulumi/tf2pulumi/il"
 	"github.com/pulumi/tf2pulumi/internal/config"
@@ -147,7 +147,7 @@ func (g *generator) genNestedPropertyAccess(w io.Writer, v *il.BoundVariableAcce
 				g.Fgenf(w, "[%s]", e)
 			}
 		} else {
-			g.Fgenf(w, ".%s", tfbridge.TerraformToPulumiName(e, sch.TF, false))
+			g.Fgenf(w, ".%s", tfbridge.TerraformToPulumiName(e, sch.TF, nil, false))
 			if sch.TF != nil && sch.TF.Optional {
 				g.Fgen(w, "!")
 			}
@@ -476,7 +476,7 @@ func (g *generator) GenVariableAccess(w io.Writer, n *il.BoundVariableAccess) {
 	case *config.ModuleVariable:
 		g.Fgen(w, g.variableName(n))
 		for _, e := range strings.Split(v.Field, ".") {
-			g.Fgenf(w, ".%s", tfbridge.TerraformToPulumiName(e, nil, false))
+			g.Fgenf(w, ".%s", tfbridge.TerraformToPulumiName(e, nil, nil, false))
 		}
 	case *config.PathVariable:
 		switch v.Type {
@@ -520,7 +520,7 @@ func (g *generator) GenVariableAccess(w io.Writer, n *il.BoundVariableAccess) {
 			if isSplat {
 				g.Fgen(w, ".map(v => v")
 			}
-			g.Fgenf(w, ".%s", tfbridge.TerraformToPulumiName(element, elementSch.TF, false))
+			g.Fgenf(w, ".%s", tfbridge.TerraformToPulumiName(element, elementSch.TF, nil, false))
 			if !g.inApplyCall {
 				g.genNestedPropertyAccess(w, n)
 			}

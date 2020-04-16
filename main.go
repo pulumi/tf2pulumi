@@ -15,21 +15,22 @@
 package main
 
 import (
+	"archive/tar"
 	"errors"
 	"fmt"
+	"io/ioutil"
 	"os"
+	"path/filepath"
 
 	"github.com/spf13/cobra"
 
 	"github.com/pulumi/tf2pulumi/convert"
-	"github.com/pulumi/tf2pulumi/gen/nodejs"
 	"github.com/pulumi/tf2pulumi/version"
 )
 
 func main() {
 	var opts convert.Options
-	var nodeJSOpts nodejs.Options
-	resourceNameProperty, filterAutoNames := "", false
+	resourceNameProperty, filterAutoNames, tarout := "", false, false
 
 	rootCmd := &cobra.Command{
 		Use:   "tf2pulumi",
@@ -49,11 +50,36 @@ Pulumi TypeScript program that describes the same resource graph.`,
 			opts.FilterResourceNames = resourceNameProperty != "" || filterAutoNames
 			opts.ResourceNameProperty = resourceNameProperty
 
-			if opts.TargetLanguage == convert.LanguageTypescript {
-				opts.TargetOptions = nodeJSOpts
+			files, diags := convert.Convert(opts)
+			if len(diags.All) > 0 {
+				if err := diags.NewDiagnosticWriter(os.Stderr, 0, true).WriteDiagnostics(diags.All); err != nil {
+					return err
+				}
 			}
 
-			return convert.Convert(opts)
+			if tarout {
+				w := tar.NewWriter(os.Stdout)
+				for filename, contents := range files {
+					if err := w.WriteHeader(&tar.Header{
+						Name: filename,
+						Mode: 0600,
+					}); err != nil {
+						return err
+					}
+					if _, err := w.Write(contents); err != nil {
+						return err
+					}
+				}
+				return nil
+			}
+
+			for filename, contents := range files {
+				path := filepath.Join(opts.Path, filename)
+				if err := ioutil.WriteFile(path, contents, 0600); err != nil {
+					return err
+				}
+			}
+			return nil
 		},
 	}
 
@@ -66,6 +92,8 @@ Pulumi TypeScript program that describes the same resource graph.`,
 		"allows code generation to continue if there are errors extracting comments")
 	flag.BoolVar(&opts.AnnotateNodesWithLocations, "record-locations", false,
 		"annotate the generated code with original source locations for each resource")
+	flag.BoolVar(&tarout, "tar", false,
+		"generate a TAR archive to stdout instead of writing to the filesystem")
 	flag.StringVar(&resourceNameProperty, "filter-resource-names", "",
 		"when set, the property with the given key will be removed from all resources")
 	flag.BoolVar(&filterAutoNames, "filter-auto-names", false,
@@ -74,8 +102,8 @@ Pulumi TypeScript program that describes the same resource graph.`,
 		"sets the language to target")
 	flag.StringVar(&opts.TargetSDKVersion, "target-sdk-version", "0.17.28",
 		"sets the language SDK version to target")
-	flag.BoolVar(&nodeJSOpts.UsePromptDataSources, "typescript.synchronous-data-sources", false,
-		"enables or disables synchronous data sources in generated TypeScript code")
+	flag.StringVar(&opts.TerraformVersion, "terraform-version", "11",
+		"sets the Terraform version targeted by the source config")
 	rootCmd.AddCommand(&cobra.Command{
 		Use:   "version",
 		Short: "Print the version number of tf2pulumi",

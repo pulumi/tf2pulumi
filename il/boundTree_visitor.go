@@ -18,7 +18,7 @@ import (
 	"sort"
 
 	"github.com/pkg/errors"
-	"github.com/pulumi/pulumi/pkg/util/contract"
+	"github.com/pulumi/pulumi/sdk/v2/go/common/util/contract"
 )
 
 // A BoundNodeVisitor is a function that visits and optionally replaces a node in a bound property tree.

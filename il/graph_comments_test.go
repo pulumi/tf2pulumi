@@ -20,7 +20,7 @@ import (
 	"path"
 	"testing"
 
-	"github.com/pulumi/pulumi/pkg/util/contract"
+	"github.com/pulumi/pulumi/sdk/v2/go/common/util/contract"
 	"github.com/stretchr/testify/assert"
 
 	"github.com/pulumi/tf2pulumi/internal/config"
