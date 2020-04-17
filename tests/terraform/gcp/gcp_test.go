@@ -54,5 +54,5 @@ func RunGCPTest(t *testing.T, dir string, opts ...terraform.TestOptionsFunc) {
 }
 
 func TestRecordSet(t *testing.T) {
-	RunGCPTest(t, "record_set", terraform.SkipPython(), terraform.Compile(false))
+	RunGCPTest(t, "record_set", terraform.Compile(false))
 }

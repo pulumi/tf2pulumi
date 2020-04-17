@@ -21,9 +21,5 @@ import (
 )
 
 func TestRandomInteger(t *testing.T) {
-	terraform.RunTest(t, "random-integer",
-		terraform.Python(
-			terraform.Compile(false), // Disabled until some pending work with the test runner
-		),
-	)
+	terraform.RunTest(t, "random-integer")
 }

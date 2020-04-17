@@ -36,10 +36,11 @@ import (
 // diffed against the output of tf2pulumi. Each test case is run on every target unless the target specifically opts
 // out.
 type Test struct {
-	Options    ConvertOptions                  // Base options for tf2pulumi, inherited by all targets.
-	RunOptions *integration.ProgramTestOptions // Options for running the generated Pulumi code
-	Python     *ConvertOptions                 // Python-specific options overriding the base options
-	TypeScript *ConvertOptions                 // TypeScript-specific options overriding the base options
+	ProjectName string
+	Options     ConvertOptions                  // Base options for tf2pulumi, inherited by all targets.
+	RunOptions  *integration.ProgramTestOptions // Options for running the generated Pulumi code
+	Python      *ConvertOptions                 // Python-specific options overriding the base options
+	TypeScript  *ConvertOptions                 // TypeScript-specific options overriding the base options
 }
 
 // ConvertOptions are options controlling the behavior of tf2pulumi. Its arguments are generally converted to
@@ -82,7 +83,9 @@ func (test Test) Run(t *testing.T) {
 		targetTest := targetTest{
 			runOpts:     &runOpts,
 			convertOpts: &convertOpts,
+			projectName: test.ProjectName,
 			language:    "python",
+			runtime:     "python",
 		}
 		targetTest.Run(t)
 	})
@@ -99,7 +102,9 @@ func (test Test) Run(t *testing.T) {
 		targetTest := targetTest{
 			runOpts:     &runOpts,
 			convertOpts: &convertOpts,
+			projectName: test.ProjectName,
 			language:    "typescript",
+			runtime:     "nodejs",
 		}
 		targetTest.Run(t)
 	})
@@ -109,7 +114,9 @@ func (test Test) Run(t *testing.T) {
 type targetTest struct {
 	runOpts     *integration.ProgramTestOptions
 	convertOpts *ConvertOptions
+	projectName string
 	language    string
+	runtime     string
 }
 
 // Run runs the test case on the given target. It is responsible for driving tf2pulumi and the CLI integration test
@@ -158,6 +165,12 @@ func (test *targetTest) Run(t *testing.T) {
 
 	// Now, if desired, finally ensure that it actually compiles (and anything else the specific test requires).
 	if test.convertOpts.Compile == nil || *test.convertOpts.Compile {
+		// Emit the Pulumi project.
+		project := fmt.Sprintf("name: %s\nruntime: %s\ndescription: %[1]s test\n", test.projectName, test.runtime)
+		if err := ioutil.WriteFile(filepath.Join(targetDir, "Pulumi.yaml"), []byte(project), 0600); err != nil {
+			t.Fatalf("failed to write Pulumi.yaml: %v", err)
+		}
+
 		integration.ProgramTest(t, test.runOpts)
 	}
 }
@@ -236,6 +249,7 @@ func (test *targetTest) generateCode(t *testing.T) {
 func RunTest(t *testing.T, dir string, opts ...TestOptionsFunc) {
 	test := Test{}
 	// Apply common defaults.
+	test.ProjectName = filepath.Base(dir)
 	test.Options.Compile = nil
 	test.Options.FilterName = "name"
 	test.RunOptions = &integration.ProgramTestOptions{

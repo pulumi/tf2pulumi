@@ -1582,6 +1582,9 @@ func (b *tf12binder) resourceType(addr addrs.Resource,
 		schemas.TFRes = info.P.DataSourcesMap[addr.Type]
 		schemas.Pulumi = schemaInfo
 	}
+	if schemas.TFRes == nil {
+		schemas.TFRes = &schema.Resource{Schema: map[string]*schema.Schema{}}
+	}
 	schemas.TFRes.Schema["id"] = &schema.Schema{Type: schema.TypeString, Computed: true}
 
 	return token, schemas, schemas.ModelType(), nil

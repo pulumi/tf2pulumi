@@ -43,49 +43,48 @@ func RunAWSTest(t *testing.T, dir string, opts ...terraform.TestOptionsFunc) {
 }
 
 func TestASG(t *testing.T) {
-	RunAWSTest(t, "asg", terraform.SkipPython())
+	RunAWSTest(t, "asg")
 }
 
 func TestCognitoUserPool(t *testing.T) {
-	RunAWSTest(t, "cognito-user-pool", terraform.SkipPython(), terraform.AllowChanges())
+	RunAWSTest(t, "cognito-user-pool", terraform.AllowChanges())
 }
 
 func TestCount(t *testing.T) {
-	RunAWSTest(t, "count", terraform.SkipPython())
+	RunAWSTest(t, "count")
 }
 
 func TestECSALB(t *testing.T) {
 	t.Skipf("Skipping test due to NYI: call to cidrsubnet")
-	RunAWSTest(t, "ecs-alb", terraform.SkipPython())
+	RunAWSTest(t, "ecs-alb")
 }
 
 func TestEIP(t *testing.T) {
-	RunAWSTest(t, "eip", terraform.SkipPython())
+	RunAWSTest(t, "eip")
 }
 
 func TestELB(t *testing.T) {
-	RunAWSTest(t, "elb", terraform.SkipPython())
+	RunAWSTest(t, "elb")
 }
 
 func TestELB2(t *testing.T) {
-	RunAWSTest(t, "elb2", terraform.SkipPython())
+	RunAWSTest(t, "elb2")
 }
 
 func TestLBListener(t *testing.T) {
 	RunAWSTest(t, "lb-listener",
-		terraform.SkipPython(),
 		// Note we don't compile this one, since it contains semantic errors.
 		terraform.Compile(false),
 	)
 }
 
 func TestLambda(t *testing.T) {
-	RunAWSTest(t, "lambda", terraform.SkipPython())
+	RunAWSTest(t, "lambda")
 }
 
 func TestNetworking(t *testing.T) {
 	t.Skipf("Skipping test due to NYI: call to cidrsubnet")
-	RunAWSTest(t, "networking", terraform.SkipPython())
+	RunAWSTest(t, "networking")
 }
 
 func TestEC2(t *testing.T) {
