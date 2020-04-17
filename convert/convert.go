@@ -48,7 +48,7 @@ func (d *Diagnostics) NewDiagnosticWriter(w io.Writer, width uint, color bool) h
 }
 
 // Convert converts a Terraform module at the provided location into a Pulumi module, written to stdout.
-func Convert(opts Options) (map[string][]byte, Diagnostics) {
+func Convert(opts Options) (map[string][]byte, Diagnostics, error) {
 	// Set default options where appropriate.
 	if opts.Path == "" {
 		opts.Path = "."
@@ -59,12 +59,9 @@ func Convert(opts Options) (map[string][]byte, Diagnostics) {
 	generatedFiles, useTF12, tf11Err := convertTF11(opts)
 	if !useTF12 {
 		if tf11Err != nil {
-			return nil, Diagnostics{All: hcl.Diagnostics{{
-				Severity: hcl.DiagError,
-				Summary:  tf11Err.Error(),
-			}}}
+			return nil, Diagnostics{}, tf11Err
 		}
-		return generatedFiles, Diagnostics{}
+		return generatedFiles, Diagnostics{}, nil
 	}
 
 	var tf12Files []*syntax.File
@@ -78,7 +75,7 @@ func Convert(opts Options) (map[string][]byte, Diagnostics) {
 			contract.Assert(err == nil)
 		}
 		if parser.Diagnostics.HasErrors() {
-			return nil, Diagnostics{All: diagnostics, files: parser.Files}
+			return nil, Diagnostics{All: diagnostics, files: parser.Files}, nil
 		}
 		tf12Files, diagnostics = parser.Files, append(diagnostics, parser.Diagnostics...)
 	} else {
@@ -86,19 +83,18 @@ func Convert(opts Options) (map[string][]byte, Diagnostics) {
 		if !diags.HasErrors() {
 			tf12Files, diagnostics = files, append(diagnostics, diags...)
 		} else {
-			diagnostics = append(diagnostics, &hcl.Diagnostic{
-				Severity: hcl.DiagError,
-				Summary:  tf11Err.Error(),
-			})
-			return nil, Diagnostics{All: diagnostics}
+			return nil, Diagnostics{}, tf11Err
 		}
 	}
 
-	tf12Files, program, programDiags := convertTF12(tf12Files, opts)
-	diagnostics = append(diagnostics, programDiags...)
+	tf12Files, program, programDiags, err := convertTF12(tf12Files, opts)
+	if err != nil {
+		return nil, Diagnostics{}, err
+	}
 
+	diagnostics = append(diagnostics, programDiags...)
 	if diagnostics.HasErrors() {
-		return nil, Diagnostics{All: diagnostics, files: tf12Files}
+		return nil, Diagnostics{All: diagnostics, files: tf12Files}, nil
 	}
 
 	switch opts.TargetLanguage {
@@ -115,10 +111,10 @@ func Convert(opts Options) (map[string][]byte, Diagnostics) {
 	}
 
 	if diagnostics.HasErrors() {
-		return nil, Diagnostics{All: diagnostics, files: tf12Files}
+		return nil, Diagnostics{All: diagnostics, files: tf12Files}, nil
 	}
 
-	return generatedFiles, Diagnostics{All: diagnostics, files: tf12Files}
+	return generatedFiles, Diagnostics{All: diagnostics, files: tf12Files}, nil
 }
 
 type Options struct {

@@ -50,7 +50,10 @@ Pulumi TypeScript program that describes the same resource graph.`,
 			opts.FilterResourceNames = resourceNameProperty != "" || filterAutoNames
 			opts.ResourceNameProperty = resourceNameProperty
 
-			files, diags := convert.Convert(opts)
+			files, diags, err := convert.Convert(opts)
+			if err != nil {
+				return err
+			}
 			if len(diags.All) > 0 {
 				if err := diags.NewDiagnosticWriter(os.Stderr, 0, true).WriteDiagnostics(diags.All); err != nil {
 					return err

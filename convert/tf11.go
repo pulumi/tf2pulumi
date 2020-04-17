@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"fmt"
 	"io"
-	"log"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -304,8 +303,6 @@ func (g *tf11generator) genModules(modules []*il.Graph) (map[string][]byte, erro
 		locals = nil
 
 		outputs[filename] = buf.Bytes()
-
-		log.Printf("%v: %v", filename, buf.String())
 	}
 
 	return outputs, nil

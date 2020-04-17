@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"fmt"
 	"io"
-	"log"
 	"os"
 	"path/filepath"
 	"sort"
@@ -96,7 +95,7 @@ func parseTF12(opts Options) ([]*syntax.File, hcl.Diagnostics) {
 	return parser.Files, parser.Diagnostics
 }
 
-func convertTF12(files []*syntax.File, opts Options) ([]*syntax.File, *hcl2.Program, hcl.Diagnostics) {
+func convertTF12(files []*syntax.File, opts Options) ([]*syntax.File, *hcl2.Program, hcl.Diagnostics, error) {
 	// Bind the files into a module.
 	binder := &tf12binder{
 		providerInfo:      il.PluginProviderInfoSource,
@@ -140,30 +139,24 @@ func convertTF12(files []*syntax.File, opts Options) ([]*syntax.File, *hcl2.Prog
 		diagnostics = append(diagnostics, bindDiags...)
 	}
 
-	log.Printf("TF bind: %v", diagnostics)
-
 	// Convert the module into a Pulumi HCL2 program.
 	assignNames(declaredFiles)
 	for _, file := range declaredFiles {
 		genDiags := binder.genFile(file)
 		diagnostics = append(diagnostics, genDiags...)
-
-		log.Printf("%v", file.output.String())
 	}
-
-	log.Printf("gen: %v", diagnostics)
 
 	pulumiParser := syntax.NewParser()
 	for _, file := range declaredFiles {
 		err := pulumiParser.ParseFile(file.output, file.syntax.Name)
 		contract.AssertNoError(err)
+		contract.Assert(!pulumiParser.Diagnostics.HasErrors())
 	}
-	program, programDiags, _ := hcl2.BindProgram(pulumiParser.Files, nil)
+
+	program, programDiags, err := hcl2.BindProgram(pulumiParser.Files, nil)
 	diagnostics = append(diagnostics, programDiags...)
 
-	log.Printf("bind: %v", diagnostics)
-
-	return pulumiParser.Files, program, diagnostics
+	return pulumiParser.Files, program, diagnostics, err
 }
 
 type tf12binder struct {
