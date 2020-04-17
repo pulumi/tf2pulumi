@@ -14,6 +14,7 @@ import (
 	"github.com/hashicorp/terraform/plugin/discovery"
 	"github.com/hashicorp/terraform/tfdiags"
 	"github.com/mitchellh/reflectwalk"
+	"github.com/spf13/afero"
 )
 
 // NameRegexp is the regular expression that all names (modules, providers,
@@ -23,6 +24,8 @@ var NameRegexp = regexp.MustCompile(`(?i)\A[A-Z0-9_][A-Z0-9\-\_]*\z`)
 // Config is the configuration that comes from loading a collection
 // of Terraform templates.
 type Config struct {
+	Fs afero.Fs
+
 	// Dir is the path to the directory where this configuration was
 	// loaded from. If it is blank, this configuration wasn't loaded from
 	// any meaningful directory.

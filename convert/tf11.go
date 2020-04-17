@@ -31,13 +31,7 @@ func convertTF11(opts Options) (map[string][]byte, bool, error) {
 	services := disco.NewWithCredentialsSource(noCredentials{})
 	moduleStorage := tf11module.NewStorage(filepath.Join(command.DefaultDataDir, "modules"), services)
 
-	var mod *tf11module.Tree
-	var err error
-	if opts.Files != nil {
-		mod, err = tf11module.NewTreeMap("", opts.Files)
-	} else {
-		mod, err = tf11module.NewTreeModule("", opts.Path)
-	}
+	mod, err := tf11module.NewTreeFs("", opts.Root)
 	if err != nil {
 		return nil, true, fmt.Errorf("failed to create tree: %w", err)
 	}

@@ -15,7 +15,6 @@
 package il
 
 import (
-	"io/ioutil"
 	"path"
 	"regexp"
 	"strings"
@@ -24,6 +23,7 @@ import (
 	"github.com/hashicorp/hcl/hcl/ast"
 	"github.com/hashicorp/hcl/hcl/token"
 	"github.com/pulumi/pulumi/sdk/v2/go/common/util/contract"
+	"github.com/spf13/afero"
 
 	"github.com/pulumi/tf2pulumi/internal/config"
 )
@@ -50,7 +50,7 @@ func (b *builder) extractComments(c *config.Config) error {
 	}
 
 	// Find all config and/or override files in the directory.
-	files, err := ioutil.ReadDir(c.Dir)
+	files, err := afero.ReadDir(c.Fs, c.Dir)
 	if err != nil {
 		return err
 	}
@@ -69,12 +69,12 @@ func (b *builder) extractComments(c *config.Config) error {
 	}
 
 	for _, f := range configs {
-		if err := b.extractFileComments(path.Join(c.Dir, f)); err != nil {
+		if err := b.extractFileComments(c.Fs, path.Join(c.Dir, f)); err != nil {
 			return err
 		}
 	}
 	for _, f := range overrides {
-		if err := b.extractFileComments(path.Join(c.Dir, f)); err != nil {
+		if err := b.extractFileComments(c.Fs, path.Join(c.Dir, f)); err != nil {
 			return err
 		}
 	}
@@ -82,8 +82,8 @@ func (b *builder) extractComments(c *config.Config) error {
 }
 
 // extractFileComments extracts comments from a particular HCL source file.
-func (b *builder) extractFileComments(filePath string) error {
-	t, err := ioutil.ReadFile(filePath)
+func (b *builder) extractFileComments(fs afero.Fs, filePath string) error {
+	t, err := afero.ReadFile(fs, filePath)
 	if err != nil {
 		return err
 	}

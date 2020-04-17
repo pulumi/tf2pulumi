@@ -20,7 +20,6 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
-	"path/filepath"
 
 	"github.com/spf13/cobra"
 
@@ -77,8 +76,7 @@ Pulumi TypeScript program that describes the same resource graph.`,
 			}
 
 			for filename, contents := range files {
-				path := filepath.Join(opts.Path, filename)
-				if err := ioutil.WriteFile(path, contents, 0600); err != nil {
+				if err := ioutil.WriteFile(filename, contents, 0600); err != nil {
 					return err
 				}
 			}

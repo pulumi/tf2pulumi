@@ -1,12 +1,11 @@
 package config
 
 import (
-	"bufio"
 	"fmt"
 	"io"
-	"os"
 
 	"github.com/hashicorp/errwrap"
+	"github.com/spf13/afero"
 )
 
 // configurable is an interface that must be implemented by any configuration
@@ -29,7 +28,7 @@ type importTree struct {
 // This is the function type that must be implemented by the configuration
 // file loader to turn a single file into a configurable and any additional
 // imports.
-type fileLoaderFunc func(path string) (configurable, []string, error)
+type fileLoaderFunc func(fs afero.Fs, path string) (configurable, []string, error)
 
 // Set this to a non-empty value at link time to enable the HCL2 experiment.
 // This is not currently enabled for release builds.
@@ -41,7 +40,7 @@ var enableHCL2Experiment = ""
 // loadTreeFromString takes a string and treats it as an HCL file with the
 // given path and loads the entire importTree for that file.
 func loadTreeFromString(path, contents string) (*importTree, error) {
-	return loadTreeFromFunc(path, func(path string) (configurable, []string, error) {
+	return loadTreeFromFunc(nil, path, func(_ afero.Fs, path string) (configurable, []string, error) {
 		return loadStringHcl(path, contents)
 	})
 }
@@ -49,64 +48,28 @@ func loadTreeFromString(path, contents string) (*importTree, error) {
 // loadTree takes a single file and loads the entire importTree for that
 // file. This function detects what kind of configuration file it is an
 // executes the proper fileLoaderFunc.
-func loadTree(root string) (*importTree, error) {
-	var f fileLoaderFunc
-
-	// HCL2 experiment is currently activated at build time via the linker.
-	// See the comment on this variable for more information.
-	if enableHCL2Experiment == "" {
-		// Main-line behavior: always use the original HCL parser
-		switch ext(root) {
-		case ".tf", ".tf.json":
-			f = loadFileHcl
-		default:
-		}
-	} else {
-		// Experimental behavior: use the HCL2 parser if the opt-in comment
-		// is present.
-		switch ext(root) {
-		case ".tf":
-			// We need to sniff the file for the opt-in comment line to decide
-			// if the file is participating in the HCL2 experiment.
-			cf, err := os.Open(root)
-			if err != nil {
-				return nil, err
-			}
-			sc := bufio.NewScanner(cf)
-			for sc.Scan() {
-				if sc.Text() == "#terraform:hcl2" {
-					f = globalHCL2Loader.loadFile
-				}
-			}
-			if f == nil {
-				f = loadFileHcl
-			}
-		case ".tf.json":
-			f = loadFileHcl
-		default:
-		}
-	}
-
-	if f == nil {
+func loadTree(fs afero.Fs, root string) (*importTree, error) {
+	switch ext(root) {
+	case ".tf", ".tf.json":
+		return loadTreeFromFunc(fs, root, loadFileHcl)
+	default:
 		return nil, fmt.Errorf(
 			"%s: unknown configuration format. Use '.tf' or '.tf.json' extension",
 			root)
 	}
-
-	return loadTreeFromFunc(root, f)
 }
 
 // loadTree takes a fileLoaderFunc and a path and loads the entire importTree
 // for that path using the func.
-func loadTreeFromFunc(root string, f fileLoaderFunc) (*importTree, error) {
-	c, imps, err := f(root)
+func loadTreeFromFunc(fs afero.Fs, root string, f fileLoaderFunc) (*importTree, error) {
+	c, imps, err := f(fs, root)
 	if err != nil {
 		return nil, err
 	}
 
 	children := make([]*importTree, len(imps))
 	for i, imp := range imps {
-		t, err := loadTree(imp)
+		t, err := loadTree(fs, imp)
 		if err != nil {
 			return nil, err
 		}

@@ -2,12 +2,12 @@ package config
 
 import (
 	"fmt"
-	"io/ioutil"
 
 	"github.com/hashicorp/go-multierror"
 	"github.com/hashicorp/hcl"
 	"github.com/hashicorp/hcl/hcl/ast"
 	"github.com/mitchellh/mapstructure"
+	"github.com/spf13/afero"
 )
 
 // hclConfigurable is an implementation of configurable that knows
@@ -170,9 +170,9 @@ func (t *hclConfigurable) Config() (*Config, error) {
 
 // loadFileHcl is a fileLoaderFunc that knows how to read HCL
 // files and turn them into hclConfigurables.
-func loadFileHcl(root string) (configurable, []string, error) {
+func loadFileHcl(fs afero.Fs, root string) (configurable, []string, error) {
 	// Read the HCL file and prepare for parsing
-	d, err := ioutil.ReadFile(root)
+	d, err := afero.ReadFile(fs, root)
 	if err != nil {
 		return nil, nil, fmt.Errorf(
 			"Error reading %s: %s", root, err)

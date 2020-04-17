@@ -24,6 +24,7 @@ import (
 	hcl2nodejs "github.com/pulumi/pulumi/pkg/v2/codegen/nodejs"
 	hcl2python "github.com/pulumi/pulumi/pkg/v2/codegen/python"
 	"github.com/pulumi/pulumi/sdk/v2/go/common/util/contract"
+	"github.com/spf13/afero"
 
 	"github.com/pulumi/tf2pulumi/il"
 )
@@ -50,8 +51,8 @@ func (d *Diagnostics) NewDiagnosticWriter(w io.Writer, width uint, color bool) h
 // Convert converts a Terraform module at the provided location into a Pulumi module, written to stdout.
 func Convert(opts Options) (map[string][]byte, Diagnostics, error) {
 	// Set default options where appropriate.
-	if opts.Path == "" {
-		opts.Path = "."
+	if opts.Root == nil {
+		opts.Root = afero.NewBasePathFs(afero.NewOsFs(), ".")
 	}
 
 	// Attempt to load the config as TF11 first. If this succeeds, use TF11 semantics unless either the config
@@ -134,10 +135,8 @@ type Options struct {
 	// ResourceNameProperty sets the key of the resource name property that will be removed if FilterResourceNames is
 	// true.
 	ResourceNameProperty string
-	// Files, when non-nil, contains the file paths and contents to use as the source module.
-	Files map[string][]byte
-	// Path, when set, overrides the default path (".") to load the source Terraform module from.
-	Path string
+	// Root, when set, overrides the default filesystem used to load the source Terraform module.
+	Root afero.Fs
 	// Optional source for provider schema information.
 	ProviderInfoSource il.ProviderInfoSource
 	// Optional logger for diagnostic information.

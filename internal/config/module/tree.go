@@ -13,6 +13,7 @@ import (
 
 	getter "github.com/hashicorp/go-getter"
 	"github.com/pulumi/tf2pulumi/internal/config"
+	"github.com/spf13/afero"
 )
 
 // RootName is the name of the root tree.
@@ -61,11 +62,11 @@ func NewEmptyTree() *Tree {
 	return t
 }
 
-// NewTreeMap is like NewTree except it parses the configuration in
-// the map  and gives it a specific name. Use a blank name "" to specify
-// the root module.
-func NewTreeMap(name string, files map[string][]byte) (*Tree, error) {
-	c, err := config.LoadMap(name, files)
+// NewTreeFs is like NewTree except it parses the configuration in
+// the virtual filesystem and gives it a specific name. Use a blank
+// name "" to specify the root module.
+func NewTreeFs(name string, fs afero.Fs) (*Tree, error) {
+	c, err := config.LoadFs(fs)
 	if err != nil {
 		return nil, err
 	}

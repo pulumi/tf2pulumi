@@ -4,8 +4,6 @@ import (
 	"bytes"
 	"fmt"
 	"io"
-	"os"
-	"path/filepath"
 	"sort"
 	"strings"
 
@@ -20,13 +18,14 @@ import (
 	"github.com/pulumi/pulumi/pkg/v2/codegen/hcl2/model"
 	"github.com/pulumi/pulumi/pkg/v2/codegen/hcl2/syntax"
 	"github.com/pulumi/pulumi/sdk/v2/go/common/util/contract"
+	"github.com/spf13/afero"
 	"github.com/zclconf/go-cty/cty"
 
 	"github.com/pulumi/tf2pulumi/il"
 )
 
-func parseFile(parser *syntax.Parser, path string) error {
-	f, err := os.Open(path)
+func parseFile(parser *syntax.Parser, fs afero.Fs, path string) error {
+	f, err := fs.Open(path)
 	if err != nil {
 		return fmt.Errorf("failed to open file: %w", err)
 	}
@@ -37,29 +36,8 @@ func parseFile(parser *syntax.Parser, path string) error {
 
 // parseTF12 parses a TF12 config.
 func parseTF12(opts Options) ([]*syntax.File, hcl.Diagnostics) {
-	if opts.Files != nil {
-		files := make([]string, 0, len(opts.Files))
-		for f := range opts.Files {
-			files = append(files, f)
-		}
-		sort.Strings(files)
-
-		// Parse the config.
-		parser := syntax.NewParser()
-		for _, file := range files {
-			if err := parser.ParseFile(bytes.NewReader(opts.Files[file]), file); err != nil {
-				return nil, hcl.Diagnostics{{
-					Severity: hcl.DiagError,
-					Summary:  fmt.Sprintf("failed to parse file %s", file),
-					Detail:   fmt.Sprintf("failed to parse file %s", file),
-				}}
-			}
-		}
-		return parser.Files, parser.Diagnostics
-	}
-
 	// Find the config files in the requested directory.
-	configs, overrides, diags := configs.NewParser(nil).ConfigDirFiles(opts.Path)
+	configs, overrides, diags := configs.NewParser(opts.Root).ConfigDirFiles("/")
 	if diags.HasErrors() {
 		return nil, diags
 	}
@@ -83,12 +61,11 @@ func parseTF12(opts Options) ([]*syntax.File, hcl.Diagnostics) {
 	// Parse the config.
 	parser := syntax.NewParser()
 	for _, config := range configs {
-		path := filepath.Join(opts.Path, config)
-		if err := parseFile(parser, path); err != nil {
+		if err := parseFile(parser, opts.Root, config); err != nil {
 			return nil, hcl.Diagnostics{{
 				Severity: hcl.DiagError,
-				Summary:  fmt.Sprintf("failed to parse file %s", path),
-				Detail:   fmt.Sprintf("failed to parse file %s", path),
+				Summary:  fmt.Sprintf("failed to parse file %s", config),
+				Detail:   fmt.Sprintf("failed to parse file %s", config),
 			}}
 		}
 	}
@@ -96,18 +73,25 @@ func parseTF12(opts Options) ([]*syntax.File, hcl.Diagnostics) {
 }
 
 func convertTF12(files []*syntax.File, opts Options) ([]*syntax.File, *hcl2.Program, hcl.Diagnostics, error) {
+	var options []model.BindOption
+	if opts.AllowMissingVariables {
+		options = append(options, model.AllowMissingVariables)
+	}
+
 	// Bind the files into a module.
 	binder := &tf12binder{
-		providerInfo:      il.PluginProviderInfoSource,
-		providers:         map[string]*tfbridge.ProviderInfo{},
-		binding:           codegen.Set{},
-		bound:             codegen.Set{},
-		conditionals:      newConditionalAnalyzer(),
-		exprToSchemas:     map[model.Expression]il.Schemas{},
-		variableToSchemas: map[model.Definition](func() il.Schemas){},
-		tokens:            syntax.NewTokenMapForFiles(files),
-		root:              model.NewRootScope(syntax.None),
-		providerScope:     model.NewRootScope(syntax.None),
+		options:             options,
+		filterResourceNames: opts.FilterResourceNames,
+		providerInfo:        il.PluginProviderInfoSource,
+		providers:           map[string]*tfbridge.ProviderInfo{},
+		binding:             codegen.Set{},
+		bound:               codegen.Set{},
+		conditionals:        newConditionalAnalyzer(),
+		exprToSchemas:       map[model.Expression]il.Schemas{},
+		variableToSchemas:   map[model.Definition](func() il.Schemas){},
+		tokens:              syntax.NewTokenMapForFiles(files),
+		root:                model.NewRootScope(syntax.None),
+		providerScope:       model.NewRootScope(syntax.None),
 	}
 
 	// Define standard scopes.
@@ -153,14 +137,16 @@ func convertTF12(files []*syntax.File, opts Options) ([]*syntax.File, *hcl2.Prog
 		contract.Assert(!pulumiParser.Diagnostics.HasErrors())
 	}
 
-	program, programDiags, err := hcl2.BindProgram(pulumiParser.Files, nil)
+	program, programDiags, err := hcl2.BindProgram(pulumiParser.Files, nil, options...)
 	diagnostics = append(diagnostics, programDiags...)
 
 	return pulumiParser.Files, program, diagnostics, err
 }
 
 type tf12binder struct {
-	providerInfo il.ProviderInfoSource
+	options             []model.BindOption
+	filterResourceNames bool
+	providerInfo        il.ProviderInfoSource
 
 	providers map[string]*tfbridge.ProviderInfo
 
@@ -353,7 +339,7 @@ func (b *tf12binder) declareFile(input *syntax.File) (*file, hcl.Diagnostics) {
 				}
 
 				if alias, ok := item.Body.Attributes["alias"]; ok {
-					boundAlias, _ := model.BindAttribute(alias, nil, b.tokens)
+					boundAlias, _ := model.BindAttribute(alias, nil, b.tokens, b.options...)
 					if t, ok := boundAlias.Value.(*model.TemplateExpression); ok && len(t.Parts) == 1 {
 						if lit, ok := t.Parts[0].(*model.LiteralValueExpression); ok {
 							p.alias = lit.Value.AsString()
@@ -667,9 +653,9 @@ func (b *tf12binder) bindBodyItem(item *bodyItem) hcl.Diagnostics {
 	var diagnostics hcl.Diagnostics
 	switch item := item.syntax.(type) {
 	case *hclsyntax.Attribute:
-		result, diagnostics = model.BindAttribute(item, b.root, b.tokens)
+		result, diagnostics = model.BindAttribute(item, b.root, b.tokens, b.options...)
 	case *hclsyntax.Block:
-		result, diagnostics = model.BindBlock(item, model.StaticScope(b.root), b.tokens)
+		result, diagnostics = model.BindBlock(item, model.StaticScope(b.root), b.tokens, b.options...)
 	}
 	item.item = result
 	return diagnostics
@@ -689,7 +675,7 @@ func (variableScopes) GetScopeForAttribute(attribute *hclsyntax.Attribute) (*mod
 }
 
 func (b *tf12binder) bindVariable(v *variable) hcl.Diagnostics {
-	block, diagnostics := model.BindBlock(v.syntax, variableScopes(0), b.tokens)
+	block, diagnostics := model.BindBlock(v.syntax, variableScopes(0), b.tokens, b.options...)
 	b.annotateExpressionsWithSchemas(block)
 
 	variableType := model.Type(model.DynamicType)
@@ -704,7 +690,7 @@ func (b *tf12binder) bindVariable(v *variable) hcl.Diagnostics {
 }
 
 func (b *tf12binder) bindProvider(p *provider) hcl.Diagnostics {
-	block, diagnostics := model.BindBlock(p.syntax, model.StaticScope(b.root), b.tokens)
+	block, diagnostics := model.BindBlock(p.syntax, model.StaticScope(b.root), b.tokens, b.options...)
 	b.annotateExpressionsWithSchemas(block)
 
 	p.block = block
@@ -712,7 +698,7 @@ func (b *tf12binder) bindProvider(p *provider) hcl.Diagnostics {
 }
 
 func (b *tf12binder) bindLocal(l *local) hcl.Diagnostics {
-	attribute, diagnostics := model.BindAttribute(l.syntax, b.root, b.tokens)
+	attribute, diagnostics := model.BindAttribute(l.syntax, b.root, b.tokens, b.options...)
 	b.annotateExpressionsWithSchemas(attribute)
 	l.schemas = b.exprToSchemas[attribute.Value]
 	l.terraformType, l.attribute = attribute.Value.Type(), attribute
@@ -720,7 +706,7 @@ func (b *tf12binder) bindLocal(l *local) hcl.Diagnostics {
 }
 
 func (b *tf12binder) bindOutput(o *output) hcl.Diagnostics {
-	block, diagnostics := model.BindBlock(o.syntax, model.StaticScope(b.root), b.tokens)
+	block, diagnostics := model.BindBlock(o.syntax, model.StaticScope(b.root), b.tokens, b.options...)
 	b.annotateExpressionsWithSchemas(block)
 	o.block = block
 	return diagnostics
@@ -806,7 +792,7 @@ func (b *tf12binder) bindResource(r *resource) hcl.Diagnostics {
 			}
 		}
 	} else if forEach, hasForEach := r.syntax.Body.Attributes["for_each"]; hasForEach {
-		forEachExpr, _ := model.BindExpression(forEach.Expr, b.root, b.tokens)
+		forEachExpr, _ := model.BindExpression(forEach.Expr, b.root, b.tokens, b.options...)
 		keyType, valueType, diags := model.GetCollectionTypes(forEachExpr.Type(), forEach.Expr.Range())
 		diagnostics = append(diagnostics, diags...)
 
@@ -833,7 +819,7 @@ func (b *tf12binder) bindResource(r *resource) hcl.Diagnostics {
 		terraformType:  r.terraformType,
 	}
 
-	block, diags := model.BindBlock(r.syntax, scopes, b.tokens)
+	block, diags := model.BindBlock(r.syntax, scopes, b.tokens, b.options...)
 	diagnostics = append(diagnostics, diags...)
 
 	if r.rangeVariable != nil {
@@ -1058,8 +1044,13 @@ func (rr *resourceRewriter) enterBodyItem(item model.BodyItem) (model.BodyItem, 
 			switch item := item.(type) {
 			case *model.Attribute:
 				propSch := rr.schemas().PropertySchemas(item.Name)
-				if propSch.Pulumi != nil && propSch.Pulumi.Asset != nil {
-					info.elidedFields.Add(propSch.Pulumi.Asset.HashField)
+				if propSch.Pulumi != nil {
+					if propSch.Pulumi.Asset != nil {
+						info.elidedFields.Add(propSch.Pulumi.Asset.HashField)
+					}
+					if def := propSch.Pulumi.Default; rr.binder.filterResourceNames && def != nil && def.AutoNamed {
+						info.elidedFields.Add(item.Name)
+					}
 				}
 			case *model.Block:
 				info.groupedTypes[item.Type] = append(info.groupedTypes[item.Type], item)

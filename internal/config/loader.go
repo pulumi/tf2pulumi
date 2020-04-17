@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/hashicorp/hcl"
+	"github.com/spf13/afero"
 )
 
 // ErrNoConfigsFound is the error returned by LoadDir if no
@@ -66,53 +67,16 @@ func LoadBytes(path string, contents []byte) (*Config, error) {
 	return configTree.Flatten()
 }
 
-// LoadMap loads the Terraform configuration from a given map of files.
-//
-// These files can be any format that Terraform recognizes, and import any
-// other format that Terraform recognizes.
-func LoadMap(path string, m map[string][]byte) (*Config, error) {
-	if len(m) == 0 {
-		return &Config{}, nil
-	}
-
-	var result *Config
-
-	// Sort the files and overrides so we have a deterministic order
-	files := make([]string, 0, len(m))
-	for f := range m {
-		files = append(files, f)
-	}
-	sort.Strings(files)
-
-	// Load all the regular files, append them to each other.
-	for _, f := range files {
-		c, err := LoadBytes(f, m[f])
-		if err != nil {
-			return nil, err
-		}
-
-		if result != nil {
-			result, err = Append(result, c)
-			if err != nil {
-				return nil, err
-			}
-		} else {
-			result = c
-		}
-	}
-
-	// Mark the directory
-	result.Dir = path
-
-	return result, nil
-}
-
 // LoadFile loads the Terraform configuration from a given file.
 //
 // This file can be any format that Terraform recognizes, and import any
 // other format that Terraform recognizes.
 func LoadFile(path string) (*Config, error) {
-	importTree, err := loadTree(path)
+	return loadFile(afero.NewOsFs(), path)
+}
+
+func loadFile(fs afero.Fs, path string) (*Config, error) {
+	importTree, err := loadTree(fs, path)
 	if err != nil {
 		return nil, err
 	}
@@ -140,18 +104,39 @@ func LoadFile(path string) (*Config, error) {
 //
 // Files are loaded in lexical order.
 func LoadDir(root string) (*Config, error) {
-	files, overrides, err := dirFiles(root)
+	rootAbs, err := filepath.Abs(root)
+	if err != nil {
+		return nil, err
+	}
+
+	c, err := LoadFs(afero.NewBasePathFs(afero.NewOsFs(), root))
+	if err != nil {
+		if _, isNotFound := err.(*ErrNoConfigsFound); isNotFound {
+			return nil, &ErrNoConfigsFound{Dir: root}
+		}
+		return nil, err
+	}
+
+	c.Fs, c.Dir = afero.NewOsFs(), rootAbs
+	return c, nil
+}
+
+// LoadDir loads all the Terraform configuration files from the root of the
+// given virtual filesystem and appends them together.
+//
+// Special files known as "override files" can also be present, which
+// are merged into the loaded configuration. That is, the non-override
+// files are loaded first to create the configuration. Then, the overrides
+// are merged into the configuration to create the final configuration.
+//
+// Files are loaded in lexical order.
+func LoadFs(fs afero.Fs) (*Config, error) {
+	files, overrides, err := fsFiles(fs)
 	if err != nil {
 		return nil, err
 	}
 	if len(files) == 0 && len(overrides) == 0 {
-		return nil, &ErrNoConfigsFound{Dir: root}
-	}
-
-	// Determine the absolute path to the directory.
-	rootAbs, err := filepath.Abs(root)
-	if err != nil {
-		return nil, err
+		return nil, &ErrNoConfigsFound{Dir: "/"}
 	}
 
 	var result *Config
@@ -162,7 +147,7 @@ func LoadDir(root string) (*Config, error) {
 
 	// Load all the regular files, append them to each other.
 	for _, f := range files {
-		c, err := LoadFile(f)
+		c, err := loadFile(fs, f)
 		if err != nil {
 			return nil, err
 		}
@@ -193,8 +178,8 @@ func LoadDir(root string) (*Config, error) {
 		}
 	}
 
-	// Mark the directory
-	result.Dir = rootAbs
+	// Mark the directory and the FS
+	result.Fs, result.Dir = fs, "/"
 
 	return result, nil
 }
@@ -206,7 +191,7 @@ func IsEmptyDir(root string) (bool, error) {
 		return true, nil
 	}
 
-	fs, os, err := dirFiles(root)
+	fs, os, err := fsFiles(afero.NewBasePathFs(afero.NewOsFs(), root))
 	if err != nil {
 		return false, err
 	}
@@ -226,8 +211,8 @@ func ext(path string) string {
 	}
 }
 
-func dirFiles(dir string) ([]string, []string, error) {
-	f, err := os.Open(dir)
+func fsFiles(fs afero.Fs) ([]string, []string, error) {
+	f, err := fs.Open("/")
 	if err != nil {
 		return nil, nil, err
 	}
@@ -238,9 +223,7 @@ func dirFiles(dir string) ([]string, []string, error) {
 		return nil, nil, err
 	}
 	if !fi.IsDir() {
-		return nil, nil, fmt.Errorf(
-			"configuration path must be a directory: %s",
-			dir)
+		return nil, nil, fmt.Errorf("configuration path must be a directory")
 	}
 
 	var files, overrides []string
@@ -270,7 +253,7 @@ func dirFiles(dir string) ([]string, []string, error) {
 			override := nameNoExt == "override" ||
 				strings.HasSuffix(nameNoExt, "_override")
 
-			path := filepath.Join(dir, name)
+			path := filepath.Join("/", name)
 			if override {
 				overrides = append(overrides, path)
 			} else {
