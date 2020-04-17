@@ -18,6 +18,7 @@ import (
 	"bytes"
 	"io"
 	"log"
+	"os"
 
 	"github.com/hashicorp/hcl/v2"
 	"github.com/pulumi/pulumi/pkg/v2/codegen/hcl2/syntax"
@@ -52,7 +53,11 @@ func (d *Diagnostics) NewDiagnosticWriter(w io.Writer, width uint, color bool) h
 func Convert(opts Options) (map[string][]byte, Diagnostics, error) {
 	// Set default options where appropriate.
 	if opts.Root == nil {
-		opts.Root = afero.NewBasePathFs(afero.NewOsFs(), ".")
+		cwd, err := os.Getwd()
+		if err != nil {
+			return nil, Diagnostics{}, err
+		}
+		opts.Root = afero.NewBasePathFs(afero.NewOsFs(), cwd)
 	}
 
 	// Attempt to load the config as TF11 first. If this succeeds, use TF11 semantics unless either the config

@@ -109,7 +109,7 @@ func LoadDir(root string) (*Config, error) {
 		return nil, err
 	}
 
-	c, err := LoadFs(afero.NewBasePathFs(afero.NewOsFs(), root))
+	c, err := LoadFs(afero.NewBasePathFs(afero.NewOsFs(), rootAbs))
 	if err != nil {
 		if _, isNotFound := err.(*ErrNoConfigsFound); isNotFound {
 			return nil, &ErrNoConfigsFound{Dir: root}
