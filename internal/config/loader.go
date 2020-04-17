@@ -167,7 +167,7 @@ func LoadFs(fs afero.Fs) (*Config, error) {
 
 	// Load all the overrides, and merge them into the config
 	for _, f := range overrides {
-		c, err := LoadFile(f)
+		c, err := loadFile(fs, f)
 		if err != nil {
 			return nil, err
 		}

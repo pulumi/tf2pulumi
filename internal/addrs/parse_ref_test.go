@@ -695,13 +695,13 @@ func TestParseRef(t *testing.T) {
 				}
 			case 1:
 				if test.WantErr == "" {
-					t.Fatalf("unexpected diagnostics: %s", diags.Err())
+					t.Fatalf("unexpected diagnostics: %s", diags.Error())
 				}
-				if got, want := diags[0].Description().Detail, test.WantErr; got != want {
+				if got, want := diags[0].Detail, test.WantErr; got != want {
 					t.Fatalf("wrong error\ngot:  %s\nwant: %s", got, want)
 				}
 			default:
-				t.Fatalf("too many diagnostics: %s", diags.Err())
+				t.Fatalf("too many diagnostics: %s", diags.Error())
 			}
 
 			if diags.HasErrors() {

@@ -38,10 +38,6 @@ func TestBackendHash(t *testing.T) {
 	for i, tc := range cases {
 		t.Run(fmt.Sprintf("%d-%s", i, tc.Name), func(t *testing.T) {
 			c := testConfig(t, tc.Fixture)
-			err := c.Validate()
-			if err != nil {
-				t.Fatalf("err: %s", err)
-			}
 
 			var actual uint64
 			if c.Terraform != nil && c.Terraform.Backend != nil {

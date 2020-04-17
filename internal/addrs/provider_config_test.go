@@ -134,7 +134,7 @@ func TestParseAbsProviderConfig(t *testing.T) {
 				if len(diags) != 1 {
 					t.Fatalf("got %d diagnostics; want 1", len(diags))
 				}
-				gotDetail := diags[0].Description().Detail
+				gotDetail := diags[0].Detail
 				if gotDetail != test.WantDiag {
 					t.Fatalf("wrong diagnostic detail\ngot:  %s\nwant: %s", gotDetail, test.WantDiag)
 				}

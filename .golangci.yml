@@ -1,6 +1,8 @@
 run:
   skip-dirs:
+    - internal/addrs
     - internal/config
+    - internal/configs
 
 linters:
   enable-all: false

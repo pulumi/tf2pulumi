@@ -7,7 +7,6 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/hashicorp/terraform-svchost/disco"
 	"github.com/pulumi/tf2pulumi/internal/config"
 )
 
@@ -42,7 +41,7 @@ func testConfig(t *testing.T, n string) *config.Config {
 	return c
 }
 
-func testStorage(t *testing.T, d *disco.Disco) *Storage {
+func testStorage(t *testing.T) *Storage {
 	t.Helper()
-	return NewStorage(tempDir(t), d)
+	return NewStorage(tempDir(t))
 }

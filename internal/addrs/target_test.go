@@ -227,7 +227,7 @@ func TestResourceContains(t *testing.T) {
 func mustParseTarget(str string) Targetable {
 	t, diags := ParseTargetStr(str)
 	if diags != nil {
-		panic(fmt.Sprintf("%s: %s", str, diags.ErrWithWarnings()))
+		panic(fmt.Sprintf("%s: %s", str, diags.Error()))
 	}
 	return t.Subject
 }
