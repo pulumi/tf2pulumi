@@ -30,6 +30,7 @@ import (
 
 const (
 	LanguageTypescript string = "typescript"
+	LanguagePulumi     string = "pulumi"
 	LanguagePython     string = "python"
 )
 
@@ -55,7 +56,7 @@ func Convert(opts Options) (map[string][]byte, Diagnostics) {
 
 	// Attempt to load the config as TF11 first. If this succeeds, use TF11 semantics unless either the config
 	// or the options specify otherwise.
-	generatedFiles, useTF12, tf11Err := convertTF11(opts.Path, opts)
+	generatedFiles, useTF12, tf11Err := convertTF11(opts)
 	if !useTF12 {
 		if tf11Err != nil {
 			return nil, Diagnostics{All: hcl.Diagnostics{{
@@ -81,7 +82,7 @@ func Convert(opts Options) (map[string][]byte, Diagnostics) {
 		}
 		tf12Files, diagnostics = parser.Files, append(diagnostics, parser.Diagnostics...)
 	} else {
-		files, diags := parseTF12(opts.Path, opts)
+		files, diags := parseTF12(opts)
 		if !diags.HasErrors() {
 			tf12Files, diagnostics = files, append(diagnostics, diags...)
 		} else {
@@ -93,7 +94,7 @@ func Convert(opts Options) (map[string][]byte, Diagnostics) {
 		}
 	}
 
-	program, programDiags := convertTF12(tf12Files, opts)
+	tf12Files, program, programDiags := convertTF12(tf12Files, opts)
 	diagnostics = append(diagnostics, programDiags...)
 
 	if diagnostics.HasErrors() {
@@ -104,6 +105,10 @@ func Convert(opts Options) (map[string][]byte, Diagnostics) {
 	case LanguageTypescript:
 		tsFiles, genDiags, _ := hcl2nodejs.GenerateProgram(program)
 		generatedFiles, diagnostics = tsFiles, append(diagnostics, genDiags...)
+	case LanguagePulumi:
+		for _, f := range tf12Files {
+			generatedFiles[f.Name] = f.Bytes
+		}
 	case LanguagePython:
 		pyFiles, genDiags, _ := hcl2python.GenerateProgram(program)
 		generatedFiles, diagnostics = pyFiles, append(diagnostics, genDiags...)
@@ -133,6 +138,8 @@ type Options struct {
 	// ResourceNameProperty sets the key of the resource name property that will be removed if FilterResourceNames is
 	// true.
 	ResourceNameProperty string
+	// Files, when non-nil, contains the file paths and contents to use as the source module.
+	Files map[string][]byte
 	// Path, when set, overrides the default path (".") to load the source Terraform module from.
 	Path string
 	// Optional source for provider schema information.

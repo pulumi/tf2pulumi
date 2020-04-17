@@ -61,6 +61,18 @@ func NewEmptyTree() *Tree {
 	return t
 }
 
+// NewTreeMap is like NewTree except it parses the configuration in
+// the map  and gives it a specific name. Use a blank name "" to specify
+// the root module.
+func NewTreeMap(name string, files map[string][]byte) (*Tree, error) {
+	c, err := config.LoadMap(name, files)
+	if err != nil {
+		return nil, err
+	}
+
+	return NewTree(name, c), nil
+}
+
 // NewTreeModule is like NewTree except it parses the configuration in
 // the directory and gives it a specific name. Use a blank name "" to specify
 // the root module.

@@ -11,7 +11,7 @@ build::
 	go install -ldflags "-X github.com/pulumi/tf2pulumi/version.Version=${VERSION}" github.com/pulumi/tf2pulumi
 
 lint::
-	golangci-lint run
+	golangci-lint run --timeout 5m
 
 test_fast::
 	$(GO_TEST_FAST) ./il/... ./gen/...

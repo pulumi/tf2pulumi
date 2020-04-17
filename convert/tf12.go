@@ -37,9 +37,30 @@ func parseFile(parser *syntax.Parser, path string) error {
 }
 
 // parseTF12 parses a TF12 config.
-func parseTF12(rootDir string, opts Options) ([]*syntax.File, hcl.Diagnostics) {
+func parseTF12(opts Options) ([]*syntax.File, hcl.Diagnostics) {
+	if opts.Files != nil {
+		files := make([]string, 0, len(opts.Files))
+		for f := range opts.Files {
+			files = append(files, f)
+		}
+		sort.Strings(files)
+
+		// Parse the config.
+		parser := syntax.NewParser()
+		for _, file := range files {
+			if err := parser.ParseFile(bytes.NewReader(opts.Files[file]), file); err != nil {
+				return nil, hcl.Diagnostics{{
+					Severity: hcl.DiagError,
+					Summary:  fmt.Sprintf("failed to parse file %s", file),
+					Detail:   fmt.Sprintf("failed to parse file %s", file),
+				}}
+			}
+		}
+		return parser.Files, parser.Diagnostics
+	}
+
 	// Find the config files in the requested directory.
-	configs, overrides, diags := configs.NewParser(nil).ConfigDirFiles(rootDir)
+	configs, overrides, diags := configs.NewParser(nil).ConfigDirFiles(opts.Path)
 	if diags.HasErrors() {
 		return nil, diags
 	}
@@ -63,7 +84,7 @@ func parseTF12(rootDir string, opts Options) ([]*syntax.File, hcl.Diagnostics) {
 	// Parse the config.
 	parser := syntax.NewParser()
 	for _, config := range configs {
-		path := filepath.Join(rootDir, config)
+		path := filepath.Join(opts.Path, config)
 		if err := parseFile(parser, path); err != nil {
 			return nil, hcl.Diagnostics{{
 				Severity: hcl.DiagError,
@@ -72,11 +93,10 @@ func parseTF12(rootDir string, opts Options) ([]*syntax.File, hcl.Diagnostics) {
 			}}
 		}
 	}
-
 	return parser.Files, parser.Diagnostics
 }
 
-func convertTF12(files []*syntax.File, opts Options) (*hcl2.Program, hcl.Diagnostics) {
+func convertTF12(files []*syntax.File, opts Options) ([]*syntax.File, *hcl2.Program, hcl.Diagnostics) {
 	// Bind the files into a module.
 	binder := &tf12binder{
 		providerInfo:      il.PluginProviderInfoSource,
@@ -143,7 +163,7 @@ func convertTF12(files []*syntax.File, opts Options) (*hcl2.Program, hcl.Diagnos
 
 	log.Printf("bind: %v", diagnostics)
 
-	return program, diagnostics
+	return pulumiParser.Files, program, diagnostics
 }
 
 type tf12binder struct {

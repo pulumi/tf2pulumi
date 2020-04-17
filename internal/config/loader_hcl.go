@@ -177,9 +177,14 @@ func loadFileHcl(root string) (configurable, []string, error) {
 		return nil, nil, fmt.Errorf(
 			"Error reading %s: %s", root, err)
 	}
+	return loadStringHcl(root, string(d))
+}
 
+// loadStringHcl parses the given string as HCL and turns it into
+// an hclConfigurable.
+func loadStringHcl(root, d string) (configurable, []string, error) {
 	// Parse it
-	hclRoot, err := hcl.Parse(string(d))
+	hclRoot, err := hcl.Parse(d)
 	if err != nil {
 		return nil, nil, fmt.Errorf(
 			"Error parsing %s: %s", root, err)

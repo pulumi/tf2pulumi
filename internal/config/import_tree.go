@@ -38,6 +38,14 @@ type fileLoaderFunc func(path string) (configurable, []string, error)
 //    go install -ldflags="-X github.com/hashicorp/terraform/config.enableHCL2Experiment=true" github.com/hashicorp/terraform
 var enableHCL2Experiment = ""
 
+// loadTreeFromString takes a string and treats it as an HCL file with the
+// given path and loads the entire importTree for that file.
+func loadTreeFromString(path, contents string) (*importTree, error) {
+	return loadTreeFromFunc(path, func(path string) (configurable, []string, error) {
+		return loadStringHcl(path, contents)
+	})
+}
+
 // loadTree takes a single file and loads the entire importTree for that
 // file. This function detects what kind of configuration file it is an
 // executes the proper fileLoaderFunc.
@@ -85,6 +93,12 @@ func loadTree(root string) (*importTree, error) {
 			root)
 	}
 
+	return loadTreeFromFunc(root, f)
+}
+
+// loadTree takes a fileLoaderFunc and a path and loads the entire importTree
+// for that path using the func.
+func loadTreeFromFunc(root string, f fileLoaderFunc) (*importTree, error) {
 	c, imps, err := f(root)
 	if err != nil {
 		return nil, err

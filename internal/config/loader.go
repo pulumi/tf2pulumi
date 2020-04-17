@@ -43,6 +43,70 @@ func LoadJSON(raw json.RawMessage) (*Config, error) {
 	return hclConfig.Config()
 }
 
+// LoadBytes loads the Terraform configuration from a given byte array.
+//
+// This string can be any format that Terraform recognizes, and import any
+// other format that Terraform recognizes.
+func LoadBytes(path string, contents []byte) (*Config, error) {
+	importTree, err := loadTreeFromString(path, string(contents))
+	if err != nil {
+		return nil, err
+	}
+
+	configTree, err := importTree.ConfigTree()
+
+	// Close the importTree now so that we can clear resources as quickly
+	// as possible.
+	importTree.Close()
+
+	if err != nil {
+		return nil, err
+	}
+
+	return configTree.Flatten()
+}
+
+// LoadMap loads the Terraform configuration from a given map of files.
+//
+// These files can be any format that Terraform recognizes, and import any
+// other format that Terraform recognizes.
+func LoadMap(path string, m map[string][]byte) (*Config, error) {
+	if len(m) == 0 {
+		return &Config{}, nil
+	}
+
+	var result *Config
+
+	// Sort the files and overrides so we have a deterministic order
+	files := make([]string, 0, len(m))
+	for f := range m {
+		files = append(files, f)
+	}
+	sort.Strings(files)
+
+	// Load all the regular files, append them to each other.
+	for _, f := range files {
+		c, err := LoadBytes(f, m[f])
+		if err != nil {
+			return nil, err
+		}
+
+		if result != nil {
+			result, err = Append(result, c)
+			if err != nil {
+				return nil, err
+			}
+		} else {
+			result = c
+		}
+	}
+
+	// Mark the directory
+	result.Dir = path
+
+	return result, nil
+}
+
 // LoadFile loads the Terraform configuration from a given file.
 //
 // This file can be any format that Terraform recognizes, and import any

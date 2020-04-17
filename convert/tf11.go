@@ -28,11 +28,17 @@ import (
 )
 
 // convertTF11 converts a TF11 graph to a set of TF12 files.
-func convertTF11(path string, opts Options) (map[string][]byte, bool, error) {
+func convertTF11(opts Options) (map[string][]byte, bool, error) {
 	services := disco.NewWithCredentialsSource(noCredentials{})
 	moduleStorage := tf11module.NewStorage(filepath.Join(command.DefaultDataDir, "modules"), services)
 
-	mod, err := tf11module.NewTreeModule("", opts.Path)
+	var mod *tf11module.Tree
+	var err error
+	if opts.Files != nil {
+		mod, err = tf11module.NewTreeMap("", opts.Files)
+	} else {
+		mod, err = tf11module.NewTreeModule("", opts.Path)
+	}
 	if err != nil {
 		return nil, true, fmt.Errorf("failed to create tree: %w", err)
 	}
