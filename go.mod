@@ -29,7 +29,7 @@ require (
 	github.com/pkg/errors v0.9.1
 	github.com/pulumi/pulumi-terraform-bridge v1.8.1-0.20200304180844-d15f6454d830
 	github.com/pulumi/pulumi-terraform-bridge/v2 v2.0.0
-	github.com/pulumi/pulumi/pkg/v2 v2.0.1-0.20200416234434-398878de31e4
+	github.com/pulumi/pulumi/pkg/v2 v2.0.1-0.20200417152444-f081d98a39f0
 	github.com/pulumi/pulumi/sdk/v2 v2.0.0
 	github.com/spf13/afero v1.2.2
 	github.com/spf13/cobra v0.0.6
