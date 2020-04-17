@@ -39,11 +39,14 @@ func AddImportTransformation(ctx *pulumi.Context, importFromStateFile string) er
 			// if resource was created with `count` in terraform, use the `index_key` instead of `0`
 			if resourceInstanceLength > 1 {
 				terraformResourceIndexKey = int(resourceInstance.IndexKey.(float64)) // By default, Go treats numeric values in JSON as float64
-				terraformResourceIndexSuffix = fmt.Sprintf("-%v", resourceInstance.IndexKey)
+				terraformResourceIndexSuffix = fmt.Sprintf("-%v", terraformResourceIndexKey)
 			}
 
 			var resourceAttributes map[string]interface{}
 			json.Unmarshal(terraformResource.Instances[terraformResourceIndexKey].AttributesRaw, &resourceAttributes)
+			if err != nil {
+				return err
+			}
 
 			pulumiType := typeMapping[terraformResource.Type]
 			if pulumiType == "" {
