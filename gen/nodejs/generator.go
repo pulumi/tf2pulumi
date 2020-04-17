@@ -41,13 +41,17 @@ type Options struct {
 
 // New creates a new NodeJS code generator.
 func New(projectName string, targetSDKVersion string, usePromptDataSources bool, w io.Writer) (gen.Generator, error) {
-	v, err := semver.Parse(targetSDKVersion)
-	if err != nil {
-		return nil, err
+	supportsProxyApplies := true
+	if targetSDKVersion != "" {
+		v, err := semver.Parse(targetSDKVersion)
+		if err != nil {
+			return nil, err
+		}
+		supportsProxyApplies = v.GTE(semver.MustParse("0.17.0"))
 	}
 	g := &generator{
 		ProjectName:          projectName,
-		supportsProxyApplies: v.GTE(semver.MustParse("0.17.0")),
+		supportsProxyApplies: supportsProxyApplies,
 		usePromptDataSources: usePromptDataSources,
 		importNames:          make(map[string]bool),
 	}
@@ -307,7 +311,7 @@ func (g *generator) GeneratePreamble(modules []*il.Graph) error {
 		}
 	}
 	if g.rootPath == "" {
-		return errors.New("could not determine root module path")
+		g.rootPath = "."
 	}
 
 	// Print the @pulumi/pulumi import at the top.
