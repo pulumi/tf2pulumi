@@ -10,8 +10,6 @@ import (
 	"github.com/hashicorp/hcl/v2"
 	"github.com/hashicorp/hcl/v2/hclsyntax"
 	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
-	"github.com/hashicorp/terraform/addrs"
-	"github.com/hashicorp/terraform/configs"
 	"github.com/pulumi/pulumi-terraform-bridge/v2/pkg/tfbridge"
 	"github.com/pulumi/pulumi/pkg/v2/codegen"
 	"github.com/pulumi/pulumi/pkg/v2/codegen/hcl2"
@@ -22,6 +20,8 @@ import (
 	"github.com/zclconf/go-cty/cty"
 
 	"github.com/pulumi/tf2pulumi/il"
+	"github.com/pulumi/tf2pulumi/internal/addrs"
+	"github.com/pulumi/tf2pulumi/internal/configs"
 )
 
 func parseFile(parser *syntax.Parser, fs afero.Fs, path string) error {
@@ -1548,7 +1548,7 @@ func (b *tf12binder) genResource(w io.Writer, r *resource) hcl.Diagnostics {
 func (b *tf12binder) resourceType(addr addrs.Resource,
 	subject hcl.Range) (string, il.Schemas, model.Type, hcl.Diagnostics) {
 
-	providerName := addr.DefaultProviderConfig().Type.LegacyString()
+	providerName := addr.ImpliedProvider()
 
 	info, ok := b.providers[providerName]
 	if !ok {

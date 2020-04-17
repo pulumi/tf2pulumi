@@ -2,9 +2,6 @@ package convert
 
 import (
 	"github.com/hashicorp/hcl/v2"
-	"github.com/hashicorp/terraform/addrs"
-	"github.com/hashicorp/terraform/lang"
-	"github.com/hashicorp/terraform/tfdiags"
 	"github.com/pulumi/pulumi/pkg/v2/codegen"
 	"github.com/pulumi/pulumi/pkg/v2/codegen/hcl2/model"
 	"github.com/pulumi/pulumi/sdk/v2/go/common/util/contract"
@@ -60,74 +57,4 @@ func (analyzer *conditionalAnalyzer) postVisit(n model.Expression) (model.Expres
 	}
 
 	return n, nil
-}
-
-func (b *tf12binder) StaticValidateReferences(refs []*addrs.Reference, self addrs.Referenceable) tfdiags.Diagnostics {
-	return nil
-}
-
-func (b *tf12binder) GetCountAttr(addr addrs.CountAttr, r tfdiags.SourceRange) (cty.Value, tfdiags.Diagnostics) {
-	return cty.UnknownVal(cty.Number), nil
-}
-
-func (b *tf12binder) GetForEachAttr(addr addrs.ForEachAttr, r tfdiags.SourceRange) (cty.Value, tfdiags.Diagnostics) {
-	return cty.UnknownVal(cty.DynamicPseudoType), nil
-}
-
-func (b *tf12binder) GetResource(addr addrs.Resource, r tfdiags.SourceRange) (cty.Value, tfdiags.Diagnostics) {
-	return cty.UnknownVal(cty.DynamicPseudoType), nil
-}
-
-func (b *tf12binder) GetLocalValue(addr addrs.LocalValue, r tfdiags.SourceRange) (cty.Value, tfdiags.Diagnostics) {
-	scope, _ := b.root.BindReference("local")
-	if l, ok := scope.(*model.Scope).BindReference(addr.Name); ok {
-		var diagnostics tfdiags.Diagnostics
-
-		expr := model.HCLExpression(l.(*local).attribute.Value)
-
-		refs, refsDiags := lang.ReferencesInExpr(expr)
-		diagnostics.Append(refsDiags)
-		if diagnostics.HasErrors() {
-			return cty.UnknownVal(cty.DynamicPseudoType), diagnostics
-		}
-
-		ctx, ctxDiags := (&lang.Scope{Data: b}).EvalContext(refs)
-		diagnostics.Append(ctxDiags)
-		if diagnostics.HasErrors() {
-			return cty.UnknownVal(cty.DynamicPseudoType), diagnostics
-		}
-
-		val, valDiags := expr.Value(ctx)
-		diagnostics.Append(valDiags)
-		return val, diagnostics
-	}
-	return cty.UnknownVal(cty.DynamicPseudoType), nil
-}
-
-func (b *tf12binder) GetModuleInstance(addr addrs.ModuleCallInstance,
-	r tfdiags.SourceRange) (cty.Value, tfdiags.Diagnostics) {
-
-	return cty.UnknownVal(cty.DynamicPseudoType), nil
-}
-
-func (b *tf12binder) GetModuleInstanceOutput(addr addrs.ModuleCallOutput,
-	r tfdiags.SourceRange) (cty.Value, tfdiags.Diagnostics) {
-
-	return cty.UnknownVal(cty.DynamicPseudoType), nil
-}
-
-func (b *tf12binder) GetPathAttr(addr addrs.PathAttr, r tfdiags.SourceRange) (cty.Value, tfdiags.Diagnostics) {
-	return cty.UnknownVal(cty.DynamicPseudoType), nil
-}
-
-func (b *tf12binder) GetTerraformAttr(addr addrs.TerraformAttr,
-	r tfdiags.SourceRange) (cty.Value, tfdiags.Diagnostics) {
-
-	return cty.UnknownVal(cty.DynamicPseudoType), nil
-}
-
-func (b *tf12binder) GetInputVariable(addr addrs.InputVariable,
-	r tfdiags.SourceRange) (cty.Value, tfdiags.Diagnostics) {
-
-	return cty.UnknownVal(cty.DynamicPseudoType), nil
 }

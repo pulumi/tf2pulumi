@@ -653,9 +653,6 @@ func loadVariablesHcl(list *ast.ObjectList) ([]*Variable, error) {
 			Default:      hclVar.Default,
 			Description:  hclVar.Description,
 		}
-		if err := newVar.ValidateTypeAndDefault(); err != nil {
-			return nil, err
-		}
 
 		result = append(result, newVar)
 	}

@@ -5,9 +5,7 @@ import (
 	"reflect"
 	"testing"
 
-	hcl2 "github.com/hashicorp/hcl/v2"
 	"github.com/hashicorp/hil/ast"
-	"github.com/hashicorp/terraform/configs/hcl2shim"
 )
 
 func TestNewRawConfig(t *testing.T) {
@@ -192,7 +190,7 @@ func TestRawConfig_merge(t *testing.T) {
 				Type:  ast.TypeString,
 			},
 			"var.baz": ast.Variable{
-				Value: hcl2shim.UnknownVariableValue,
+				Value: unknownVariableValue,
 				Type:  ast.TypeUnknown,
 			},
 		}
@@ -218,7 +216,7 @@ func TestRawConfig_merge(t *testing.T) {
 	expected := map[string]interface{}{
 		"foo": "foovalue",
 		"bar": "barvalue",
-		"baz": hcl2shim.UnknownVariableValue,
+		"baz": unknownVariableValue,
 	}
 	if !reflect.DeepEqual(actual, expected) {
 		t.Fatalf("bad: %#v", actual)
@@ -252,7 +250,7 @@ func TestRawConfig_unknown(t *testing.T) {
 
 	vars := map[string]ast.Variable{
 		"var.bar": ast.Variable{
-			Value: hcl2shim.UnknownVariableValue,
+			Value: unknownVariableValue,
 			Type:  ast.TypeUnknown,
 		},
 	}
@@ -261,7 +259,7 @@ func TestRawConfig_unknown(t *testing.T) {
 	}
 
 	actual := rc.Config()
-	expected := map[string]interface{}{"foo": hcl2shim.UnknownVariableValue}
+	expected := map[string]interface{}{"foo": unknownVariableValue}
 
 	if !reflect.DeepEqual(actual, expected) {
 		t.Fatalf("bad: %#v", actual)
@@ -285,7 +283,7 @@ func TestRawConfig_unknownPartial(t *testing.T) {
 
 	vars := map[string]ast.Variable{
 		"var.bar": ast.Variable{
-			Value: hcl2shim.UnknownVariableValue,
+			Value: unknownVariableValue,
 			Type:  ast.TypeUnknown,
 		},
 	}
@@ -294,7 +292,7 @@ func TestRawConfig_unknownPartial(t *testing.T) {
 	}
 
 	actual := rc.Config()
-	expected := map[string]interface{}{"foo": hcl2shim.UnknownVariableValue}
+	expected := map[string]interface{}{"foo": unknownVariableValue}
 
 	if !reflect.DeepEqual(actual, expected) {
 		t.Fatalf("bad: %#v", actual)
@@ -320,7 +318,7 @@ func TestRawConfig_unknownPartialList(t *testing.T) {
 
 	vars := map[string]ast.Variable{
 		"var.bar": ast.Variable{
-			Value: hcl2shim.UnknownVariableValue,
+			Value: unknownVariableValue,
 			Type:  ast.TypeUnknown,
 		},
 	}
@@ -329,7 +327,7 @@ func TestRawConfig_unknownPartialList(t *testing.T) {
 	}
 
 	actual := rc.Config()
-	expected := map[string]interface{}{"foo": []interface{}{hcl2shim.UnknownVariableValue}}
+	expected := map[string]interface{}{"foo": []interface{}{unknownVariableValue}}
 
 	if !reflect.DeepEqual(actual, expected) {
 		t.Fatalf("bad: %#v", actual)
@@ -357,7 +355,7 @@ func TestRawConfig_sliceIndexLoss(t *testing.T) {
 
 	vars := map[string]ast.Variable{
 		"var.unknown": ast.Variable{
-			Value: hcl2shim.UnknownVariableValue,
+			Value: unknownVariableValue,
 			Type:  ast.TypeUnknown,
 		},
 		"var.known": ast.Variable{
@@ -434,18 +432,6 @@ func TestRawConfigCopy(t *testing.T) {
 		if rc2.Value() != "qux" {
 			t.Fatalf("bad: %#v", rc2.Value())
 		}
-	}
-}
-
-func TestRawConfigCopyHCL2(t *testing.T) {
-	rc := NewRawConfigHCL2(hcl2.EmptyBody())
-	rc2 := rc.Copy()
-
-	if rc.Body == nil {
-		t.Errorf("RawConfig copy has a nil Body")
-	}
-	if rc2.Raw != nil {
-		t.Errorf("RawConfig copy got a non-nil Raw")
 	}
 }
 

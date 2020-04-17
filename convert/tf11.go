@@ -11,10 +11,6 @@ import (
 	"github.com/hashicorp/hcl/hcl/token"
 	"github.com/hashicorp/hcl/v2/hclsyntax"
 	"github.com/hashicorp/hil/ast"
-	svchost "github.com/hashicorp/terraform-svchost"
-	"github.com/hashicorp/terraform-svchost/auth"
-	"github.com/hashicorp/terraform-svchost/disco"
-	"github.com/hashicorp/terraform/command"
 	"github.com/pkg/errors"
 	"github.com/pulumi/pulumi/sdk/v2/go/common/util/contract"
 
@@ -28,8 +24,7 @@ import (
 
 // convertTF11 converts a TF11 graph to a set of TF12 files.
 func convertTF11(opts Options) (map[string][]byte, bool, error) {
-	services := disco.NewWithCredentialsSource(noCredentials{})
-	moduleStorage := tf11module.NewStorage(filepath.Join(command.DefaultDataDir, "modules"), services)
+	moduleStorage := tf11module.NewStorage(filepath.Join(".terraform", "modules"))
 
 	mod, err := tf11module.NewTreeFs("", opts.Root)
 	if err != nil {
@@ -93,20 +88,6 @@ func convertTF11(opts Options) (map[string][]byte, bool, error) {
 		filename: buf.Bytes(),
 	}
 	return files, false, nil
-}
-
-type noCredentials struct{}
-
-func (noCredentials) ForHost(host svchost.Hostname) (auth.HostCredentials, error) {
-	return nil, nil
-}
-
-func (noCredentials) StoreForHost(host svchost.Hostname, credentials auth.HostCredentialsWritable) error {
-	return nil
-}
-
-func (noCredentials) ForgetForHost(host svchost.Hostname) error {
-	return nil
 }
 
 func addLocationAnnotation(location token.Pos, comments **il.Comments) {

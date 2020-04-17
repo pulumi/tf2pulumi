@@ -9,8 +9,6 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/hashicorp/terraform/tfdiags"
-
 	getter "github.com/hashicorp/go-getter"
 	"github.com/pulumi/tf2pulumi/internal/config"
 	"github.com/spf13/afero"
@@ -182,8 +180,7 @@ func (t *Tree) Name() string {
 //
 // Various semantic-like checks are made along the way of loading since
 // module trees inherently require the configuration to be in a reasonably
-// sane state: no circular dependencies, proper module sources, etc. A full
-// suite of validations can be done by running Validate (after loading).
+// sane state: no circular dependencies, proper module sources, etc.
 func (t *Tree) Load(s *Storage) error {
 	t.lock.Lock()
 	defer t.lock.Unlock()
@@ -392,135 +389,6 @@ func (t *Tree) String() string {
 	return result.String()
 }
 
-// Validate does semantic checks on the entire tree of configurations.
-//
-// This will call the respective config.Config.Validate() functions as well
-// as verifying things such as parameters/outputs between the various modules.
-//
-// Load must be called prior to calling Validate or an error will be returned.
-func (t *Tree) Validate() tfdiags.Diagnostics {
-	var diags tfdiags.Diagnostics
-
-	if !t.Loaded() {
-		diags = diags.Append(fmt.Errorf(
-			"tree must be loaded before calling Validate",
-		))
-		return diags
-	}
-
-	// Terraform core does not handle root module children named "root".
-	// We plan to fix this in the future but this bug was brought up in
-	// the middle of a release and we don't want to introduce wide-sweeping
-	// changes at that time.
-	if len(t.path) == 1 && t.name == "root" {
-		diags = diags.Append(fmt.Errorf(
-			"root module cannot contain module named 'root'",
-		))
-		return diags
-	}
-
-	// Validate our configuration first.
-	diags = diags.Append(t.config.Validate())
-
-	// If we're the root, we do extra validation. This validation usually
-	// requires the entire tree (since children don't have parent pointers).
-	if len(t.path) == 0 {
-		if err := t.validateProviderAlias(); err != nil {
-			diags = diags.Append(err)
-		}
-	}
-
-	// Get the child trees
-	children := t.Children()
-
-	// Validate all our children
-	for _, c := range children {
-		childDiags := c.Validate()
-		diags = diags.Append(childDiags)
-		if diags.HasErrors() {
-			continue
-		}
-	}
-
-	// Go over all the modules and verify that any parameters are valid
-	// variables into the module in question.
-	for _, m := range t.config.Modules {
-		tree, ok := children[m.Name]
-		if !ok {
-			// This should never happen because Load watches us
-			panic("module not found in children: " + m.Name)
-		}
-
-		// Build the variables that the module defines
-		requiredMap := make(map[string]struct{})
-		varMap := make(map[string]struct{})
-		for _, v := range tree.config.Variables {
-			varMap[v.Name] = struct{}{}
-
-			if v.Required() {
-				requiredMap[v.Name] = struct{}{}
-			}
-		}
-
-		// Compare to the keys in our raw config for the module
-		for k, _ := range m.RawConfig.Raw {
-			if _, ok := varMap[k]; !ok {
-				diags = diags.Append(fmt.Errorf(
-					"module %q: %q is not a valid argument",
-					m.Name, k,
-				))
-			}
-
-			// Remove the required
-			delete(requiredMap, k)
-		}
-
-		// If we have any required left over, they aren't set.
-		for k, _ := range requiredMap {
-			diags = diags.Append(fmt.Errorf(
-				"module %q: missing required argument %q",
-				m.Name, k,
-			))
-		}
-	}
-
-	// Go over all the variables used and make sure that any module
-	// variables represent outputs properly.
-	for source, vs := range t.config.InterpolatedVariables() {
-		for _, v := range vs {
-			mv, ok := v.(*config.ModuleVariable)
-			if !ok {
-				continue
-			}
-
-			tree, ok := children[mv.Name]
-			if !ok {
-				diags = diags.Append(fmt.Errorf(
-					"%s: reference to undefined module %q",
-					source, mv.Name,
-				))
-				continue
-			}
-
-			found := false
-			for _, o := range tree.config.Outputs {
-				if o.Name == mv.Field {
-					found = true
-					break
-				}
-			}
-			if !found {
-				diags = diags.Append(fmt.Errorf(
-					"%s: %q is not a valid output for module %q",
-					source, mv.Field, mv.Name,
-				))
-			}
-		}
-	}
-
-	return diags
-}
-
 // versionedPathKey returns a path string with every levels full name, version
 // and source encoded. This is to provide a unique key for our module storage,
 // since submodules need to know which versions of their ancestor modules they
@@ -560,53 +428,4 @@ func (t *Tree) versionedPathKey(m *Module) string {
 
 	key := strings.Join(path, "|")
 	return key
-}
-
-// treeError is an error use by Tree.Validate to accumulates all
-// validation errors.
-type treeError struct {
-	Name     []string
-	Errs     []error
-	Children []*treeError
-}
-
-func (e *treeError) Add(err error) {
-	e.Errs = append(e.Errs, err)
-}
-
-func (e *treeError) AddChild(err *treeError) {
-	e.Children = append(e.Children, err)
-}
-
-func (e *treeError) ErrOrNil() error {
-	if len(e.Errs) > 0 || len(e.Children) > 0 {
-		return e
-	}
-	return nil
-}
-
-func (e *treeError) Error() string {
-	name := strings.Join(e.Name, ".")
-	var out bytes.Buffer
-	fmt.Fprintf(&out, "module %s: ", name)
-
-	if len(e.Errs) == 1 {
-		// single like error
-		out.WriteString(e.Errs[0].Error())
-	} else {
-		// multi-line error
-		for _, err := range e.Errs {
-			fmt.Fprintf(&out, "\n    %s", err)
-		}
-	}
-
-	if len(e.Children) > 0 {
-		// start the next error on a new line
-		out.WriteString("\n  ")
-	}
-	for _, child := range e.Children {
-		out.WriteString(child.Error())
-	}
-
-	return out.String()
 }

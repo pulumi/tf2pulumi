@@ -19,7 +19,6 @@ import (
 	"github.com/terraform-providers/terraform-provider-http/http"
 
 	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
-	tfschema "github.com/hashicorp/terraform/helper/schema"
 	"github.com/pulumi/pulumi-terraform-bridge/v2/pkg/tfbridge"
 )
 
@@ -39,79 +38,11 @@ var builtinProviderInfo = map[string]*tfbridge.ProviderInfo{
 		},
 	},
 	"http": {
-		P:      convertProvider(http.Provider().(*tfschema.Provider)),
+		P:      http.Provider().(*schema.Provider),
 		Config: map[string]*tfbridge.SchemaInfo{},
 		DataSources: map[string]*tfbridge.DataSourceInfo{
 			"http": {Tok: "http:http:http"},
 		},
 		Resources: map[string]*tfbridge.ResourceInfo{},
 	},
-}
-
-func convertProvider(p *tfschema.Provider) *schema.Provider {
-	return &schema.Provider{
-		Schema:         convertSchemas(p.Schema),
-		DataSourcesMap: convertResources(p.DataSourcesMap),
-		ResourcesMap:   convertResources(p.ResourcesMap),
-	}
-}
-
-func convertSchemas(schemas map[string]*tfschema.Schema) map[string]*schema.Schema {
-	if schemas == nil {
-		return nil
-	}
-	result := make(map[string]*schema.Schema)
-	for k, v := range schemas {
-		result[k] = convertSchema(v)
-	}
-	return result
-}
-
-func convertSchema(s *tfschema.Schema) *schema.Schema {
-	return &schema.Schema{
-		Type:          schema.ValueType(s.Type),
-		ConfigMode:    schema.SchemaConfigMode(s.ConfigMode),
-		Optional:      s.Optional,
-		Required:      s.Required,
-		Computed:      s.Computed,
-		ForceNew:      s.ForceNew,
-		Elem:          convertElem(s.Elem),
-		MaxItems:      s.MaxItems,
-		MinItems:      s.MinItems,
-		PromoteSingle: s.PromoteSingle,
-		ComputedWhen:  s.ComputedWhen,
-		ConflictsWith: s.ConflictsWith,
-		Deprecated:    s.Deprecated,
-		Removed:       s.Removed,
-		Sensitive:     s.Sensitive,
-	}
-}
-
-func convertElem(elem interface{}) interface{} {
-	switch elem := elem.(type) {
-	case *tfschema.Schema:
-		return convertSchema(elem)
-	case *tfschema.Resource:
-		return convertResource(elem)
-	default:
-		return elem
-	}
-}
-
-func convertResource(r *tfschema.Resource) *schema.Resource {
-	return &schema.Resource{
-		Schema:        convertSchemas(r.Schema),
-		SchemaVersion: r.SchemaVersion,
-	}
-}
-
-func convertResources(resources map[string]*tfschema.Resource) map[string]*schema.Resource {
-	if resources == nil {
-		return nil
-	}
-	result := make(map[string]*schema.Resource)
-	for k, v := range resources {
-		result[k] = convertResource(v)
-	}
-	return result
 }
