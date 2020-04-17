@@ -22,3 +22,6 @@ linters:
     - structcheck
     - unconvert
     - varcheck
+  disable:
+    - staticcheck # Disabled due to OOM errors as of golangci-lint@v1.24.0
+    - megacheck   # Disabled due to OOM errors as of golangci-lint@v1.24.0
