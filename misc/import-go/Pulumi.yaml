@@ -1,0 +1,3 @@
+name: import-go-example
+runtime: go
+description: A Go example for adopting resources from Terraform state
