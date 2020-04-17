@@ -1,6 +1,6 @@
 module github.com/pulumi/tf2pulumi
 
-go 1.12
+go 1.13
 
 require (
 	github.com/apparentlymart/go-cidr v1.0.1
