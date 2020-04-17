@@ -185,7 +185,7 @@ func newGenerator(w io.Writer, projectName string, opts Options) (gen.Generator,
 	switch opts.TargetLanguage {
 	case LanguageTypescript:
 		nodeOpts, ok := opts.TargetOptions.(nodejs.Options)
-		if !ok {
+		if !ok && opts.TargetOptions != nil {
 			return nil, "", errors.Errorf("invalid target options of type %T", opts.TargetOptions)
 		}
 		g, err := nodejs.New(projectName, opts.TargetSDKVersion, nodeOpts.UsePromptDataSources, w)
