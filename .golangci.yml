@@ -16,7 +16,6 @@ linters:
     - ineffassign
     - interfacer
     - lll
-    - megacheck
     - misspell
     - nakedret
     - structcheck
