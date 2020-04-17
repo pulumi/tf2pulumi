@@ -1,10 +1,13 @@
 ## HEAD (Unreleased)
 
+- Improve Python support and add preliminary support for HCL2.
+  [#160](https://github.com/pulumi/tf2pulumi/pull/160)
+
 ## 0.7.0 (Released April 26, 2020)
 
-- Support importing resources from existing `.tfstate` files. [#142](https://github.com/pulumi/tf2pulumi/pull/142)
+- Support importing resources from existing `.tfstate` files.
+  [#142](https://github.com/pulumi/tf2pulumi/pull/142)
 - Update documentation.
-
 - Defaulting `typescript.synchronous-data-sources` to `false` as sync data sources are being
   deprecated in Pulumi 2.0.
 
