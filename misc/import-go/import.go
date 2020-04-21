@@ -7,10 +7,18 @@ import (
 	"io/ioutil"
 
 	"github.com/pulumi/pulumi/sdk/go/pulumi"
+	"github.com/pulumi/pulumi/sdk/go/pulumi/config"
 )
 
 // AddImportTransformation by reading from Terraform State and add `Import` transformation for each _found_ resource
-func AddImportTransformation(ctx *pulumi.Context, importFromStateFile string) error {
+func AddImportTransformation(ctx *pulumi.Context) error {
+
+	config := config.New(ctx, "")
+
+	importFromStateFile := config.Get("importFromStateFile")
+	if importFromStateFile == "" {
+		return nil
+	}
 
 	terraformState, err := ioutil.ReadFile(importFromStateFile)
 	if err != nil {
@@ -30,20 +38,24 @@ func AddImportTransformation(ctx *pulumi.Context, importFromStateFile string) er
 	// make map of pulumi "type::name" to "id" - e.g. "aws:ec2/vpc:Vpc::main" => "vpc-abc123"
 	pulumiResourceMapping := make(map[string]string)
 	for _, terraformResource := range terraformResources.Resources {
-		// each resource has an `Instances` array regardless of `count`
-		resourceInstanceLength := len(terraformResource.Instances)
-		for _, resourceInstance := range terraformResource.Instances {
-			terraformResourceIndexKey := 0
-			terraformResourceIndexSuffix := ""
 
-			// if resource was created with `count` in terraform, use the `index_key` instead of `0`
-			if resourceInstanceLength > 1 {
-				terraformResourceIndexKey = int(resourceInstance.IndexKey.(float64)) // By default, Go treats numeric values in JSON as float64
-				terraformResourceIndexSuffix = fmt.Sprintf("-%v", terraformResourceIndexKey)
+		// each resource has an `Instances` array regardless of `count`,
+		// we assume the order of these resources is stable and predictable
+		for terraformResourceIndex, terraformResourceInstance := range terraformResource.Instances {
+
+			// add a suffix to the resource name if resource is of list (via count) or map
+			// e.g. `main`
+			terraformResourceIndexSuffix := ""
+			if terraformResource.EachMode == "list" {
+				// e.g. `main-0`
+				terraformResourceIndexSuffix = fmt.Sprintf("-%v", terraformResourceIndex)
+			} else if terraformResource.EachMode == "map" {
+				// e.g. `main-1.1.1.1/32`
+				terraformResourceIndexSuffix = fmt.Sprintf("-%v", terraformResourceInstance.IndexKey)
 			}
 
 			var resourceAttributes map[string]interface{}
-			json.Unmarshal(terraformResource.Instances[terraformResourceIndexKey].AttributesRaw, &resourceAttributes)
+			json.Unmarshal(terraformResourceInstance.AttributesRaw, &resourceAttributes)
 			if err != nil {
 				return err
 			}
@@ -51,7 +63,7 @@ func AddImportTransformation(ctx *pulumi.Context, importFromStateFile string) er
 			pulumiType := typeMapping[terraformResource.Type]
 			if pulumiType == "" {
 				// TODO return error if type mapping not found?
-				ctx.Log.Warn(fmt.Sprintf("Mapping for [%s] not found. Skipping import of [%s]...", terraformResource.Type, terraformResource.Name), nil)
+				ctx.Log.Warn(fmt.Sprintf("No type mapping for [%s]. Unable to import.", terraformResource.Type), nil)
 				continue
 			}
 
@@ -71,6 +83,17 @@ func AddImportTransformation(ctx *pulumi.Context, importFromStateFile string) er
 			// e.g. "aws:ec2/vpc:Vpc::main" => "vpc-abc123"
 			pulumiResourceMapping[pulumiResourceTypeAndName] = resourceID
 			ctx.Log.Debug(fmt.Sprintf("Mapped [%s] => [%s]", pulumiResourceTypeAndName, resourceID), nil)
+
+			// Map by 'Name' tag too
+			tags := resourceAttributes["tags"]
+			if tags != nil {
+				nameTag := tags.(map[string]interface{})["Name"]
+				if nameTag != "" {
+					pulumiResourceTypeAndName := fmt.Sprintf("%s::%s%s", pulumiType, nameTag, terraformResourceIndexSuffix)
+					pulumiResourceMapping[pulumiResourceTypeAndName] = resourceID
+					ctx.Log.Debug(fmt.Sprintf("Mapped [%s] => [%s] by Name tag", pulumiResourceTypeAndName, resourceID), nil)
+				}
+			}
 		}
 	}
 
@@ -95,7 +118,7 @@ func lookupID(ctx *pulumi.Context, pulumiResourceMapping map[string]string, args
 	foundResource := pulumiResourceMapping[pulumiResourceTypeAndName]
 	if foundResource == "" {
 		// TODO return error if resource mapping not found?
-		ctx.Log.Warn(fmt.Sprintf("Resource mapping for [%s] not found. Skipping import...", pulumiResourceTypeAndName), nil)
+		ctx.Log.Warn(fmt.Sprintf("Unable to import [%s]. Either not found in Terraform state or no type mapping.", pulumiResourceTypeAndName), nil)
 		return ""
 	}
 

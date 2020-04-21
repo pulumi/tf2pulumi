@@ -4,34 +4,34 @@ import (
 	"fmt"
 
 	"github.com/pulumi/pulumi-aws/sdk/go/aws/ec2"
+	"github.com/pulumi/pulumi-aws/sdk/go/aws/iot"
 	"github.com/pulumi/pulumi-aws/sdk/go/aws/s3"
 	"github.com/pulumi/pulumi/sdk/go/pulumi"
-	"github.com/pulumi/pulumi/sdk/go/pulumi/config"
 )
 
 func main() {
 	pulumi.Run(func(ctx *pulumi.Context) error {
 
-		config := config.New(ctx, "")
-
 		/**
 		 * Add this directive to your Pulumi application to
 		 * run the import.
 		 */
-		importFromStateFile := config.Get("importFromStateFile")
-		if importFromStateFile != "" {
-			err := AddImportTransformation(ctx, importFromStateFile)
-			if err != nil {
-				return err
-			}
+		err := AddImportTransformation(ctx)
+		if err != nil {
+			return err
 		}
 
-		/**
-		 * These resources are here as examples for doing an import.
-		 * This is where you would put your own resources.
-		 */
+		_, err = s3.NewBucket(ctx, "main", &s3.BucketArgs{
+			Bucket: pulumi.String("import-apr15-1841"),
+		})
+
 		vpc, err := ec2.NewVpc(ctx, "main", &ec2.VpcArgs{
 			CidrBlock: pulumi.String("10.0.0.0/16"),
+			Tags: pulumi.Map{
+				"project_name": pulumi.String("original-tf"),
+				"stack_name":   pulumi.String(ctx.Stack()),
+				"Name":         pulumi.String("main"),
+			},
 		})
 		if err != nil {
 			return err
@@ -39,6 +39,11 @@ func main() {
 
 		igw, err := ec2.NewInternetGateway(ctx, "main", &ec2.InternetGatewayArgs{
 			VpcId: vpc.ID(),
+			Tags: pulumi.Map{
+				"project_name": pulumi.String("original-tf"),
+				"stack_name":   pulumi.String(ctx.Stack()),
+				"Name":         pulumi.String("public"),
+			},
 		})
 		if err != nil {
 			return err
@@ -46,15 +51,30 @@ func main() {
 
 		publicRouteTable, err := ec2.NewRouteTable(ctx, "main", &ec2.RouteTableArgs{
 			VpcId: vpc.ID(),
-			Routes: &ec2.RouteTableRouteArray{
-				&ec2.RouteTableRouteArgs{
-					CidrBlock: pulumi.String("0.0.0.0/0"),
-					GatewayId: igw.ID(),
-				},
-			},
 		})
 		if err != nil {
 			return err
+		}
+
+		_, err = ec2.NewRoute(ctx, "public", &ec2.RouteArgs{
+			RouteTableId:         publicRouteTable.ID(),
+			DestinationCidrBlock: pulumi.String("0.0.0.0/0"),
+			GatewayId:            igw.ID(),
+		})
+		if err != nil {
+			return err
+		}
+
+		routedCidrBlocks := []string{"1.1.1.1/32", "2.2.2.2/32"}
+		for _, cidrBlock := range routedCidrBlocks {
+			_, err = ec2.NewRoute(ctx, fmt.Sprintf("%s-%s", "routed", cidrBlock), &ec2.RouteArgs{
+				RouteTableId:         publicRouteTable.ID(),
+				DestinationCidrBlock: pulumi.String(cidrBlock),
+				GatewayId:            igw.ID(),
+			})
+			if err != nil {
+				return err
+			}
 		}
 
 		publicSubnetCidrBlocks := []string{"10.0.0.0/24", "10.0.1.0/24"}
@@ -63,6 +83,11 @@ func main() {
 				VpcId:               vpc.ID(),
 				CidrBlock:           pulumi.String(cidrBlock),
 				MapPublicIpOnLaunch: pulumi.Bool(true),
+				Tags: pulumi.Map{
+					"project_name": pulumi.String("original-tf"),
+					"stack_name":   pulumi.String(ctx.Stack()),
+					"Name":         pulumi.String("public"),
+				},
 			})
 			if err != nil {
 				return err
@@ -84,13 +109,23 @@ func main() {
 				VpcId:               vpc.ID(),
 				CidrBlock:           pulumi.String(cidrBlock),
 				MapPublicIpOnLaunch: pulumi.Bool(false),
+				Tags: pulumi.Map{
+					"project_name": pulumi.String("original-tf"),
+					"stack_name":   pulumi.String(ctx.Stack()),
+					"Name":         pulumi.String("private"),
+				},
 			})
 			if err != nil {
 				return err
 			}
 		}
 
-		_, err = s3.NewBucket(ctx, "main", &s3.BucketArgs{})
+		_, err = s3.NewBucket(ctx, "not-found", &s3.BucketArgs{})
+		if err != nil {
+			return err
+		}
+
+		_, err = iot.NewThing(ctx, "no-type-mapping", &iot.ThingArgs{})
 		if err != nil {
 			return err
 		}

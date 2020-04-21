@@ -5,16 +5,19 @@ import "fmt"
 /**
  * Special mappings
  */
+func idRouteTable(resourceAttributes map[string]interface{}) string {
+	return fmt.Sprintf("%s_%s", resourceAttributes["route_table_id"].(string), resourceAttributes["destination_cidr_block"].(string))
+}
 func idRouteTableAssociation(resourceAttributes map[string]interface{}) string {
 	return fmt.Sprintf("%s/%s", resourceAttributes["subnet_id"].(string), resourceAttributes["route_table_id"].(string))
 }
-
 func idRolePolicyAttachment(resourceAttributes map[string]interface{}) string {
 	return fmt.Sprintf("%s/%s", resourceAttributes["role"].(string), resourceAttributes["policy_arn"].(string))
 }
 
 var specialMapping = map[string]func(resourceAttributes map[string]interface{}) string{
 	// AWS
+	"aws_route":                      idRouteTable,
 	"aws_route_table_association":    idRouteTableAssociation,
 	"aws_iam_role_policy_attachment": idRolePolicyAttachment,
 }
@@ -58,6 +61,7 @@ var typeMapping = map[string]string{
 	"aws_route53_zone":                      "aws:route53/zone:Zone",
 	"aws_route_table":                       "aws:ec2/routeTable:RouteTable",
 	"aws_route_table_association":           "aws:ec2/routeTableAssociation:RouteTableAssociation",
+	"aws_s3_bucket":                         "aws:s3/bucket:Bucket",
 	"aws_security_group":                    "aws:ec2/securityGroup:SecurityGroup",
 	"aws_security_group_rule":               "aws:ec2/securityGroupRule:SecurityGroupRule",
 	"aws_subnet":                            "aws:ec2/subnet:Subnet",
@@ -67,7 +71,7 @@ var typeMapping = map[string]string{
 	"aws_vpc_endpoint":                      "aws:ec2/vpcEndpoint:VpcEndpoint",
 	"aws_vpc_endpoint_service":              "aws:ec2/vpcEndpointService:VpcEndpointService",
 	"aws_vpc_ipv4_cidr_block_association":   "aws:ec2/vpcIpv4CidrBlockAssociation:VpcIpv4CidrBlockAssociation",
-	"aws_vpc_peering_connection":            "aws:ec2/peeringConnectionOptions:PeeringConnectionOptions",
+	"aws_vpc_peering_connection":            "aws:ec2/vpcPeeringConnection:VpcPeeringConnection",
 	"aws_vpn_gateway":                       "aws:ec2/vpnGateway:VpnGateway",
 	"aws_vpn_gateway_attachment":            "aws:ec2/vpnGatewayAttachment:VpnGatewayAttachment",
 	"aws_vpn_gateway_route_propagation":     "aws:ec2/vpnGatewayRoutePropagation:VpnGatewayRoutePropagation",
