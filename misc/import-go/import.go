@@ -7,10 +7,18 @@ import (
 	"io/ioutil"
 
 	"github.com/pulumi/pulumi/sdk/go/pulumi"
+	"github.com/pulumi/pulumi/sdk/go/pulumi/config"
 )
 
 // AddImportTransformation by reading from Terraform State and add `Import` transformation for each _found_ resource
-func AddImportTransformation(ctx *pulumi.Context, importFromStateFile string) error {
+func AddImportTransformation(ctx *pulumi.Context) error {
+
+	config := config.New(ctx, "")
+
+	importFromStateFile := config.Get("importFromStateFile")
+	if importFromStateFile == "" {
+		return nil
+	}
 
 	terraformState, err := ioutil.ReadFile(importFromStateFile)
 	if err != nil {
@@ -30,6 +38,13 @@ func AddImportTransformation(ctx *pulumi.Context, importFromStateFile string) er
 	// make map of pulumi "type::name" to "id" - e.g. "aws:ec2/vpc:Vpc::main" => "vpc-abc123"
 	pulumiResourceMapping := make(map[string]string)
 	for _, terraformResource := range terraformResources.Resources {
+
+		// skip for_each resources for now
+		if terraformResource.EachMode == "map" {
+			ctx.Log.Info(fmt.Sprintf("Skipping 'map' resource [%s] for now...", terraformResource.Type), nil)
+			continue
+		}
+
 		// each resource has an `Instances` array regardless of `count`
 		resourceInstanceLength := len(terraformResource.Instances)
 		for _, resourceInstance := range terraformResource.Instances {
@@ -71,6 +86,17 @@ func AddImportTransformation(ctx *pulumi.Context, importFromStateFile string) er
 			// e.g. "aws:ec2/vpc:Vpc::main" => "vpc-abc123"
 			pulumiResourceMapping[pulumiResourceTypeAndName] = resourceID
 			ctx.Log.Debug(fmt.Sprintf("Mapped [%s] => [%s]", pulumiResourceTypeAndName, resourceID), nil)
+
+			// Map by 'Name' tag too
+			tags := resourceAttributes["tags"]
+			if tags != nil {
+				nameTag := tags.(map[string]interface{})["Name"]
+				if nameTag != "" {
+					pulumiResourceTypeAndName := fmt.Sprintf("%s::%s%s", pulumiType, nameTag, terraformResourceIndexSuffix)
+					pulumiResourceMapping[pulumiResourceTypeAndName] = resourceID
+					ctx.Log.Debug(fmt.Sprintf("Mapped [%s] => [%s] by Name tag", pulumiResourceTypeAndName, resourceID), nil)
+				}
+			}
 		}
 	}
 

@@ -5,16 +5,19 @@ import "fmt"
 /**
  * Special mappings
  */
+func idRouteTable(resourceAttributes map[string]interface{}) string {
+	return fmt.Sprintf("%s_%s", resourceAttributes["route_table_id"].(string), resourceAttributes["destination_cidr_block"].(string))
+}
 func idRouteTableAssociation(resourceAttributes map[string]interface{}) string {
 	return fmt.Sprintf("%s/%s", resourceAttributes["subnet_id"].(string), resourceAttributes["route_table_id"].(string))
 }
-
 func idRolePolicyAttachment(resourceAttributes map[string]interface{}) string {
 	return fmt.Sprintf("%s/%s", resourceAttributes["role"].(string), resourceAttributes["policy_arn"].(string))
 }
 
 var specialMapping = map[string]func(resourceAttributes map[string]interface{}) string{
 	// AWS
+	"aws_route":                      idRouteTable,
 	"aws_route_table_association":    idRouteTableAssociation,
 	"aws_iam_role_policy_attachment": idRolePolicyAttachment,
 }
