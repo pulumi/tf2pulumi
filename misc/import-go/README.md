@@ -11,12 +11,12 @@ See [`main.go`](main.go) for how to do this in your Go Pulumi application.
 ## Missing Mappings
 
 If you get a warning message during your import like the one below, add an additional 
-mapping like `"aws_vpc": "aws:ec2/vpc:Vpc"` to `typeMapping` in 
+mapping like `"aws_iot_thing": "aws:iot/thing:Thing"` to `typeMapping` in 
 [`resourceTypeMappings.go`](resourceTypeMappings.go) to map the Terraform resource to 
 the Pulumi resource.
 
 ```
-    warning: Resource mapping for [aws:s3/bucket:Bucket::main] not found. Skipping import...
+    warning: No type mapping for [aws_iot_thing]. Unable to import.
 ```
 
 ## Special Mappings

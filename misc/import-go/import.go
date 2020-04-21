@@ -39,26 +39,23 @@ func AddImportTransformation(ctx *pulumi.Context) error {
 	pulumiResourceMapping := make(map[string]string)
 	for _, terraformResource := range terraformResources.Resources {
 
-		// skip for_each resources for now
-		if terraformResource.EachMode == "map" {
-			ctx.Log.Info(fmt.Sprintf("Skipping 'map' resource [%s] for now...", terraformResource.Type), nil)
-			continue
-		}
+		// each resource has an `Instances` array regardless of `count`,
+		// we assume the order of these resources is stable and predictable
+		for terraformResourceIndex, terraformResourceInstance := range terraformResource.Instances {
 
-		// each resource has an `Instances` array regardless of `count`
-		resourceInstanceLength := len(terraformResource.Instances)
-		for _, resourceInstance := range terraformResource.Instances {
-			terraformResourceIndexKey := 0
+			// add a suffix to the resource name if resource is of list (via count) or map
+			// e.g. `main`
 			terraformResourceIndexSuffix := ""
-
-			// if resource was created with `count` in terraform, use the `index_key` instead of `0`
-			if resourceInstanceLength > 1 {
-				terraformResourceIndexKey = int(resourceInstance.IndexKey.(float64)) // By default, Go treats numeric values in JSON as float64
-				terraformResourceIndexSuffix = fmt.Sprintf("-%v", terraformResourceIndexKey)
+			if terraformResource.EachMode == "list" {
+				// e.g. `main-0`
+				terraformResourceIndexSuffix = fmt.Sprintf("-%v", terraformResourceIndex)
+			} else if terraformResource.EachMode == "map" {
+				// e.g. `main-1.1.1.1/32`
+				terraformResourceIndexSuffix = fmt.Sprintf("-%v", terraformResourceInstance.IndexKey)
 			}
 
 			var resourceAttributes map[string]interface{}
-			json.Unmarshal(terraformResource.Instances[terraformResourceIndexKey].AttributesRaw, &resourceAttributes)
+			json.Unmarshal(terraformResourceInstance.AttributesRaw, &resourceAttributes)
 			if err != nil {
 				return err
 			}
@@ -66,7 +63,7 @@ func AddImportTransformation(ctx *pulumi.Context) error {
 			pulumiType := typeMapping[terraformResource.Type]
 			if pulumiType == "" {
 				// TODO return error if type mapping not found?
-				ctx.Log.Warn(fmt.Sprintf("Mapping for [%s] not found. Skipping import of [%s]...", terraformResource.Type, terraformResource.Name), nil)
+				ctx.Log.Warn(fmt.Sprintf("No type mapping for [%s]. Unable to import.", terraformResource.Type), nil)
 				continue
 			}
 
@@ -121,7 +118,7 @@ func lookupID(ctx *pulumi.Context, pulumiResourceMapping map[string]string, args
 	foundResource := pulumiResourceMapping[pulumiResourceTypeAndName]
 	if foundResource == "" {
 		// TODO return error if resource mapping not found?
-		ctx.Log.Warn(fmt.Sprintf("Resource mapping for [%s] not found. Skipping import...", pulumiResourceTypeAndName), nil)
+		ctx.Log.Warn(fmt.Sprintf("Unable to import [%s]. Either not found in Terraform state or no type mapping.", pulumiResourceTypeAndName), nil)
 		return ""
 	}
 

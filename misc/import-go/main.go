@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/pulumi/pulumi-aws/sdk/go/aws/ec2"
+	"github.com/pulumi/pulumi-aws/sdk/go/aws/iot"
 	"github.com/pulumi/pulumi-aws/sdk/go/aws/s3"
 	"github.com/pulumi/pulumi/sdk/go/pulumi"
 )
@@ -19,6 +20,10 @@ func main() {
 		if err != nil {
 			return err
 		}
+
+		_, err = s3.NewBucket(ctx, "main", &s3.BucketArgs{
+			Bucket: pulumi.String("import-apr15-1841"),
+		})
 
 		vpc, err := ec2.NewVpc(ctx, "main", &ec2.VpcArgs{
 			CidrBlock: pulumi.String("10.0.0.0/16"),
@@ -61,8 +66,8 @@ func main() {
 		}
 
 		routedCidrBlocks := []string{"1.1.1.1/32", "2.2.2.2/32"}
-		for i, cidrBlock := range routedCidrBlocks {
-			_, err = ec2.NewRoute(ctx, fmt.Sprintf("%s-%v", "routed", i), &ec2.RouteArgs{
+		for _, cidrBlock := range routedCidrBlocks {
+			_, err = ec2.NewRoute(ctx, fmt.Sprintf("%s-%s", "routed", cidrBlock), &ec2.RouteArgs{
 				RouteTableId:         publicRouteTable.ID(),
 				DestinationCidrBlock: pulumi.String(cidrBlock),
 				GatewayId:            igw.ID(),
@@ -115,7 +120,12 @@ func main() {
 			}
 		}
 
-		_, err = s3.NewBucket(ctx, "main", &s3.BucketArgs{})
+		_, err = s3.NewBucket(ctx, "not-found", &s3.BucketArgs{})
+		if err != nil {
+			return err
+		}
+
+		_, err = iot.NewThing(ctx, "no-type-mapping", &iot.ThingArgs{})
 		if err != nil {
 			return err
 		}
