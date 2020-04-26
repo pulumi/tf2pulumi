@@ -1,5 +1,7 @@
 ## HEAD (Unreleased)
 
+## v0.7.0 (Released April 26, 2020)
+
 - Support importing resources from existing `.tfstate` files. [#142](https://github.com/pulumi/tf2pulumi/pull/142)
 - Update documentation.
 
