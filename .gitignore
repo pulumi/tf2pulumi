@@ -4,3 +4,5 @@
 Pulumi.*.yaml
 
 **/command-output/
+
+dist/
