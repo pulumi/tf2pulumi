@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"log"
 	"sort"
 	"strings"
 
@@ -31,7 +32,8 @@ func parseFile(parser *syntax.Parser, fs afero.Fs, path string) error {
 	}
 	defer contract.IgnoreClose(f)
 
-	return parser.ParseFile(f, path)
+	contract.Assert(path[0] == '/')
+	return parser.ParseFile(f, path[1:])
 }
 
 // parseTF12 parses a TF12 config.
@@ -73,14 +75,23 @@ func parseTF12(opts Options) ([]*syntax.File, hcl.Diagnostics) {
 }
 
 func convertTF12(files []*syntax.File, opts Options) ([]*syntax.File, *hcl2.Program, hcl.Diagnostics, error) {
-	var options []model.BindOption
+	var hcl2Options []model.BindOption
+	var pulumiOptions []hcl2.BindOption
 	if opts.AllowMissingVariables {
-		options = append(options, model.AllowMissingVariables)
+		hcl2Options = append(hcl2Options, model.AllowMissingVariables)
+		pulumiOptions = append(pulumiOptions, hcl2.AllowMissingVariables)
+	}
+	if opts.PluginHost != nil {
+		pulumiOptions = append(pulumiOptions, hcl2.PluginHost(opts.PluginHost))
+	}
+	if opts.PackageCache != nil {
+		pulumiOptions = append(pulumiOptions, hcl2.Cache(opts.PackageCache))
 	}
 
 	// Bind the files into a module.
 	binder := &tf12binder{
-		options:             options,
+		hcl2Options:         hcl2Options,
+		pulumiOptions:       pulumiOptions,
 		filterResourceNames: opts.FilterResourceNames,
 		providerInfo:        il.PluginProviderInfoSource,
 		providers:           map[string]*tfbridge.ProviderInfo{},
@@ -132,19 +143,29 @@ func convertTF12(files []*syntax.File, opts Options) ([]*syntax.File, *hcl2.Prog
 
 	pulumiParser := syntax.NewParser()
 	for _, file := range declaredFiles {
-		err := pulumiParser.ParseFile(file.output, file.syntax.Name)
+		contents := file.output.String()
+
+		err := pulumiParser.ParseFile(file.output, file.syntax.Name+".pp")
 		contract.AssertNoError(err)
-		contract.Assert(!pulumiParser.Diagnostics.HasErrors())
+		file.output.Reset()
+
+		if pulumiParser.Diagnostics.HasErrors() {
+			log.Printf("%v", contents)
+			log.Printf("%v", diagnostics)
+			log.Printf("%v", pulumiParser.Diagnostics)
+			contract.Fail()
+		}
 	}
 
-	program, programDiags, err := hcl2.BindProgram(pulumiParser.Files, nil, options...)
+	program, programDiags, err := hcl2.BindProgram(pulumiParser.Files, pulumiOptions...)
 	diagnostics = append(diagnostics, programDiags...)
 
 	return pulumiParser.Files, program, diagnostics, err
 }
 
 type tf12binder struct {
-	options             []model.BindOption
+	pulumiOptions       []hcl2.BindOption
+	hcl2Options         []model.BindOption
 	filterResourceNames bool
 	providerInfo        il.ProviderInfoSource
 
@@ -339,7 +360,7 @@ func (b *tf12binder) declareFile(input *syntax.File) (*file, hcl.Diagnostics) {
 				}
 
 				if alias, ok := item.Body.Attributes["alias"]; ok {
-					boundAlias, _ := model.BindAttribute(alias, nil, b.tokens, b.options...)
+					boundAlias, _ := model.BindAttribute(alias, nil, b.tokens, b.hcl2Options...)
 					if t, ok := boundAlias.Value.(*model.TemplateExpression); ok && len(t.Parts) == 1 {
 						if lit, ok := t.Parts[0].(*model.LiteralValueExpression); ok {
 							p.alias = lit.Value.AsString()
@@ -386,6 +407,7 @@ func (b *tf12binder) declareFile(input *syntax.File) (*file, hcl.Diagnostics) {
 
 				addr := addrs.Resource{Mode: mode, Type: item.Labels[0], Name: item.Labels[1]}
 				token, schemas, terraformType, typeDiags := b.resourceType(addr, item.LabelRanges[0])
+				diagnostics = append(diagnostics, typeDiags...)
 
 				variableType := terraformType
 				_, hasCount := item.Body.Attributes["count"]
@@ -417,7 +439,7 @@ func (b *tf12binder) declareFile(input *syntax.File) (*file, hcl.Diagnostics) {
 				}
 
 				scopeDef.(*model.Scope).Define(addr.Name, r)
-				file.nodes, diagnostics = append(file.nodes, r), append(diagnostics, typeDiags...)
+				file.nodes = append(file.nodes, r)
 			default:
 				file.nodes = append(file.nodes, &bodyItem{syntax: item})
 			}
@@ -563,7 +585,7 @@ func (b *tf12binder) getTraversalSchemas(traversal hcl.Traversal, schemas il.Sch
 }
 
 func (b *tf12binder) annotateExpressionsWithSchemas(item model.BodyItem) {
-	_, diags := model.VisitBodyItem(item, model.IdentityBodyItemVisitor,
+	_, diags := model.VisitBodyItem(item, model.BodyItemIdentityVisitor,
 		func(item model.BodyItem) (model.BodyItem, hcl.Diagnostics) {
 			if item, ok := item.(*model.Attribute); ok {
 				_, diags := model.VisitExpression(item.Value,
@@ -653,9 +675,9 @@ func (b *tf12binder) bindBodyItem(item *bodyItem) hcl.Diagnostics {
 	var diagnostics hcl.Diagnostics
 	switch item := item.syntax.(type) {
 	case *hclsyntax.Attribute:
-		result, diagnostics = model.BindAttribute(item, b.root, b.tokens, b.options...)
+		result, diagnostics = model.BindAttribute(item, b.root, b.tokens, b.hcl2Options...)
 	case *hclsyntax.Block:
-		result, diagnostics = model.BindBlock(item, model.StaticScope(b.root), b.tokens, b.options...)
+		result, diagnostics = model.BindBlock(item, model.StaticScope(b.root), b.tokens, b.hcl2Options...)
 	}
 	item.item = result
 	return diagnostics
@@ -675,7 +697,7 @@ func (variableScopes) GetScopeForAttribute(attribute *hclsyntax.Attribute) (*mod
 }
 
 func (b *tf12binder) bindVariable(v *variable) hcl.Diagnostics {
-	block, diagnostics := model.BindBlock(v.syntax, variableScopes(0), b.tokens, b.options...)
+	block, diagnostics := model.BindBlock(v.syntax, variableScopes(0), b.tokens, b.hcl2Options...)
 	b.annotateExpressionsWithSchemas(block)
 
 	variableType := model.Type(model.DynamicType)
@@ -690,7 +712,7 @@ func (b *tf12binder) bindVariable(v *variable) hcl.Diagnostics {
 }
 
 func (b *tf12binder) bindProvider(p *provider) hcl.Diagnostics {
-	block, diagnostics := model.BindBlock(p.syntax, model.StaticScope(b.root), b.tokens, b.options...)
+	block, diagnostics := model.BindBlock(p.syntax, model.StaticScope(b.root), b.tokens, b.hcl2Options...)
 	b.annotateExpressionsWithSchemas(block)
 
 	p.block = block
@@ -698,7 +720,7 @@ func (b *tf12binder) bindProvider(p *provider) hcl.Diagnostics {
 }
 
 func (b *tf12binder) bindLocal(l *local) hcl.Diagnostics {
-	attribute, diagnostics := model.BindAttribute(l.syntax, b.root, b.tokens, b.options...)
+	attribute, diagnostics := model.BindAttribute(l.syntax, b.root, b.tokens, b.hcl2Options...)
 	b.annotateExpressionsWithSchemas(attribute)
 	l.schemas = b.exprToSchemas[attribute.Value]
 	l.terraformType, l.attribute = attribute.Value.Type(), attribute
@@ -706,7 +728,7 @@ func (b *tf12binder) bindLocal(l *local) hcl.Diagnostics {
 }
 
 func (b *tf12binder) bindOutput(o *output) hcl.Diagnostics {
-	block, diagnostics := model.BindBlock(o.syntax, model.StaticScope(b.root), b.tokens, b.options...)
+	block, diagnostics := model.BindBlock(o.syntax, model.StaticScope(b.root), b.tokens, b.hcl2Options...)
 	b.annotateExpressionsWithSchemas(block)
 	o.block = block
 	return diagnostics
@@ -792,7 +814,7 @@ func (b *tf12binder) bindResource(r *resource) hcl.Diagnostics {
 			}
 		}
 	} else if forEach, hasForEach := r.syntax.Body.Attributes["for_each"]; hasForEach {
-		forEachExpr, _ := model.BindExpression(forEach.Expr, b.root, b.tokens, b.options...)
+		forEachExpr, _ := model.BindExpression(forEach.Expr, b.root, b.tokens, b.hcl2Options...)
 		keyType, valueType, diags := model.GetCollectionTypes(forEachExpr.Type(), forEach.Expr.Range())
 		diagnostics = append(diagnostics, diags...)
 
@@ -819,7 +841,7 @@ func (b *tf12binder) bindResource(r *resource) hcl.Diagnostics {
 		terraformType:  r.terraformType,
 	}
 
-	block, diags := model.BindBlock(r.syntax, scopes, b.tokens, b.options...)
+	block, diags := model.BindBlock(r.syntax, scopes, b.tokens, b.hcl2Options...)
 	diagnostics = append(diagnostics, diags...)
 
 	if r.rangeVariable != nil {
@@ -901,7 +923,8 @@ func (b *tf12binder) genProvider(w io.Writer, p *provider) hcl.Diagnostics {
 
 	return b.genResource(w, &resource{
 		syntax:        p.syntax,
-		name:          p.pulumiName,
+		name:          p.alias,
+		pulumiName:    p.pulumiName,
 		token:         token,
 		schemas:       schemas,
 		terraformType: terraformType,
@@ -967,21 +990,24 @@ func (rr *resourceRewriter) isElidedField(name string) bool {
 }
 
 func (rr *resourceRewriter) group(name string) []*model.Block {
-	return rr.stack[len(rr.stack)-2].groupedTypes[name]
+	return rr.stack[len(rr.stack)-1].groupedTypes[name]
 }
 
 func (rr *resourceRewriter) isRewritten(name string) bool {
-	return rr.stack[len(rr.stack)-2].rewrittenTypes.Has(name)
+	return rr.stack[len(rr.stack)-1].rewrittenTypes.Has(name)
 }
 
 func (rr *resourceRewriter) markRewritten(name string) {
-	rr.stack[len(rr.stack)-2].rewrittenTypes.Add(name)
+	rr.stack[len(rr.stack)-1].rewrittenTypes.Add(name)
 }
 
-func (rr *resourceRewriter) push(name string) *blockInfo {
+func (rr *resourceRewriter) push(name string, block bool) *blockInfo {
 	schemas := rr.rootSchemas
 	if len(rr.stack) > 0 {
 		schemas = rr.schemas().PropertySchemas(name)
+	}
+	if block && schemas.Type().IsList() {
+		schemas = schemas.ElemSchemas()
 	}
 	info := &blockInfo{
 		name:           name,
@@ -992,6 +1018,24 @@ func (rr *resourceRewriter) push(name string) *blockInfo {
 	}
 	rr.stack = append(rr.stack, info)
 	return info
+}
+
+func (rr *resourceRewriter) pushElem() *blockInfo {
+	contract.Assert(len(rr.stack) > 0)
+	schemas := rr.schemas().ElemSchemas()
+	info := &blockInfo{
+		name:           rr.stack[len(rr.stack)-1].name,
+		schemas:        schemas,
+		elidedFields:   codegen.StringSet{},
+		groupedTypes:   map[string][]*model.Block{},
+		rewrittenTypes: codegen.StringSet{},
+	}
+	rr.stack = append(rr.stack, info)
+	return info
+}
+
+func (rr *resourceRewriter) pop() {
+	rr.stack = rr.stack[:len(rr.stack)-1]
 }
 
 //nolint: unused
@@ -1006,8 +1050,8 @@ func (rr *resourceRewriter) dumpStack() {
 	fmt.Printf("]\n")
 }
 
-func (rr *resourceRewriter) appendOption(item *model.Attribute) *model.Block {
-	var result *model.Block
+func (rr *resourceRewriter) appendOption(item *model.Attribute) model.BodyItem {
+	var result model.BodyItem
 	if rr.options == nil {
 		rr.options = &model.Block{
 			Type: "options",
@@ -1036,9 +1080,9 @@ func (rr *resourceRewriter) enterBodyItem(item model.BodyItem) (model.BodyItem, 
 
 	switch item := item.(type) {
 	case *model.Attribute:
-		rr.push(item.Name)
+		rr.push(item.Name, false)
 	case *model.Block:
-		info := rr.push(item.Type)
+		info := rr.push(item.Type, true)
 
 		for _, item := range item.Body.Items {
 			switch item := item.(type) {
@@ -1059,6 +1103,35 @@ func (rr *resourceRewriter) enterBodyItem(item model.BodyItem) (model.BodyItem, 
 	}
 
 	return item, diagnostics
+}
+
+func (rr *resourceRewriter) rewriteObjectKeys(expr model.Expression) {
+	switch expr := expr.(type) {
+	case *model.ObjectConsExpression:
+		schemas := rr.schemas()
+		useExactKeys := schemas.TF != nil && schemas.TF.Type == schema.TypeMap
+
+		for _, item := range expr.Items {
+			// Ignore non-literal keys
+			keyVal := ""
+			if !useExactKeys {
+				if key, ok := item.Key.(*model.LiteralValueExpression); ok && key.Value.Type().Equals(cty.String) {
+					keyVal = rr.terraformToPulumiName(key.Value.AsString())
+					key.Value = cty.StringVal(keyVal)
+				}
+			}
+
+			rr.push(keyVal, false)
+			rr.rewriteObjectKeys(item.Value)
+			rr.pop()
+		}
+	case *model.TupleConsExpression:
+		rr.pushElem()
+		for _, element := range expr.Expressions {
+			rr.rewriteObjectKeys(element)
+		}
+		rr.pop()
+	}
 }
 
 func (rr *resourceRewriter) rewriteBlockAsObjectCons(block *model.Block) *model.ObjectConsExpression {
@@ -1102,11 +1175,10 @@ func (rr *resourceRewriter) rewriteBlockAsObjectCons(block *model.Block) *model.
 }
 
 func (rr *resourceRewriter) rewriteBodyItem(item model.BodyItem) (model.BodyItem, hcl.Diagnostics) {
-	defer func() { rr.stack = rr.stack[:len(rr.stack)-1] }()
+	defer rr.pop()
 
 	var diagnostics hcl.Diagnostics
 
-	result := item
 	switch item := item.(type) {
 	case *model.Attribute:
 		if rr.isElidedField(item.Name) {
@@ -1114,22 +1186,25 @@ func (rr *resourceRewriter) rewriteBodyItem(item model.BodyItem) (model.BodyItem
 			return nil, nil
 		}
 
+		rr.rewriteObjectKeys(item.Value)
 		value, diags := rr.binder.rewriteExpression(item.Value)
 		diagnostics = append(diagnostics, diags...)
 
-		switch item.Name {
-		case "depends_on":
-			item.Name = "dependsOn"
-			return rr.appendOption(item), nil
-		case "count":
-			item.Name = "range"
-			return rr.appendOption(item), nil
-		case "for_each":
-			item.Name = "range"
-			return rr.appendOption(item), nil
-		case "provider":
-			item.Name = "provider"
-			return rr.appendOption(item), nil
+		if len(rr.stack) == 2 {
+			switch item.Name {
+			case "depends_on":
+				item.Name = "dependsOn"
+				return rr.appendOption(item), nil
+			case "count":
+				item.Name = "range"
+				return rr.appendOption(item), nil
+			case "for_each":
+				item.Name = "range"
+				return rr.appendOption(item), nil
+			case "provider":
+				item.Name = "provider"
+				return rr.appendOption(item), nil
+			}
 		}
 
 		propSch := rr.schemas()
@@ -1165,13 +1240,13 @@ func (rr *resourceRewriter) rewriteBodyItem(item model.BodyItem) (model.BodyItem
 		item.Name, item.Value = rr.terraformToPulumiName(item.Name), value
 	case *model.Block:
 		if len(rr.stack) == 1 {
-			return item, diagnostics
+			rr.markRewritten("options")
 		}
 
 		if len(rr.stack) == 2 {
 			switch item.Type {
 			case "lifecycle":
-				var result *model.Block
+				var result model.BodyItem
 				preventDestroy, ok := item.Body.Attribute("prevent_destroy")
 				if ok {
 					preventDestroy.Name = "protect"
@@ -1195,63 +1270,73 @@ func (rr *resourceRewriter) rewriteBodyItem(item model.BodyItem) (model.BodyItem
 			}
 		}
 
-		if rr.isRewritten(item.Type) {
-			return nil, nil
-		}
-		rr.markRewritten(item.Type)
-
-		group := rr.group(item.Type)
-		objects := make([]model.Expression, len(group))
-		for i, block := range group {
-			objects[i] = rr.rewriteBlockAsObjectCons(block)
-		}
-
-		propSch := rr.schemas()
-		_, isList := propSch.ModelType().(*model.ListType)
-		projectListElement := isList && tfbridge.IsMaxItemsOne(propSch.TF, propSch.Pulumi)
-
-		tokens := syntax.NewAttributeTokens(item.Type)
-
-		var value model.Expression
-		if !projectListElement || len(objects) > 1 {
-			if item.Tokens != nil {
-				tokens.Name.LeadingTrivia = item.Tokens.Type.LeadingTrivia
+		items := make([]model.BodyItem, 0, len(item.Body.Items))
+		for _, item := range item.Body.Items {
+			block, ok := item.(*model.Block)
+			if !ok {
+				items = append(items, item)
+				continue
+			}
+			if rr.isRewritten(block.Type) {
+				continue
 			}
 
-			tokens := syntax.NewTupleConsTokens(len(objects))
-			for i, o := range objects {
-				if i > 0 && group[i].Tokens != nil {
-					leading := append(group[i].Tokens.Type.AllTrivia(), o.GetLeadingTrivia().CollapseWhitespace()...)
-					o.SetLeadingTrivia(leading)
+			rr.markRewritten(block.Type)
+
+			group := rr.group(block.Type)
+			objects := make([]model.Expression, len(group))
+			for i, block := range group {
+				objects[i] = rr.rewriteBlockAsObjectCons(block)
+			}
+
+			propSch := rr.schemas().PropertySchemas(block.Type)
+			_, isList := propSch.ModelType().(*model.ListType)
+			projectListElement := isList && tfbridge.IsMaxItemsOne(propSch.TF, propSch.Pulumi)
+
+			tokens := syntax.NewAttributeTokens(block.Type)
+
+			var value model.Expression
+			if !projectListElement || len(objects) > 1 {
+				if block.Tokens != nil {
+					tokens.Name.LeadingTrivia = block.Tokens.Type.LeadingTrivia
 				}
-				if i == len(objects)-1 {
-					tokens.CloseBracket.TrailingTrivia = o.GetTrailingTrivia()
-				} else {
-					tokens.Commas[i].TrailingTrivia = o.GetTrailingTrivia()
+
+				tokens := syntax.NewTupleConsTokens(len(objects))
+				for i, o := range objects {
+					if i > 0 && group[i].Tokens != nil {
+						leading := append(group[i].Tokens.Type.AllTrivia(), o.GetLeadingTrivia().CollapseWhitespace()...)
+						o.SetLeadingTrivia(leading)
+					}
+					if i == len(objects)-1 {
+						tokens.CloseBracket.TrailingTrivia = o.GetTrailingTrivia()
+					} else {
+						tokens.Commas[i].TrailingTrivia = o.GetTrailingTrivia()
+					}
+					o.SetTrailingTrivia(nil)
 				}
-				o.SetTrailingTrivia(nil)
+
+				value = &model.TupleConsExpression{
+					Tokens:      tokens,
+					Expressions: objects,
+				}
+			} else {
+				value = objects[0]
+
+				obj := objects[0].(*model.ObjectConsExpression)
+				tokens.Name.LeadingTrivia = obj.Tokens.OpenBrace.LeadingTrivia
+				obj.Tokens.OpenBrace.LeadingTrivia = syntax.TriviaList{syntax.NewWhitespace(' ')}
 			}
 
-			value = &model.TupleConsExpression{
-				Tokens:      tokens,
-				Expressions: objects,
-			}
-		} else {
-			value = objects[0]
-
-			obj := objects[0].(*model.ObjectConsExpression)
-			tokens.Name.LeadingTrivia = obj.Tokens.OpenBrace.LeadingTrivia
-			obj.Tokens.OpenBrace.LeadingTrivia = syntax.TriviaList{syntax.NewWhitespace(' ')}
+			items = append(items, &model.Attribute{
+				Tokens: tokens,
+				Name:   block.Type,
+				Value:  value,
+			})
 		}
-
-		result = &model.Attribute{
-			Tokens: tokens,
-			Name:   item.Type,
-			Value:  value,
-		}
+		item.Body.Items = items
 	}
 
-	return result, diagnostics
+	return item, diagnostics
 }
 
 func (b *tf12binder) rewriteExpression(n model.Expression) (model.Expression, hcl.Diagnostics) {
@@ -1554,7 +1639,9 @@ func (b *tf12binder) resourceType(addr addrs.Resource,
 	if !ok {
 		i, err := b.providerInfo.GetProviderInfo(providerName)
 		if err != nil {
-			return "", il.Schemas{}, model.DynamicType, hcl.Diagnostics{{
+			// Fake up a root-level token.
+			tok := providerName + ":index:" + addr.Type
+			return tok, il.Schemas{}, model.DynamicType, hcl.Diagnostics{{
 				Subject: &subject,
 				Summary: fmt.Sprintf("unknown provider '%s'", providerName),
 				Detail:  fmt.Sprintf("unknown provider '%s'", providerName),
@@ -1593,11 +1680,13 @@ func (b *tf12binder) resourceType(addr addrs.Resource,
 func (b *tf12binder) providerType(providerName string,
 	subject hcl.Range) (string, il.Schemas, model.Type, hcl.Diagnostics) {
 
+	tok := "pulumi:providers:" + providerName
+
 	info, ok := b.providers[providerName]
 	if !ok {
 		i, err := b.providerInfo.GetProviderInfo(providerName)
 		if err != nil {
-			return "", il.Schemas{}, model.DynamicType, hcl.Diagnostics{{
+			return tok, il.Schemas{}, model.DynamicType, hcl.Diagnostics{{
 				Subject: &subject,
 				Summary: fmt.Sprintf("unknown provider '%s'", providerName),
 				Detail:  fmt.Sprintf("unknown provider '%s'", providerName),
@@ -1614,7 +1703,7 @@ func (b *tf12binder) providerType(providerName string,
 			Schema: info.P.Schema,
 		},
 	}
-	return "pulumi:providers:" + providerName, schemas, schemas.ModelType(), nil
+	return tok, schemas, schemas.ModelType(), nil
 }
 
 var tf12builtins = map[string]*model.Function{

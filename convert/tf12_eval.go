@@ -39,8 +39,11 @@ func (analyzer *conditionalAnalyzer) postVisit(n model.Expression) (model.Expres
 			analyzer.booleanValues.Add(n)
 		}
 	case *model.LiteralValueExpression:
-		if _, err := convert.Convert(n.Value, cty.Bool); err != nil {
-			analyzer.booleanValues.Add(n)
+		strVal, err := convert.Convert(n.Value, cty.String)
+		if err == nil {
+			if _, err = convert.Convert(strVal, cty.Bool); err == nil {
+				analyzer.booleanValues.Add(n)
+			}
 		}
 	case *model.ScopeTraversalExpression:
 		if local, ok := n.Parts[0].(*local); ok {

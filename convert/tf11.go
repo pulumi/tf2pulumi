@@ -40,7 +40,7 @@ func convertTF11(opts Options) (map[string][]byte, bool, error) {
 		return nil, true, fmt.Errorf("failed to build graphs: %w", err)
 	}
 
-	if opts.TerraformVersion == "12" || opts.TargetLanguage == "python" {
+	if opts.TerraformVersion == "12" || opts.TargetLanguage != "typescript" {
 		// Generate TF12 code from the TF11 graph, then pass the result off to the TF12 pipeline.
 		g := &tf11generator{}
 		g.Emitter = gen.NewEmitter(nil, g)
@@ -385,7 +385,7 @@ func (g *tf11generator) genProvider(w io.Writer, p *il.ProviderNode) error {
 func (g *tf11generator) genResource(w io.Writer, r *il.ResourceNode) error {
 	// Build the lifeycle block if necessary.
 	if len(r.IgnoreChanges) != 0 || r.Config.Lifecycle.PreventDestroy {
-		lifecycle := &il.BoundMapProperty{}
+		lifecycle := &il.BoundMapProperty{Elements: map[string]il.BoundNode{}}
 		if len(r.IgnoreChanges) != 0 {
 			ignoreChanges := &il.BoundListProperty{}
 			for _, prop := range r.IgnoreChanges {
@@ -423,8 +423,13 @@ func (g *tf11generator) genResource(w io.Writer, r *il.ResourceNode) error {
 		}
 	}
 
+	typ := "resource"
+	if r.IsDataSource {
+		typ = "data"
+	}
+
 	g.genLeadingComment(w, r.Comments)
-	g.Fgenf(w, "%sresource \"%s\" \"%s\" %v", g.Indent, r.Config.Type, r.Config.Name, r.Properties)
+	g.Fgenf(w, "%s%s \"%s\" \"%s\" %v", g.Indent, typ, r.Config.Type, r.Config.Name, r.Properties)
 	g.genTrailingComment(w, r.Comments)
 	g.Fgenf(w, "\n")
 	return nil
@@ -541,36 +546,33 @@ func (g *tf11generator) GenIndex(w io.Writer, n *il.BoundIndex) {
 	g.Fgenf(w, "%v[%v]", n.TargetExpr, n.KeyExpr)
 }
 
+func (g *tf11generator) genEscapedString(b *strings.Builder, v string, heredoc bool) {
+	for _, c := range v {
+		switch c {
+		case '"', '\\':
+			if !heredoc {
+				b.WriteRune('\\')
+			}
+		case '$':
+			b.WriteRune('$')
+		}
+		b.WriteRune(c)
+	}
+}
+
 func (g *tf11generator) genStringLiteral(w io.Writer, v string) {
 	builder := strings.Builder{}
-	newlines := strings.Count(v, "\n")
-	if newlines == 0 {
-		// This string does not contain newlines, so we'll generate a normal string literal. '$', quotes, and
-		// backslashes will be escaped.
-		builder.WriteRune('"')
-		for _, c := range v {
-			switch c {
-			case '"', '\\':
-				builder.WriteRune('\\')
-			case '$':
-				builder.WriteRune('$')
-			}
-			builder.WriteRune(c)
-		}
-		builder.WriteRune('"')
-	} else {
-		// This string does contain newlines, so we'll generate a heredoc literal. '$' will be escaped.
-		builder.WriteString("EOF<<\n")
-		for _, c := range v {
-			if c == '$' {
-				builder.WriteRune('$')
-			}
-			builder.WriteRune(c)
-		}
-		builder.WriteString("\nEOF")
+
+	heredoc, start, end := false, `"`, `"`
+	if strings.IndexRune(v, '\n') != -1 {
+		heredoc, start, end = true, "<<EOF\n", "\nEOF"
 	}
 
-	g.Fgenf(w, "%s", builder.String())
+	builder.WriteString(start)
+	g.genEscapedString(&builder, v, heredoc)
+	builder.WriteString(end)
+
+	g.Fgen(w, builder.String())
 }
 
 // genListProperty generates code for as single list property.
@@ -657,15 +659,28 @@ func (g *tf11generator) GenOutput(w io.Writer, n *il.BoundOutput) {
 	g.pushExpr(n)
 	defer g.popExpr()
 
-	g.Fgen(w, `"`)
+	heredoc, start, end := false, `"`, `"`
 	for _, s := range n.Exprs {
 		if lit, ok := s.(*il.BoundLiteral); ok && lit.ExprType == il.TypeString {
-			g.Fgen(w, lit.Value.(string))
-		} else {
-			g.Fgenf(w, "${%v}", s)
+			if strings.IndexRune(lit.Value.(string), '\n') != -1 {
+				heredoc, start, end = true, "<<EOF\n", "\nEOF"
+				break
+			}
 		}
 	}
-	g.Fgen(w, `"`)
+
+	builder := strings.Builder{}
+	g.Fgen(&builder, start)
+	for _, s := range n.Exprs {
+		if lit, ok := s.(*il.BoundLiteral); ok && lit.ExprType == il.TypeString {
+			g.genEscapedString(&builder, lit.Value.(string), heredoc)
+		} else {
+			g.Fgenf(&builder, "${%v}", s)
+		}
+	}
+	g.Fgen(&builder, end)
+
+	g.Fgen(w, builder.String())
 }
 
 // GenPropertyValue generates code for a single property value expression.

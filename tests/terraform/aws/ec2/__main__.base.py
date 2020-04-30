@@ -1,5 +1,4 @@
 import pulumi
-import json
 import pulumi_aws as aws
 
 ubuntu = aws.ec2.Ami("ubuntu",

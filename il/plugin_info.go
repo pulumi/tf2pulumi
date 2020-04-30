@@ -33,6 +33,34 @@ type ProviderInfoSource interface {
 	GetProviderInfo(tfProviderName string) (*tfbridge.ProviderInfo, error)
 }
 
+// CachingProviderInfoSource wraps a ProviderInfoSource in a cache for faster access.
+type CachingProviderInfoSource struct {
+	source  ProviderInfoSource
+	entries map[string]*tfbridge.ProviderInfo
+}
+
+// GetProviderInfo returns the tfbridge information for the indicated Terraform provider as well as the name of the
+// corresponding Pulumi resource provider.
+func (cache *CachingProviderInfoSource) GetProviderInfo(tfProviderName string) (*tfbridge.ProviderInfo, error) {
+	info, ok := cache.entries[tfProviderName]
+	if !ok {
+		i, err := cache.source.GetProviderInfo(tfProviderName)
+		if err != nil {
+			return nil, err
+		}
+		cache.entries[tfProviderName], info = i, i
+	}
+	return info, nil
+}
+
+// NewCachingProviderInfoSource creates a new CachingProviderInfoSource that wraps the given ProviderInfoSource.
+func NewCachingProviderInfoSource(source ProviderInfoSource) *CachingProviderInfoSource {
+	return &CachingProviderInfoSource{
+		source:  source,
+		entries: map[string]*tfbridge.ProviderInfo{},
+	}
+}
+
 type pluginProviderInfoSource struct{}
 
 // PluginProviderInfoSource is the ProviderInfoSource that retrieves tfbridge information by loading and interrogating

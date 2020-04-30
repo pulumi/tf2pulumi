@@ -21,9 +21,11 @@ import (
 	"os"
 
 	"github.com/hashicorp/hcl/v2"
+	"github.com/pulumi/pulumi/pkg/v2/codegen/hcl2"
 	"github.com/pulumi/pulumi/pkg/v2/codegen/hcl2/syntax"
 	hcl2nodejs "github.com/pulumi/pulumi/pkg/v2/codegen/nodejs"
 	hcl2python "github.com/pulumi/pulumi/pkg/v2/codegen/python"
+	"github.com/pulumi/pulumi/sdk/v2/go/common/resource/plugin"
 	"github.com/pulumi/pulumi/sdk/v2/go/common/util/contract"
 	"github.com/spf13/afero"
 
@@ -37,7 +39,7 @@ const (
 )
 
 var (
-	ValidLanguages = [...]string{LanguageTypescript, LanguagePython}
+	ValidLanguages = [...]string{LanguageTypescript, LanguagePulumi, LanguagePython}
 )
 
 type Diagnostics struct {
@@ -81,7 +83,7 @@ func Convert(opts Options) (map[string][]byte, Diagnostics, error) {
 			contract.Assert(err == nil)
 		}
 		if parser.Diagnostics.HasErrors() {
-			return nil, Diagnostics{All: diagnostics, files: parser.Files}, nil
+			return nil, Diagnostics{All: parser.Diagnostics, files: parser.Files}, nil
 		}
 		tf12Files, diagnostics = parser.Files, append(diagnostics, parser.Diagnostics...)
 	} else {
@@ -108,6 +110,7 @@ func Convert(opts Options) (map[string][]byte, Diagnostics, error) {
 		tsFiles, genDiags, _ := hcl2nodejs.GenerateProgram(program)
 		generatedFiles, diagnostics = tsFiles, append(diagnostics, genDiags...)
 	case LanguagePulumi:
+		generatedFiles = map[string][]byte{}
 		for _, f := range tf12Files {
 			generatedFiles[f.Name] = f.Bytes
 		}
@@ -142,6 +145,10 @@ type Options struct {
 	ResourceNameProperty string
 	// Root, when set, overrides the default filesystem used to load the source Terraform module.
 	Root afero.Fs
+	// Optional package cache.
+	PackageCache *hcl2.PackageCache
+	// Optional plugin host.
+	PluginHost plugin.Host
 	// Optional source for provider schema information.
 	ProviderInfoSource il.ProviderInfoSource
 	// Optional logger for diagnostic information.
