@@ -18,7 +18,8 @@ import (
 	"strconv"
 
 	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
-	"github.com/pulumi/pulumi-terraform-bridge/pkg/tfbridge"
+	"github.com/pulumi/pulumi-terraform-bridge/v2/pkg/tfbridge"
+	"github.com/pulumi/pulumi/pkg/v2/codegen/hcl2/model"
 )
 
 // Schemas bundles a property's Terraform and Pulumi schema information into a single type. This information is then
@@ -96,4 +97,38 @@ func (s Schemas) Type() Type {
 	}
 
 	return TypeUnknown
+}
+
+// ModelType returns the appropriate model type for the property associated with these Schemas.
+func (s Schemas) ModelType() model.Type {
+	if s.TF != nil {
+		switch s.TF.Type {
+		case schema.TypeBool:
+			return model.BoolType
+		case schema.TypeInt, schema.TypeFloat:
+			return model.NumberType
+		case schema.TypeString:
+			return model.StringType
+		case schema.TypeList, schema.TypeSet:
+			return model.NewListType(s.ElemSchemas().ModelType())
+		case schema.TypeMap:
+			if s.TFRes == nil {
+				return model.NewMapType(model.StringType)
+			}
+		default:
+			if s.TFRes == nil {
+				return model.DynamicType
+			}
+		}
+	}
+
+	if s.TFRes != nil {
+		properties := map[string]model.Type{}
+		for prop := range s.TFRes.Schema {
+			properties[prop] = s.PropertySchemas(prop).ModelType()
+		}
+		return model.NewObjectType(properties)
+	}
+
+	return model.DynamicType
 }

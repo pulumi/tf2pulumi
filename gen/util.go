@@ -18,7 +18,7 @@ import (
 	"reflect"
 	"sort"
 
-	"github.com/pulumi/pulumi/pkg/util/contract"
+	"github.com/pulumi/pulumi/sdk/v2/go/common/util/contract"
 )
 
 // SortedKeys returns a sorted list of keys for the given map. The map's key type must be of kind string.

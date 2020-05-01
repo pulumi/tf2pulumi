@@ -1,6 +1,8 @@
 run:
   skip-dirs:
+    - internal/addrs
     - internal/config
+    - internal/configs
 
 linters:
   enable-all: false
@@ -14,9 +16,11 @@ linters:
     - ineffassign
     - interfacer
     - lll
-    - megacheck
     - misspell
     - nakedret
     - structcheck
     - unconvert
     - varcheck
+  disable:
+    - staticcheck # Disabled due to OOM errors as of golangci-lint@v1.24.0
+    - megacheck   # Disabled due to OOM errors as of golangci-lint@v1.24.0

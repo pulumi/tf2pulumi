@@ -632,10 +632,6 @@ func TestLoadDir_noMerge(t *testing.T) {
 	if c == nil {
 		t.Fatal("config should not be nil")
 	}
-
-	if err := c.Validate(); err == nil {
-		t.Fatal("should not be valid")
-	}
 }
 
 func TestLoadDir_override(t *testing.T) {
@@ -682,30 +678,6 @@ func TestLoadDir_overrideVar(t *testing.T) {
 	actual := variablesStr(c.Variables)
 	if actual != strings.TrimSpace(dirOverrideVarsVariablesStr) {
 		t.Fatalf("bad:\n%s", actual)
-	}
-}
-
-func TestLoadFile_mismatchedVariableTypes(t *testing.T) {
-	_, err := LoadFile(filepath.Join(fixtureDir, "variable-mismatched-type.tf"))
-	if err == nil {
-		t.Fatalf("bad: expected error")
-	}
-
-	errorStr := err.Error()
-	if !strings.Contains(errorStr, "'not_a_map' has a default value which is not of type 'string'") {
-		t.Fatalf("bad: expected error has wrong text: %s", errorStr)
-	}
-}
-
-func TestLoadFile_badVariableTypes(t *testing.T) {
-	_, err := LoadFile(filepath.Join(fixtureDir, "bad-variable-type.tf"))
-	if err == nil {
-		t.Fatalf("bad: expected error")
-	}
-
-	errorStr := err.Error()
-	if !strings.Contains(errorStr, "'bad_type' type must be one of") {
-		t.Fatalf("bad: expected error has wrong text: %s", errorStr)
 	}
 }
 

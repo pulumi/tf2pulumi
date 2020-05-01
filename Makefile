@@ -11,13 +11,13 @@ build::
 	go install -ldflags "-X github.com/pulumi/tf2pulumi/version.Version=${VERSION}" github.com/pulumi/tf2pulumi
 
 lint::
-	golangci-lint run
+	golangci-lint run --timeout 5m
 
 test_fast::
-	$(GO_TEST_FAST) ./il/... ./gen/...
+	$(GO_TEST_FAST) ./il/... ./gen/... ./internal/...
 
 test_all::
-	$(GO_TEST) ./il/... ./gen/...
+	$(GO_TEST) ./il/... ./gen/... ./internal/...
 	$(GO_TEST) ./tests/...
 
 # The travis_* targets are entrypoints for CI.

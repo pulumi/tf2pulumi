@@ -1,9 +1,0 @@
-name: lambda
-runtime: nodejs
-description: Lambda Example
-template:
-  description: A minimal AWS TypeScript Pulumi program
-  config:
-    aws:region:
-      description: The AWS region to deploy into
-      default: us-east-1

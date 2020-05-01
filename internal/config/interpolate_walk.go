@@ -7,9 +7,10 @@ import (
 
 	"github.com/hashicorp/hil"
 	"github.com/hashicorp/hil/ast"
-	"github.com/hashicorp/terraform/configs/hcl2shim"
 	"github.com/mitchellh/reflectwalk"
 )
+
+const unknownVariableValue = "74D93920-ED26-11E3-AC10-0800200C9A66"
 
 // interpolationWalker implements interfaces for the reflectwalk package
 // (github.com/mitchellh/reflectwalk) that can be used to automatically
@@ -154,14 +155,14 @@ func (w *interpolationWalker) Primitive(v reflect.Value) error {
 
 	if w.Replace {
 		// We need to determine if we need to remove this element
-		// if the result contains any "UnknownVariableValue" which is
+		// if the result contains any "unknownVariableValue" which is
 		// set if it is computed. This behavior is different if we're
 		// splitting (in a SliceElem) or not.
 		remove := false
 		if w.loc == reflectwalk.SliceElem {
 			switch typedReplaceVal := replaceVal.(type) {
 			case string:
-				if typedReplaceVal == hcl2shim.UnknownVariableValue {
+				if typedReplaceVal == unknownVariableValue {
 					remove = true
 				}
 			case []interface{}:
@@ -169,7 +170,7 @@ func (w *interpolationWalker) Primitive(v reflect.Value) error {
 					remove = true
 				}
 			}
-		} else if replaceVal == hcl2shim.UnknownVariableValue {
+		} else if replaceVal == unknownVariableValue {
 			remove = true
 		}
 
@@ -225,7 +226,7 @@ func (w *interpolationWalker) replaceCurrent(v reflect.Value) {
 func hasUnknownValue(variable []interface{}) bool {
 	for _, value := range variable {
 		if strVal, ok := value.(string); ok {
-			if strVal == hcl2shim.UnknownVariableValue {
+			if strVal == unknownVariableValue {
 				return true
 			}
 		}

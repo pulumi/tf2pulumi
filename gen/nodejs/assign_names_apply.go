@@ -18,8 +18,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/pulumi/pulumi-terraform-bridge/pkg/tfbridge"
-	"github.com/pulumi/pulumi/pkg/util/contract"
+	"github.com/pulumi/pulumi-terraform-bridge/v2/pkg/tfbridge"
+	"github.com/pulumi/pulumi/sdk/v2/go/common/util/contract"
 
 	"github.com/pulumi/tf2pulumi/il"
 	"github.com/pulumi/tf2pulumi/internal/config"
@@ -76,7 +76,7 @@ func (nt *applyNameTable) bestArgName(n *il.BoundVariableAccess) string {
 		// Otherwise, use the name of the path's first field, which is the name of the output-typed field argument.
 		element := n.Elements[0]
 		elementSch := n.Schemas.PropertySchemas(element)
-		return tfbridge.TerraformToPulumiName(element, elementSch.TF, false)
+		return tfbridge.TerraformToPulumiName(element, elementSch.TF, nil, false)
 	default:
 		// Path and Count variables should never be Output-typed.
 		contract.Failf("unexpected TF var type in assignApplyArgName: %T", v)

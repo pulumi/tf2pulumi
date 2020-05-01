@@ -25,8 +25,8 @@ import (
 	"github.com/blang/semver"
 	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
 	"github.com/pkg/errors"
-	"github.com/pulumi/pulumi-terraform-bridge/pkg/tfbridge"
-	"github.com/pulumi/pulumi/pkg/util/contract"
+	"github.com/pulumi/pulumi-terraform-bridge/v2/pkg/tfbridge"
+	"github.com/pulumi/pulumi/sdk/v2/go/common/util/contract"
 
 	"github.com/pulumi/tf2pulumi/gen"
 	"github.com/pulumi/tf2pulumi/il"
@@ -41,13 +41,17 @@ type Options struct {
 
 // New creates a new NodeJS code generator.
 func New(projectName string, targetSDKVersion string, usePromptDataSources bool, w io.Writer) (gen.Generator, error) {
-	v, err := semver.Parse(targetSDKVersion)
-	if err != nil {
-		return nil, err
+	supportsProxyApplies := true
+	if targetSDKVersion != "" {
+		v, err := semver.Parse(targetSDKVersion)
+		if err != nil {
+			return nil, err
+		}
+		supportsProxyApplies = v.GTE(semver.MustParse("0.17.0"))
 	}
 	g := &generator{
 		ProjectName:          projectName,
-		supportsProxyApplies: v.GTE(semver.MustParse("0.17.0")),
+		supportsProxyApplies: supportsProxyApplies,
 		usePromptDataSources: usePromptDataSources,
 		importNames:          make(map[string]bool),
 	}
@@ -150,7 +154,7 @@ func tsName(tfName string, tfSchema *schema.Schema, schemaInfo *tfbridge.SchemaI
 		}
 		return cleanName(tfName)
 	}
-	return tfbridge.TerraformToPulumiName(tfName, tfSchema, false)
+	return tfbridge.TerraformToPulumiName(tfName, tfSchema, nil, false)
 }
 
 func (g *generator) nodeName(n il.Node) string {
@@ -307,7 +311,7 @@ func (g *generator) GeneratePreamble(modules []*il.Graph) error {
 		}
 	}
 	if g.rootPath == "" {
-		return errors.New("could not determine root module path")
+		g.rootPath = "."
 	}
 
 	// Print the @pulumi/pulumi import at the top.
@@ -585,7 +589,7 @@ func resourceTypeName(r *il.ResourceNode) (string, string, string, error) {
 	provider, resourceType := cleanName(r.Provider.PluginName), r.Type[underscore+1:]
 
 	// Convert the TF resource type into its Pulumi name.
-	memberName := tfbridge.TerraformToPulumiName(resourceType, nil, true)
+	memberName := tfbridge.TerraformToPulumiName(resourceType, nil, nil, true)
 
 	// Compute the module in which the Pulumi type definition lives.
 	module := ""
