@@ -1239,10 +1239,6 @@ func (rr *resourceRewriter) rewriteBodyItem(item model.BodyItem) (model.BodyItem
 
 		item.Name, item.Value = rr.terraformToPulumiName(item.Name), value
 	case *model.Block:
-		if len(rr.stack) == 1 {
-			rr.markRewritten("options")
-		}
-
 		if len(rr.stack) == 2 {
 			switch item.Type {
 			case "lifecycle":
@@ -1273,7 +1269,7 @@ func (rr *resourceRewriter) rewriteBodyItem(item model.BodyItem) (model.BodyItem
 		items := make([]model.BodyItem, 0, len(item.Body.Items))
 		for _, item := range item.Body.Items {
 			block, ok := item.(*model.Block)
-			if !ok {
+			if !ok || len(rr.stack) == 1 && block.Type == "options" {
 				items = append(items, item)
 				continue
 			}

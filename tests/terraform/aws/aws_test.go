@@ -68,7 +68,7 @@ func TestELB(t *testing.T) {
 }
 
 func TestELB2(t *testing.T) {
-	RunAWSTest(t, "elb2")
+	RunAWSTest(t, "elb2", terraform.SkipPython())
 }
 
 func TestLBListener(t *testing.T) {
