@@ -1,8 +1,7 @@
 import pulumi
 import pulumi_aws as aws
 
-ubuntu = aws.ec2.Ami("ubuntu",
-    filter=[
+ubuntu = aws.get_ami(filter=[
         {
             "name": "name",
             "values": ["ubuntu/images/hvm-ssd/ubuntu-trusty-14.04-amd64-server-*"],
