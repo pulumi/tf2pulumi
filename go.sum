@@ -503,8 +503,8 @@ github.com/pulumi/etcd v3.3.18+incompatible/go.mod h1:lVIpFKVML+ApRSsPXaJTYlMlkg
 github.com/pulumi/pulumi-terraform-bridge/v2 v2.0.0 h1:TkdHeUcgMzETceij2Sri7isVSuakbsmrHOK9thSkA44=
 github.com/pulumi/pulumi-terraform-bridge/v2 v2.0.0/go.mod h1:CShKXRvffj8fOwzDfBM8qxEpqfMpLLbEAb6QCtcGeUw=
 github.com/pulumi/pulumi/pkg/v2 v2.0.0/go.mod h1:kNG9MBTdKP9AzMgkETumR3fmX9gUYB+HpQL767K6jXc=
-github.com/pulumi/pulumi/pkg/v2 v2.1.1-0.20200501132939-93a7dbe41201 h1:TI/xSwhoiuj9CPkw5wCN3KFo7YwrsPmNTwlm/brf82A=
-github.com/pulumi/pulumi/pkg/v2 v2.1.1-0.20200501132939-93a7dbe41201/go.mod h1:hXaFYjGEnsQ7qGRJbCDhjuGh7sip3TsaOGNkU3ADt9s=
+github.com/pulumi/pulumi/pkg/v2 v2.1.1-0.20200501171150-4278595f1b55 h1:mLKbmmXS/dczj8IzE3rO7rDo4Dmn+P8k52cJRTL+g48=
+github.com/pulumi/pulumi/pkg/v2 v2.1.1-0.20200501171150-4278595f1b55/go.mod h1:hXaFYjGEnsQ7qGRJbCDhjuGh7sip3TsaOGNkU3ADt9s=
 github.com/pulumi/pulumi/sdk/v2 v2.0.0 h1:3VMXbEo3bqeaU+YDt8ufVBLD0WhLYE3tG3t/nIZ3Iac=
 github.com/pulumi/pulumi/sdk/v2 v2.0.0/go.mod h1:W7k1UDYerc5o97mHnlHHp5iQZKEby+oQrQefWt+2RF4=
 github.com/pulumi/pulumi/sdk/v2 v2.1.1-0.20200501132939-93a7dbe41201 h1:LYorq2xklDtCqZTcZpWQBGgzPYRTIeYtgC9hgD4LpV0=
