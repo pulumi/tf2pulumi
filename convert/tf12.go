@@ -320,6 +320,7 @@ type resource struct {
 	terraformType model.Type
 	variableType  model.Type
 	rangeVariable *model.Variable
+	isCounted     bool
 	isConditional bool
 
 	block *model.Block
@@ -848,6 +849,8 @@ func (b *tf12binder) bindResource(r *resource) hcl.Diagnostics {
 		var rangeExpr model.Expression
 		if count, hasCount := block.Body.Attribute("count"); hasCount {
 			r.isConditional = b.conditionals.isConditionalValue(count.Value)
+			r.isCounted = !r.isConditional
+
 			rangeExpr = count.Value
 			b.annotateExpressionsWithSchemas(count)
 		} else {
@@ -878,7 +881,7 @@ func (b *tf12binder) genVariable(w io.Writer, v *variable) hcl.Diagnostics {
 
 	var bodyItems []model.BodyItem
 	if defaultValue, ok := v.block.Body.Attribute("default"); ok {
-		dv, diags := b.rewriteExpression(defaultValue.Value)
+		dv, diags := b.rewriteExpression(defaultValue.Value, nil)
 		defaultValue.Value, diagnostics = dv, append(diagnostics, diags...)
 
 		bodyItems = []model.BodyItem{defaultValue}
@@ -935,7 +938,7 @@ func (b *tf12binder) genProvider(w io.Writer, p *provider) hcl.Diagnostics {
 func (b *tf12binder) genLocal(w io.Writer, l *local) hcl.Diagnostics {
 	l.attribute.Name = l.pulumiName
 
-	v, diagnostics := b.rewriteExpression(l.attribute.Value)
+	v, diagnostics := b.rewriteExpression(l.attribute.Value, nil)
 	l.attribute.Value = v
 
 	_, err := fmt.Fprintf(w, "%v", l.attribute)
@@ -947,7 +950,7 @@ func (b *tf12binder) genOutput(w io.Writer, o *output) hcl.Diagnostics {
 	var diagnostics hcl.Diagnostics
 	var bodyItems []model.BodyItem
 	if value, ok := o.block.Body.Attribute("value"); ok {
-		v, diags := b.rewriteExpression(value.Value)
+		v, diags := b.rewriteExpression(value.Value, nil)
 		value.Value, diagnostics = v, append(diagnostics, diags...)
 
 		bodyItems = []model.BodyItem{value}
@@ -975,10 +978,10 @@ type blockInfo struct {
 }
 
 type resourceRewriter struct {
-	binder      *tf12binder
-	rootSchemas il.Schemas
-	stack       []*blockInfo
-	options     *model.Block
+	binder   *tf12binder
+	resource *resource
+	stack    []*blockInfo
+	options  *model.Block
 }
 
 func (rr *resourceRewriter) schemas() il.Schemas {
@@ -1002,7 +1005,7 @@ func (rr *resourceRewriter) markRewritten(name string) {
 }
 
 func (rr *resourceRewriter) push(name string, block bool) *blockInfo {
-	schemas := rr.rootSchemas
+	schemas := rr.resource.schemas
 	if len(rr.stack) > 0 {
 		schemas = rr.schemas().PropertySchemas(name)
 	}
@@ -1187,7 +1190,7 @@ func (rr *resourceRewriter) rewriteBodyItem(item model.BodyItem) (model.BodyItem
 		}
 
 		rr.rewriteObjectKeys(item.Value)
-		value, diags := rr.binder.rewriteExpression(item.Value)
+		value, diags := rr.binder.rewriteExpression(item.Value, rr.resource)
 		diagnostics = append(diagnostics, diags...)
 
 		if len(rr.stack) == 2 {
@@ -1335,7 +1338,7 @@ func (rr *resourceRewriter) rewriteBodyItem(item model.BodyItem) (model.BodyItem
 	return item, diagnostics
 }
 
-func (b *tf12binder) rewriteExpression(n model.Expression) (model.Expression, hcl.Diagnostics) {
+func (b *tf12binder) rewriteExpression(n model.Expression, resource *resource) (model.Expression, hcl.Diagnostics) {
 	visitor := func(n model.Expression) (model.Expression, hcl.Diagnostics) {
 		switch n := n.(type) {
 		case *model.IndexExpression:
@@ -1347,7 +1350,7 @@ func (b *tf12binder) rewriteExpression(n model.Expression) (model.Expression, hc
 			// TODO(pdg): implement
 			return n, nil
 		case *model.ScopeTraversalExpression:
-			return b.rewriteScopeTraversal(n)
+			return b.rewriteScopeTraversal(n, resource)
 		default:
 			return n, nil
 		}
@@ -1367,8 +1370,50 @@ func (b *tf12binder) rewriteFunctionCall(
 	return n, nil
 }
 
-func (b *tf12binder) rewriteScopeTraversal(
-	n *model.ScopeTraversalExpression) (*model.ScopeTraversalExpression, hcl.Diagnostics) {
+func internalTrivia(traversal []syntax.TraverserTokens) (syntax.TriviaList, syntax.TriviaList) {
+	var leadingTrivia, trailingTrivia syntax.TriviaList
+	for i, traverser := range traversal {
+		switch traverser := traverser.(type) {
+		case *syntax.DotTraverserTokens:
+			leadingTrivia = append(leadingTrivia, traverser.Dot.AllTrivia().CollapseWhitespace()...)
+			leadingTrivia = append(leadingTrivia, traverser.Index.LeadingTrivia.CollapseWhitespace()...)
+			if i < len(traversal)-1 {
+				leadingTrivia = append(leadingTrivia, traverser.Index.TrailingTrivia.CollapseWhitespace()...)
+			} else {
+				trailingTrivia = append(trailingTrivia, traverser.Index.TrailingTrivia...)
+			}
+		case *syntax.BracketTraverserTokens:
+			leadingTrivia = append(leadingTrivia, traverser.OpenBracket.AllTrivia().CollapseWhitespace()...)
+			leadingTrivia = append(leadingTrivia, traverser.Index.AllTrivia().CollapseWhitespace()...)
+			leadingTrivia = append(leadingTrivia, traverser.CloseBracket.LeadingTrivia.CollapseWhitespace()...)
+			if i < len(traversal)-1 {
+				leadingTrivia = append(leadingTrivia, traverser.Index.TrailingTrivia.CollapseWhitespace()...)
+			} else {
+				trailingTrivia = append(trailingTrivia, traverser.Index.TrailingTrivia...)
+			}
+		}
+	}
+	return leadingTrivia, trailingTrivia
+}
+
+func makeSimpleTraversal(name string, part model.Traversable,
+	original *model.ScopeTraversalExpression) *model.ScopeTraversalExpression {
+
+	x := &model.ScopeTraversalExpression{
+		RootName:  name,
+		Traversal: hcl.Traversal{hcl.TraverseRoot{Name: name}},
+		Parts:     []model.Traversable{part},
+	}
+
+	trivia, _ := internalTrivia(original.Tokens.Traversal)
+	x.SetLeadingTrivia(original.GetLeadingTrivia())
+	x.SetTrailingTrivia(append(trivia, original.GetTrailingTrivia()...))
+
+	return x
+}
+
+func (b *tf12binder) rewriteScopeTraversal(n *model.ScopeTraversalExpression,
+	res *resource) (*model.ScopeTraversalExpression, hcl.Diagnostics) {
 
 	name, offset := "", 0
 	var schemas il.Schemas
@@ -1387,6 +1432,21 @@ func (b *tf12binder) rewriteScopeTraversal(
 		case *variable:
 			name, offset = p.pulumiName, i
 		case *model.Variable:
+			if res != nil && res.isDataSource && p == res.rangeVariable {
+				if res.isCounted {
+					return makeSimpleTraversal("__index", p, n), nil
+				} else if len(n.Traversal) > i+1 {
+					if attr, ok := n.Traversal[i+1].(hcl.TraverseAttr); ok {
+						switch attr.Name {
+						case "key":
+							return makeSimpleTraversal("__key", p, n), nil
+						case "value":
+							return makeSimpleTraversal("__value", p, n), nil
+						}
+					}
+				}
+			}
+
 			fn, ok := b.variableToSchemas[p]
 			if ok {
 				schemas = fn()
@@ -1458,31 +1518,12 @@ func (b *tf12binder) rewriteScopeTraversal(
 		newTokens.Root.LeadingTrivia = n.Tokens.Root.LeadingTrivia
 		newTokens.Root.TrailingTrivia = n.Tokens.Root.TrailingTrivia
 	} else {
-		var leadingTrivia, trailingTrivia syntax.TriviaList
+		var leadingTrivia syntax.TriviaList
 		leadingTrivia = append(leadingTrivia, n.Tokens.Root.LeadingTrivia...)
 		leadingTrivia = append(leadingTrivia, n.Tokens.Root.TrailingTrivia.CollapseWhitespace()...)
 
-		for i, traverser := range n.Tokens.Traversal[:offset] {
-			switch traverser := traverser.(type) {
-			case *syntax.DotTraverserTokens:
-				leadingTrivia = append(leadingTrivia, traverser.Dot.AllTrivia().CollapseWhitespace()...)
-				leadingTrivia = append(leadingTrivia, traverser.Index.LeadingTrivia.CollapseWhitespace()...)
-				if i < offset-1 {
-					leadingTrivia = append(leadingTrivia, traverser.Index.TrailingTrivia.CollapseWhitespace()...)
-				} else {
-					trailingTrivia = append(trailingTrivia, traverser.Index.TrailingTrivia...)
-				}
-			case *syntax.BracketTraverserTokens:
-				leadingTrivia = append(leadingTrivia, traverser.OpenBracket.AllTrivia().CollapseWhitespace()...)
-				leadingTrivia = append(leadingTrivia, traverser.Index.AllTrivia().CollapseWhitespace()...)
-				leadingTrivia = append(leadingTrivia, traverser.CloseBracket.LeadingTrivia.CollapseWhitespace()...)
-				if i < offset-1 {
-					leadingTrivia = append(leadingTrivia, traverser.Index.TrailingTrivia.CollapseWhitespace()...)
-				} else {
-					trailingTrivia = append(trailingTrivia, traverser.Index.TrailingTrivia...)
-				}
-			}
-		}
+		trivia, trailingTrivia := internalTrivia(n.Tokens.Traversal[:offset])
+		leadingTrivia = append(leadingTrivia, trivia...)
 
 		newTokens.Root.LeadingTrivia = leadingTrivia
 		newTokens.Root.TrailingTrivia = trailingTrivia
@@ -1500,8 +1541,8 @@ func (b *tf12binder) genResource(w io.Writer, r *resource) hcl.Diagnostics {
 	}
 
 	rewriter := &resourceRewriter{
-		binder:      b,
-		rootSchemas: r.schemas,
+		binder:   b,
+		resource: r,
 	}
 	_, diags := model.VisitBodyItem(r.block, rewriter.enterBodyItem, rewriter.rewriteBodyItem)
 	diagnostics = append(diagnostics, diags...)
@@ -1563,7 +1604,7 @@ func (b *tf12binder) genResource(w io.Writer, r *resource) hcl.Diagnostics {
 		if options != nil {
 			if rng, hasRange := options.Body.Attribute("range"); hasRange {
 				rangeExpr = rng.Value
-				if !r.isConditional && model.NumberType.ConversionFrom(rng.Value.Type()) != model.NoConversion {
+				if r.isCounted {
 					rangeExpr = &model.FunctionCallExpression{
 						Name: "range",
 						Args: []model.Expression{rng.Value},
@@ -1594,21 +1635,31 @@ func (b *tf12binder) genResource(w io.Writer, r *resource) hcl.Diagnostics {
 					},
 				}
 			} else {
-				forTokens := syntax.NewForTokens("", "range", false, false, false)
+				valueVariable := &model.Variable{
+					Name:         "__index",
+					VariableType: model.DynamicType,
+				}
+				keyVariableName := ""
+				var keyVariable *model.Variable
+				if !r.isCounted {
+					valueVariable.Name = "__value"
+					keyVariableName = "__key"
+					keyVariable = &model.Variable{
+						Name:         "__key",
+						VariableType: model.DynamicType,
+					}
+				}
+
+				forTokens := syntax.NewForTokens(keyVariableName, valueVariable.Name, false, false, false)
 				forTokens.Close.TrailingTrivia = valueTokens.CloseParen.TrailingTrivia
 				valueTokens.CloseParen.TrailingTrivia = nil
 
 				value = &model.ForExpression{
-					Tokens: forTokens,
-					ValueVariable: &model.Variable{
-						Name:         "range",
-						VariableType: model.DynamicType,
-					},
-					Collection: &model.FunctionCallExpression{
-						Name: "entries",
-						Args: []model.Expression{rangeExpr},
-					},
-					Value: value,
+					Tokens:        forTokens,
+					KeyVariable:   keyVariable,
+					ValueVariable: valueVariable,
+					Collection:    rangeExpr,
+					Value:         value,
 				}
 			}
 		}
