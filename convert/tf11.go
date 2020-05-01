@@ -53,7 +53,7 @@ func convertTF11(opts Options) (map[string][]byte, bool, error) {
 		filterAutoNames := opts.ResourceNameProperty == ""
 		for _, g := range gs {
 			for _, r := range g.Resources {
-				if r.Config.Mode != config.ManagedResourceMode {
+				if r.Config.Mode == config.ManagedResourceMode {
 					il.FilterProperties(r, func(key string, _ il.BoundNode) bool {
 						if filterAutoNames {
 							sch := r.Schemas().PropertySchemas(key).Pulumi
