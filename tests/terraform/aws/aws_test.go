@@ -68,7 +68,7 @@ func TestELB(t *testing.T) {
 }
 
 func TestELB2(t *testing.T) {
-	RunAWSTest(t, "elb2", terraform.SkipPython())
+	RunAWSTest(t, "elb2")
 }
 
 func TestLBListener(t *testing.T) {
@@ -79,7 +79,8 @@ func TestLBListener(t *testing.T) {
 }
 
 func TestLambda(t *testing.T) {
-	RunAWSTest(t, "lambda")
+	// Skip Python due to unimplemented support for the archive provider (#172)
+	RunAWSTest(t, "lambda", terraform.SkipPython())
 }
 
 func TestNetworking(t *testing.T) {
