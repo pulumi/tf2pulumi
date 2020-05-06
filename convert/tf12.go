@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"fmt"
 	"io"
-	"log"
 	"sort"
 	"strings"
 
@@ -150,9 +149,9 @@ func convertTF12(files []*syntax.File, opts Options) ([]*syntax.File, *hcl2.Prog
 		file.output.Reset()
 
 		if pulumiParser.Diagnostics.HasErrors() {
-			log.Printf("%v", contents)
-			log.Printf("%v", diagnostics)
-			log.Printf("%v", pulumiParser.Diagnostics)
+			opts.logf("%v", contents)
+			opts.logf("%v", diagnostics)
+			opts.logf("%v", pulumiParser.Diagnostics)
 			contract.Fail()
 		}
 	}

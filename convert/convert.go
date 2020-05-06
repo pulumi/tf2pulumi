@@ -163,3 +163,10 @@ type Options struct {
 	// TargetOptions captures any target-specific options.
 	TargetOptions interface{}
 }
+
+// logf writes a formatted message to the configured logger, if any.
+func (o Options) logf(format string, arguments ...interface{}) {
+	if o.Logger != nil {
+		o.Logger.Printf(format, arguments...)
+	}
+}
