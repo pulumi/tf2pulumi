@@ -79,7 +79,8 @@ func TestLBListener(t *testing.T) {
 }
 
 func TestLambda(t *testing.T) {
-	RunAWSTest(t, "lambda")
+	// Skip Python due to unimplemented support for the archive provider (#172)
+	RunAWSTest(t, "lambda", terraform.SkipPython())
 }
 
 func TestNetworking(t *testing.T) {
