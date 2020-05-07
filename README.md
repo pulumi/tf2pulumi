@@ -33,17 +33,17 @@ into a directory that is on your path.
 In order to use `tf2pulumi` to convert a Terraform project to Pulumi TypeScript and then deploy it,
 you'll first need to install the [Pulumi CLI](https://pulumi.io/quickstart/install.html). Once the
 Pulumi CLI has been installed, navigate to the same directory as the Terraform project you'd like to
-import and create a new Pulumi TypeScript stack in a subdirectory:
+import and create a new Pulumi TypeScript stack:
 
 ```console
-$ pulumi new typescript --dir my-stack
+$ pulumi new typescript -f
 ```
 
-Then run `tf2pulumi` and redirect its output to a file named `index.ts` in the directory that
+Then run `tf2pulumi` which will write a file named `index.ts` in the directory that
 contains the Pulumi project you just created:
 
 ```console
-$ tf2pulumi >my-stack/index.ts
+$ tf2pulumi
 ```
 
 If `tf2pulumi` complains about missing Terraform resource plugins, install those plugins as per the
