@@ -14,7 +14,7 @@ builds:
   ldflags: -X github.com/pulumi/tf2pulumi/version.Version={{.Tag}}
   binary: tf2pulumi
 archives:
-  - name_template: "{{ .Binary }}-{{ .Tag }}-{{ .Os }}-{{ .Arch }}"
+- name_template: "{{ .Binary }}-{{ .Tag }}-{{ .Os }}-{{ .Arch }}"
   format_overrides:
     - goos: windows
       format: zip
