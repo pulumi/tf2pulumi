@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io/ioutil"
+	"reflect"
 
 	"github.com/pulumi/pulumi/sdk/go/pulumi"
 	"github.com/pulumi/pulumi/sdk/go/pulumi/config"
@@ -87,11 +88,18 @@ func AddImportTransformation(ctx *pulumi.Context) error {
 			// Map by 'Name' tag too
 			tags := resourceAttributes["tags"]
 			if tags != nil {
-				nameTag := tags.(map[string]interface{})["Name"]
-				if nameTag != "" {
-					pulumiResourceTypeAndName := fmt.Sprintf("%s::%s%s", pulumiType, nameTag, terraformResourceIndexSuffix)
-					pulumiResourceMapping[pulumiResourceTypeAndName] = resourceID
-					ctx.Log.Debug(fmt.Sprintf("Mapped [%s] => [%s] by Name tag", pulumiResourceTypeAndName, resourceID), nil)
+				// Only handle maps for now
+				tagsType := reflect.ValueOf(tags)
+				if tagsType.Kind() == reflect.Map {
+					ctx.Log.Debug(fmt.Sprintf("parsing name tags %s", pulumiResourceTypeAndName), nil)
+					nameTag := tags.(map[string]interface{})["Name"]
+					if nameTag != "" {
+						pulumiResourceTypeAndName := fmt.Sprintf("%s::%s%s", pulumiType, nameTag, terraformResourceIndexSuffix)
+						pulumiResourceMapping[pulumiResourceTypeAndName] = resourceID
+						ctx.Log.Debug(fmt.Sprintf("Mapped [%s] => [%s] by Name tag", pulumiResourceTypeAndName, resourceID), nil)
+					}
+				} else {
+					ctx.Log.Warn(fmt.Sprintf("`tags` is not of type map. Skipping Name tag parsing for [%s]...", pulumiResourceTypeAndName), nil)
 				}
 			}
 		}
