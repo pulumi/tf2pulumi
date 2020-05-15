@@ -20,7 +20,36 @@ archives:
       format: zip
   replacements:
       amd64: x64
-      386: x86
+brews:
+  - 
+    name: tf2pulumi
+    github:
+      owner: pulumi
+      name: homebrew-tap
+    commit_author:
+      name: pulumi-bot
+      email: bot@pulumi.com
+    homepage: "https://pulumi.io"
+    description: "A tool to convert Terraform projects to Pulumi TypeScript programs"
+    custom_block: |
+      head do
+        url "https://github.com/pulumi/tf2pulumi.git"
+        depends_on "go@1.13" if build.head?
+      end
+    install: |
+      if build.head?
+        ENV["GOPATH"] = buildpath
+        ENV["GO111MODULE"] = "on"
+        dir = buildpath/"src/github.com/pulumi/tf2pulumi"
+        dir.install buildpath.children
+        system "go", "build", "-ldflags=-X github.com/pulumi/tf2pulumi/version.Version=#{version}", "github.com/pulumi/tf2pulumi"
+        bin.install Dir["#{buildpath}/tf2pulumi"]
+      end
+
+      if build.stable?
+        bin.install "tf2pulumi"
+      end
+
 snapshot:
   name_template: "{{ .Tag }}-SNAPSHOT"
 changelog:
