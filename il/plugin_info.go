@@ -15,11 +15,11 @@
 package il
 
 import (
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"os/exec"
 
+	jsoniter "github.com/json-iterator/go"
 	"github.com/pkg/errors"
 	"github.com/pulumi/pulumi-terraform-bridge/v2/pkg/tfbridge"
 	"github.com/pulumi/pulumi/sdk/v2/go/common/util/contract"
@@ -106,7 +106,7 @@ func (pluginProviderInfoSource) GetProviderInfo(tfProviderName string) (*tfbridg
 	}
 
 	var info *tfbridge.MarshallableProviderInfo
-	err = json.NewDecoder(out).Decode(&info)
+	err = jsoniter.NewDecoder(out).Decode(&info)
 
 	if cErr := cmd.Wait(); cErr != nil {
 		return nil, errors.Wrapf(err, "failed to run plugin %s for provider %s", pluginName, tfProviderName)
@@ -132,7 +132,7 @@ func getLatestPluginVersion(pluginName string) string {
 	var packument struct {
 		DistTags map[string]string `json:"dist-tags"`
 	}
-	if err = json.NewDecoder(resp.Body).Decode(&packument); err != nil {
+	if err = jsoniter.NewDecoder(resp.Body).Decode(&packument); err != nil {
 		return ""
 	}
 	return packument.DistTags["latest"]
