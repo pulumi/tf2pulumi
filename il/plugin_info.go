@@ -53,8 +53,7 @@ func (cache *CachingProviderInfoSource) getProviderInfo(tfProviderName string) (
 // GetProviderInfo returns the tfbridge information for the indicated Terraform provider as well as the name of the
 // corresponding Pulumi resource provider.
 func (cache *CachingProviderInfoSource) GetProviderInfo(tfProviderName string) (*tfbridge.ProviderInfo, error) {
-	info, ok := cache.getProviderInfo(tfProviderName)
-	if ok {
+	if info, ok := cache.getProviderInfo(tfProviderName); ok {
 		return info, nil
 	}
 
