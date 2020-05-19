@@ -57,6 +57,9 @@ func (cache *CachingProviderInfoSource) GetProviderInfo(tfProviderName string) (
 		return info, nil
 	}
 
+	cache.m.Lock()
+	defer cache.m.Unlock()
+
 	info, err := cache.source.GetProviderInfo(tfProviderName)
 	if err != nil {
 		return nil, err
