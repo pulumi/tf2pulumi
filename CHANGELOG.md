@@ -1,5 +1,8 @@
 ## HEAD (Unreleased)
 
+- Add preliminary C# support.
+  [#179](https://github.com/pulumi/tf2pulumi/pull/179)
+
 ## 0.8.0 (Released May 7, 2020)
 
 - Improve Python support.
