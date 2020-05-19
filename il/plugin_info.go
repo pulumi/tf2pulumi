@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"net/http"
 	"os/exec"
+	"sync"
 
 	jsoniter "github.com/json-iterator/go"
 	"github.com/pkg/errors"
@@ -35,21 +36,32 @@ type ProviderInfoSource interface {
 
 // CachingProviderInfoSource wraps a ProviderInfoSource in a cache for faster access.
 type CachingProviderInfoSource struct {
+	m sync.RWMutex
+
 	source  ProviderInfoSource
 	entries map[string]*tfbridge.ProviderInfo
+}
+
+func (cache *CachingProviderInfoSource) getProviderInfo(tfProviderName string) (*tfbridge.ProviderInfo, bool) {
+	cache.m.RLock()
+	defer cache.m.RUnlock()
+
+	info, ok := cache.entries[tfProviderName]
+	return info, ok
 }
 
 // GetProviderInfo returns the tfbridge information for the indicated Terraform provider as well as the name of the
 // corresponding Pulumi resource provider.
 func (cache *CachingProviderInfoSource) GetProviderInfo(tfProviderName string) (*tfbridge.ProviderInfo, error) {
-	info, ok := cache.entries[tfProviderName]
-	if !ok {
-		i, err := cache.source.GetProviderInfo(tfProviderName)
-		if err != nil {
-			return nil, err
-		}
-		cache.entries[tfProviderName], info = i, i
+	if info, ok := cache.getProviderInfo(tfProviderName); ok {
+		return info, nil
 	}
+
+	info, err := cache.source.GetProviderInfo(tfProviderName)
+	if err != nil {
+		return nil, err
+	}
+	cache.entries[tfProviderName] = info
 	return info, nil
 }
 
