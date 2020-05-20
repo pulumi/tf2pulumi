@@ -63,6 +63,9 @@ func Convert(opts Options) (map[string][]byte, Diagnostics, error) {
 		}
 		opts.Root = afero.NewBasePathFs(afero.NewOsFs(), cwd)
 	}
+	if opts.ProviderInfoSource == nil {
+		opts.ProviderInfoSource = il.PluginProviderInfoSource
+	}
 
 	// Attempt to load the config as TF11 first. If this succeeds, use TF11 semantics unless either the config
 	// or the options specify otherwise.
