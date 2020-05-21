@@ -92,7 +92,7 @@ func convertTF12(files []*syntax.File, opts Options) ([]*syntax.File, *hcl2.Prog
 		hcl2Options:         hcl2Options,
 		pulumiOptions:       pulumiOptions,
 		filterResourceNames: opts.FilterResourceNames,
-		providerInfo:        il.PluginProviderInfoSource,
+		providerInfo:        opts.ProviderInfoSource,
 		providers:           map[string]*tfbridge.ProviderInfo{},
 		binding:             codegen.Set{},
 		bound:               codegen.Set{},
