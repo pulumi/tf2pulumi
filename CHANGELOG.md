@@ -1,5 +1,8 @@
 ## HEAD (Unreleased)
 
+- Add preliminary Go support.
+  [#179](https://github.com/pulumi/tf2pulumi/pull/189)
+
 - Add preliminary C# support.
   [#179](https://github.com/pulumi/tf2pulumi/pull/179)
 

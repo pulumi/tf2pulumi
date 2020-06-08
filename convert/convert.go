@@ -22,6 +22,7 @@ import (
 
 	"github.com/hashicorp/hcl/v2"
 	hcl2dotnet "github.com/pulumi/pulumi/pkg/v2/codegen/dotnet"
+	hcl2go "github.com/pulumi/pulumi/pkg/v2/codegen/go"
 	"github.com/pulumi/pulumi/pkg/v2/codegen/hcl2"
 	"github.com/pulumi/pulumi/pkg/v2/codegen/hcl2/syntax"
 	hcl2nodejs "github.com/pulumi/pulumi/pkg/v2/codegen/nodejs"
@@ -38,10 +39,11 @@ const (
 	LanguagePulumi     string = "pulumi"
 	LanguagePython     string = "python"
 	LanguageCSharp     string = "csharp"
+	LanguageGo         string = "go"
 )
 
 var (
-	ValidLanguages = [...]string{LanguageTypescript, LanguagePulumi, LanguagePython, LanguageCSharp}
+	ValidLanguages = [...]string{LanguageTypescript, LanguagePulumi, LanguagePython, LanguageCSharp, LanguageGo}
 )
 
 type Diagnostics struct {
@@ -125,6 +127,9 @@ func Convert(opts Options) (map[string][]byte, Diagnostics, error) {
 	case LanguageCSharp:
 		csFiles, genDiags, _ := hcl2dotnet.GenerateProgram(program)
 		generatedFiles, diagnostics = csFiles, append(diagnostics, genDiags...)
+	case LanguageGo:
+		goFiles, genDiags, _ := hcl2go.GenerateProgram(program)
+		generatedFiles, diagnostics = goFiles, append(diagnostics, genDiags...)
 	}
 
 	if diagnostics.HasErrors() {
