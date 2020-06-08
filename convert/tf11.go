@@ -547,14 +547,16 @@ func (g *tf11generator) GenIndex(w io.Writer, n *il.BoundIndex) {
 }
 
 func (g *tf11generator) genEscapedString(b *strings.Builder, v string, heredoc bool) {
-	for _, c := range v {
+	for i, c := range v {
 		switch c {
 		case '"', '\\':
 			if !heredoc {
 				b.WriteRune('\\')
 			}
-		case '$':
-			b.WriteRune('$')
+		case '$', '%':
+			if i+1 < len(v) && v[i+1] == '{' {
+				b.WriteRune(c)
+			}
 		}
 		b.WriteRune(c)
 	}
