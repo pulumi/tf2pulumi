@@ -522,6 +522,8 @@ github.com/pulumi/pulumi/sdk/v2 v2.0.0 h1:3VMXbEo3bqeaU+YDt8ufVBLD0WhLYE3tG3t/nI
 github.com/pulumi/pulumi/sdk/v2 v2.0.0/go.mod h1:W7k1UDYerc5o97mHnlHHp5iQZKEby+oQrQefWt+2RF4=
 github.com/pulumi/pulumi/sdk/v2 v2.3.1-0.20200608163628-76aede990ebd h1:WcA8UfVD9f8SVyvBFgvE06OMiYQMLuN1iF7WD1Rm2YM=
 github.com/pulumi/pulumi/sdk/v2 v2.3.1-0.20200608163628-76aede990ebd/go.mod h1:llk6tmXss8kJrt3vEXAkwiwgZOuINEFmKIfMveVIwO8=
+github.com/pulumi/pulumi/sdk/v2 v2.3.1-0.20200610172153-45a901d3e77c h1:jrm4MqhviE8q3uXOsNIOMLwsLBel99z6T5Sik+RRkhQ=
+github.com/pulumi/pulumi/sdk/v2 v2.3.1-0.20200610172153-45a901d3e77c/go.mod h1:llk6tmXss8kJrt3vEXAkwiwgZOuINEFmKIfMveVIwO8=
 github.com/pulumi/terraform-plugin-sdk v0.0.0-20200416232118-ec806f20dbeb h1:EtqQ/fIfOQ/UaQxMXNfeAvSKB9CJ16T256n1HlTH2Zo=
 github.com/pulumi/terraform-plugin-sdk v0.0.0-20200416232118-ec806f20dbeb/go.mod h1:C/AXwmDHqbc3h6URiHpIsVKrwV4PS0Sh0+VTaeEkShw=
 github.com/rjeczalik/notify v0.9.2 h1:MiTWrPj55mNDHEiIX5YUSKefw/+lCQVoAFmD6oQm5w8=
