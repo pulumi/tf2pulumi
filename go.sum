@@ -516,6 +516,8 @@ github.com/pulumi/pulumi-terraform-bridge/v2 v2.0.0/go.mod h1:CShKXRvffj8fOwzDfB
 github.com/pulumi/pulumi/pkg/v2 v2.0.0/go.mod h1:kNG9MBTdKP9AzMgkETumR3fmX9gUYB+HpQL767K6jXc=
 github.com/pulumi/pulumi/pkg/v2 v2.3.1-0.20200608163628-76aede990ebd h1:nSOE1e1ZSCWAWaVB1ISgqT8YVPpNuuvTjTgVHQNIIbw=
 github.com/pulumi/pulumi/pkg/v2 v2.3.1-0.20200608163628-76aede990ebd/go.mod h1:aqo0wBboEEdy+T5EYKUB6YnzbL80VPjgJPwjttuHqT0=
+github.com/pulumi/pulumi/pkg/v2 v2.3.1-0.20200610172153-45a901d3e77c h1:zC/AIr57ebV0ZAeKHuUZNq5i1fkbj8mHmlNna/439zM=
+github.com/pulumi/pulumi/pkg/v2 v2.3.1-0.20200610172153-45a901d3e77c/go.mod h1:aqo0wBboEEdy+T5EYKUB6YnzbL80VPjgJPwjttuHqT0=
 github.com/pulumi/pulumi/sdk/v2 v2.0.0 h1:3VMXbEo3bqeaU+YDt8ufVBLD0WhLYE3tG3t/nIZ3Iac=
 github.com/pulumi/pulumi/sdk/v2 v2.0.0/go.mod h1:W7k1UDYerc5o97mHnlHHp5iQZKEby+oQrQefWt+2RF4=
 github.com/pulumi/pulumi/sdk/v2 v2.3.1-0.20200608163628-76aede990ebd h1:WcA8UfVD9f8SVyvBFgvE06OMiYQMLuN1iF7WD1Rm2YM=
