@@ -1,5 +1,8 @@
 ## HEAD (Unreleased)
 
+- Turn NYIs into diagnostic errors.
+  [#191](https://github.com/pulumi/tf2pulumi/pull/191)
+
 - Add preliminary Go support.
   [#179](https://github.com/pulumi/tf2pulumi/pull/189)
 
