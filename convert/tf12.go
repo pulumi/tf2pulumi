@@ -1069,12 +1069,15 @@ func (rr *resourceRewriter) appendOption(item *model.Attribute) model.BodyItem {
 	return result
 }
 
-func (rr *resourceRewriter) terraformToPulumiName(tfName string) string {
-	schemas := rr.schemas()
+func terraformToPulumiName(tfName string, schemas il.Schemas) string {
 	if schemas.Pulumi != nil && schemas.Pulumi.Name != "" {
 		return schemas.Pulumi.Name
 	}
 	return tfbridge.TerraformToPulumiName(tfName, schemas.TF, schemas.Pulumi, false)
+}
+
+func (rr *resourceRewriter) terraformToPulumiName(tfName string) string {
+	return terraformToPulumiName(tfName, rr.schemas())
 }
 
 func (rr *resourceRewriter) enterBodyItem(item model.BodyItem) (model.BodyItem, hcl.Diagnostics) {
@@ -1291,7 +1294,7 @@ func (rr *resourceRewriter) rewriteBodyItem(item model.BodyItem) (model.BodyItem
 			_, isList := propSch.ModelType().(*model.ListType)
 			projectListElement := isList && tfbridge.IsMaxItemsOne(propSch.TF, propSch.Pulumi)
 
-			name := rr.terraformToPulumiName(block.Type)
+			name := terraformToPulumiName(block.Type, propSch)
 			tokens := syntax.NewAttributeTokens(name)
 
 			var value model.Expression
