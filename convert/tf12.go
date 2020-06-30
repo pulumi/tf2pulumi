@@ -1069,12 +1069,15 @@ func (rr *resourceRewriter) appendOption(item *model.Attribute) model.BodyItem {
 	return result
 }
 
-func (rr *resourceRewriter) terraformToPulumiName(tfName string) string {
-	schemas := rr.schemas()
+func terraformToPulumiName(tfName string, schemas il.Schemas) string {
 	if schemas.Pulumi != nil && schemas.Pulumi.Name != "" {
 		return schemas.Pulumi.Name
 	}
 	return tfbridge.TerraformToPulumiName(tfName, schemas.TF, schemas.Pulumi, false)
+}
+
+func (rr *resourceRewriter) terraformToPulumiName(tfName string) string {
+	return terraformToPulumiName(tfName, rr.schemas())
 }
 
 func (rr *resourceRewriter) enterBodyItem(item model.BodyItem) (model.BodyItem, hcl.Diagnostics) {
@@ -1118,8 +1121,9 @@ func (rr *resourceRewriter) rewriteObjectKeys(expr model.Expression) {
 			keyVal := ""
 			if !useExactKeys {
 				if key, ok := item.Key.(*model.LiteralValueExpression); ok && key.Value.Type().Equals(cty.String) {
-					keyVal = rr.terraformToPulumiName(key.Value.AsString())
-					key.Value = cty.StringVal(keyVal)
+					keyVal := key.Value.AsString()
+					propSch := rr.schemas().PropertySchemas(keyVal)
+					key.Value = cty.StringVal(terraformToPulumiName(keyVal, propSch))
 				}
 			}
 
@@ -1291,7 +1295,8 @@ func (rr *resourceRewriter) rewriteBodyItem(item model.BodyItem) (model.BodyItem
 			_, isList := propSch.ModelType().(*model.ListType)
 			projectListElement := isList && tfbridge.IsMaxItemsOne(propSch.TF, propSch.Pulumi)
 
-			tokens := syntax.NewAttributeTokens(block.Type)
+			name := terraformToPulumiName(block.Type, propSch)
+			tokens := syntax.NewAttributeTokens(name)
 
 			var value model.Expression
 			if !projectListElement || len(objects) > 1 {
@@ -1327,7 +1332,7 @@ func (rr *resourceRewriter) rewriteBodyItem(item model.BodyItem) (model.BodyItem
 
 			items = append(items, &model.Attribute{
 				Tokens: tokens,
-				Name:   block.Type,
+				Name:   name,
 				Value:  value,
 			})
 		}
