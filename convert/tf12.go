@@ -1121,8 +1121,9 @@ func (rr *resourceRewriter) rewriteObjectKeys(expr model.Expression) {
 			keyVal := ""
 			if !useExactKeys {
 				if key, ok := item.Key.(*model.LiteralValueExpression); ok && key.Value.Type().Equals(cty.String) {
-					keyVal = rr.terraformToPulumiName(key.Value.AsString())
-					key.Value = cty.StringVal(keyVal)
+					keyVal := key.Value.AsString()
+					propSch := rr.schemas().PropertySchemas(keyVal)
+					key.Value = cty.StringVal(terraformToPulumiName(keyVal, propSch))
 				}
 			}
 

@@ -23,6 +23,10 @@ import (
 )
 
 // convertTF11 converts a TF11 graph to a set of TF12 files.
+//
+// Note that the output of the conversion process may not be valid input for Terraform itself: in particular, the block
+// structure of the original source code may not be preserved, so entities that were blocks in the input may be
+// attributes in the output. The TF12 -> PCL converter must be able to handle this sort of input.
 func convertTF11(opts Options) (map[string][]byte, bool, error) {
 	moduleStorage := tf11module.NewStorage(filepath.Join(".terraform", "modules"))
 
