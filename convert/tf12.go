@@ -1291,7 +1291,8 @@ func (rr *resourceRewriter) rewriteBodyItem(item model.BodyItem) (model.BodyItem
 			_, isList := propSch.ModelType().(*model.ListType)
 			projectListElement := isList && tfbridge.IsMaxItemsOne(propSch.TF, propSch.Pulumi)
 
-			tokens := syntax.NewAttributeTokens(block.Type)
+			name := rr.terraformToPulumiName(block.Type)
+			tokens := syntax.NewAttributeTokens(name)
 
 			var value model.Expression
 			if !projectListElement || len(objects) > 1 {
@@ -1327,7 +1328,7 @@ func (rr *resourceRewriter) rewriteBodyItem(item model.BodyItem) (model.BodyItem
 
 			items = append(items, &model.Attribute{
 				Tokens: tokens,
-				Name:   block.Type,
+				Name:   name,
 				Value:  value,
 			})
 		}
