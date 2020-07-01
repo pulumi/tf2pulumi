@@ -23,6 +23,7 @@ import (
 	"strings"
 
 	"github.com/hashicorp/hcl/hcl/token"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
 	"github.com/pkg/errors"
 	"github.com/pulumi/pulumi-terraform-bridge/v2/pkg/tfbridge"
 	"github.com/pulumi/pulumi/sdk/v2/go/common/util/contract"
@@ -282,14 +283,27 @@ func (r *ResourceNode) Dependencies() []Node {
 func (r *ResourceNode) Schemas() Schemas {
 	switch {
 	case r.Provider == nil || r.Provider.Info == nil:
-		return Schemas{}
+		return Schemas{
+			TFRes: &schema.Resource{
+				Schema: map[string]*schema.Schema{
+					"id": {Type: schema.TypeString},
+				},
+			},
+		}
 	case !r.IsDataSource:
 		schemaInfo := &tfbridge.SchemaInfo{}
 		if resInfo, ok := r.Provider.Info.Resources[r.Type]; ok {
 			schemaInfo.Fields = resInfo.Fields
 		}
+		tf := r.Provider.Info.P.ResourcesMap[r.Type]
+		if tf == nil {
+			tf = &schema.Resource{Schema: map[string]*schema.Schema{}}
+		}
+		if _, ok := tf.Schema["id"]; !ok {
+			tf.Schema["id"] = &schema.Schema{Type: schema.TypeString}
+		}
 		return Schemas{
-			TFRes:  r.Provider.Info.P.ResourcesMap[r.Type],
+			TFRes:  tf,
 			Pulumi: schemaInfo,
 		}
 	default:
@@ -297,8 +311,15 @@ func (r *ResourceNode) Schemas() Schemas {
 		if dsInfo, ok := r.Provider.Info.DataSources[r.Type]; ok {
 			schemaInfo.Fields = dsInfo.Fields
 		}
+		tf := r.Provider.Info.P.DataSourcesMap[r.Type]
+		if tf == nil {
+			tf = &schema.Resource{Schema: map[string]*schema.Schema{}}
+		}
+		if _, ok := tf.Schema["id"]; !ok {
+			tf.Schema["id"] = &schema.Schema{Type: schema.TypeString}
+		}
 		return Schemas{
-			TFRes:  r.Provider.Info.P.DataSourcesMap[r.Type],
+			TFRes:  tf,
 			Pulumi: schemaInfo,
 		}
 	}
@@ -688,6 +709,10 @@ func buildIgnoreChanges(tfIgnoreChanges []string, schemas Schemas) []string {
 
 			ignoreChanges = ignoreChanges[:0]
 			for k, v := range schemas.TFRes.Schema {
+				if k == "id" {
+					continue
+				}
+
 				var p *tfbridge.SchemaInfo
 				if schemas.Pulumi != nil {
 					p = schemas.Pulumi.Fields[k]
