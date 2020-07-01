@@ -709,6 +709,10 @@ func buildIgnoreChanges(tfIgnoreChanges []string, schemas Schemas) []string {
 
 			ignoreChanges = ignoreChanges[:0]
 			for k, v := range schemas.TFRes.Schema {
+				if k == "id" {
+					continue
+				}
+
 				var p *tfbridge.SchemaInfo
 				if schemas.Pulumi != nil {
 					p = schemas.Pulumi.Fields[k]
