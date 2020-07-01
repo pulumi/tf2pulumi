@@ -286,7 +286,7 @@ func (r *ResourceNode) Schemas() Schemas {
 		return Schemas{
 			TFRes: &schema.Resource{
 				Schema: map[string]*schema.Schema{
-					"id": &schema.Schema{Type: schema.TypeString},
+					"id": {Type: schema.TypeString},
 				},
 			},
 		}
