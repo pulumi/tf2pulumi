@@ -28,11 +28,11 @@ require (
 	github.com/onsi/gomega v1.9.0 // indirect
 	github.com/pkg/errors v0.9.1
 	github.com/pulumi/pulumi-terraform-bridge/v2 v2.0.0
-	github.com/pulumi/pulumi/pkg/v2 v2.3.1-0.20200610172153-45a901d3e77c
-	github.com/pulumi/pulumi/sdk/v2 v2.3.1-0.20200610172153-45a901d3e77c
+	github.com/pulumi/pulumi/pkg/v2 v2.6.2-0.20200715231137-1a10e06588f6
+	github.com/pulumi/pulumi/sdk/v2 v2.6.2-0.20200715231137-1a10e06588f6
 	github.com/spf13/afero v1.2.2
 	github.com/spf13/cobra v1.0.0
-	github.com/stretchr/testify v1.5.1
+	github.com/stretchr/testify v1.6.1
 	github.com/terraform-providers/terraform-provider-archive v1.3.0
 	github.com/terraform-providers/terraform-provider-http v1.2.0
 	github.com/zclconf/go-cty v1.3.1
