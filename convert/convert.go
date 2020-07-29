@@ -97,6 +97,8 @@ func Convert(opts Options) (map[string][]byte, Diagnostics, error) {
 		files, diags := parseTF12(opts)
 		if !diags.HasErrors() {
 			tf12Files, diagnostics = files, append(diagnostics, diags...)
+		} else if opts.TerraformVersion != "11" {
+			return nil, Diagnostics{All: diags, files: files}, nil
 		} else {
 			return nil, Diagnostics{}, tf11Err
 		}
