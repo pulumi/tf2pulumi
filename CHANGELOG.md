@@ -1,4 +1,7 @@
 ## HEAD (Unreleased)
+_(none)_
+
+## 0.9.0 (Released September 9, 2020)
 
 - Turn NYIs into diagnostic errors.
   [#191](https://github.com/pulumi/tf2pulumi/pull/191)

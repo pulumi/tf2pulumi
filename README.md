@@ -30,30 +30,51 @@ into a directory that is on your path.
 
 ## Usage
 
-In order to use `tf2pulumi` to convert a Terraform project to Pulumi TypeScript and then deploy it,
+In order to use `tf2pulumi` to convert a Terraform project to Pulumi and then deploy it,
 you'll first need to install the [Pulumi CLI](https://pulumi.io/quickstart/install.html). Once the
 Pulumi CLI has been installed, navigate to the same directory as the Terraform project you'd like to
-import and create a new Pulumi TypeScript stack:
+import and create a new Pulumi stack in your favourite language:
 
 ```console
+// For a Go project
+$ pulumi new go -f
+
+// For a TypeScript project
 $ pulumi new typescript -f
+
+// For a Python project
+$ pulumi new python -f
+
+// For a C# project
+$ pulumi new csharp -f
 ```
 
-Then run `tf2pulumi` which will write a file named `index.ts` in the directory that
+Then run `tf2pulumi` which will write a file in the directory that
 contains the Pulumi project you just created:
 
 ```console
-$ tf2pulumi
+// For a Go project
+$ tf2pulumi --target-language go 
+
+// For a TypeScript project
+$ tf2pulumi --target-language typescript
+
+// For a Python project
+$ tf2pulumi --target-language python
+
+// For a C# project
+$ tf2pulumi --target-language csharp
 ```
 
 If `tf2pulumi` complains about missing Terraform resource plugins, install those plugins as per the
 instructions in the error message and re-run the command above.
 
-This will generate a Pulumi TypeScript program in `index.ts` that when run with `pulumi update` will deploy the
+This will generate a Pulumi TypeScript program that when run with `pulumi update` will deploy the
 infrastructure originally described by the Terraform project. Note that if your infrastructure
 references files or directories with paths relative to the location of the Terraform project, you
-will most likely need to update these paths such that they are relative to the generated `index.ts`
-file.
+will most likely need to update these paths such that they are relative to the generated file.
+
+## Adopting Resource From TFState
 
 If you would like to adopt resources from an existing `.tfstate` file under management of a Pulumi
 stack, copy the [`import.ts`](./misc/import/import.ts) file from this repo into your project folder,
