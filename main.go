@@ -21,9 +21,9 @@ import (
 	"io/ioutil"
 	"os"
 
+	"github.com/pulumi/pulumi-terraform-bridge/v2/pkg/tf2pulumi/convert"
 	"github.com/spf13/cobra"
 
-	"github.com/pulumi/tf2pulumi/convert"
 	"github.com/pulumi/tf2pulumi/version"
 )
 
