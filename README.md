@@ -15,6 +15,11 @@ time, it will also translate Terraform state files into Pulumi checkpoint files.
 If you wish to use `tf2pulumi` without developing the tool itself, you can use one of the [binary
 releases](https://github.com/pulumi/tf2pulumi/releases) hosted on GitHub.
 
+### Homebrew
+`tf2pulumi` can be installed on Mac from the Pulumi Homebrew tap.
+```console
+brew install pulumi/tap/tf2pulumi
+```
 
 tf2pulumi uses [Go modules](https://github.com/golang/go/wiki/Modules) to manage dependencies. If you want to develop `tf2pulumi2` itself, you'll need to have [Go](https://golang.org/)  installed in order to build.
 Once this prerequisite is installed, run the following to build the `tf2pulumi` binary and install it into `$GOPATH/bin`:
