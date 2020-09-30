@@ -25,3 +25,14 @@ snapshot:
   name_template: "{{ .Tag }}-SNAPSHOT"
 changelog:
   skip: true
+brews:
+  -
+    name: tf2pulumi
+    github:
+      owner: pulumi
+      name: homebrew-tap
+    commit_author:
+      name: pulumi-bot
+      email: bot@pulumi.com
+    homepage: "https://pulumi.io"
+    description: "A tool to convert Terraform projects to Pulumi programs"
