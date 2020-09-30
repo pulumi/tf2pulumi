@@ -1,28 +1,27 @@
 PROJECT_NAME := Terraform -> Pulumi converter
-include build/common.mk
 
-VERSION := $(shell scripts/get-version)
+VERSION := $(shell pulumictl get version)
 TESTPARALLELISM := 1
+WORKING_DIR     := $(shell pwd)
 
-# NOTE: Since the plugin is published using the nodejs style semver version
-# We set the PLUGIN_VERSION to be the same as the version we use when building
-# the provider (e.g. x.y.z-dev-... instead of x.y.zdev...)
 build::
-	go install -ldflags "-X github.com/pulumi/tf2pulumi/version.Version=${VERSION}" github.com/pulumi/tf2pulumi
+	go build -a -o ${WORKING_DIR}/bin/tf2pulumi -ldflags "-X github.com/pulumi/tf2pulumi/version.Version=${VERSION}" github.com/pulumi/tf2pulumi
 
 lint::
 	golangci-lint run --timeout 5m
 
 test_fast::
-	$(GO_TEST_FAST) ./il/... ./gen/... ./internal/...
+	go test -v -count=1 -cover -timeout 2h -parallel ${TESTPARALLELISM} ./il/... ./gen/... ./internal/...
 
-test_all::
-	$(GO_TEST) ./il/... ./gen/... ./internal/...
-	$(GO_TEST) ./tests/...
+test_acceptance::
+	go test -v -count=1 -cover -timeout 2h -parallel ${TESTPARALLELISM} ./tests/...
 
-# The travis_* targets are entrypoints for CI.
-.PHONY: travis_cron travis_push travis_pull_request travis_api
-travis_cron: all
-travis_push: all
-travis_pull_request: all
-travis_api: all
+install_plugins::
+	[ -x $(shell which pulumi) ] || curl -fsSL https://get.pulumi.com | sh
+	pulumi plugin install resource aws 2.0.0
+	pulumi plugin install resource azure 2.0.0
+	pulumi plugin install resource gcp 2.0.0
+	pulumi plugin install resource terraform-template 0.16.0
+	pulumi plugin install resource random 2.0.0
+
+dev:: build lint test_fast test_acceptance
