@@ -10,9 +10,6 @@ build::
 lint::
 	golangci-lint run --timeout 5m
 
-test_fast::
-	go test -v -count=1 -cover -timeout 2h -parallel ${TESTPARALLELISM} ./il/... ./gen/... ./internal/...
-
 test_acceptance::
 	go test -v -count=1 -cover -timeout 2h -parallel ${TESTPARALLELISM} ./tests/...
 
@@ -24,4 +21,4 @@ install_plugins::
 	pulumi plugin install resource terraform-template 0.16.0
 	pulumi plugin install resource random 2.0.0
 
-dev:: build lint test_fast test_acceptance
+dev:: build lint test_acceptance

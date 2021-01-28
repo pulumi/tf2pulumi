@@ -53,10 +53,6 @@ jobs:
         with:
           name: tf2pulumi-provider.tar.gz
           path: ${{ github.workspace }}/bin/provider.tar.gz
-      - name: Install plugins
-        run: make install_plugins
-      - name: Run unit tests
-        run: make test_fast
   test:
     name: test
     needs: build
