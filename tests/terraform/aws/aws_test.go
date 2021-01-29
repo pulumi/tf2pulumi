@@ -64,7 +64,8 @@ func TestEIP(t *testing.T) {
 }
 
 func TestELB(t *testing.T) {
-	RunAWSTest(t, "elb")
+	// Skip Python due to a bug in depends_on codegen
+	RunAWSTest(t, "elb", terraform.SkipPython())
 }
 
 func TestELB2(t *testing.T) {

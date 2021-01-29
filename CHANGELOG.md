@@ -1,5 +1,7 @@
 ## HEAD (Unreleased)
-_(none)_
+
+- Move most of the implementation of the converter into [`pulumi-terraform-bridge`](https://github.com/pulumi/pulumi-terraform-bridge).
+  [#207](https://github.com/pulumi/tf2pulumi/pull/207)
 
 ## 0.9.0 (Released September 9, 2020)
 
