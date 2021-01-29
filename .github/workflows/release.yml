@@ -33,4 +33,6 @@ jobs:
         run: |
           CURRENT_TAG=v$(pulumictl get version --language generic -o)
           pulumictl create choco-deploy -a tf2pulumi ${CURRENT_TAG}
+        env:
+          GITHUB_TOKEN: ${{ secrets.PULUMI_BOT_TOKEN }}
 
