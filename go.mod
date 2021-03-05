@@ -1,10 +1,8 @@
 module github.com/pulumi/tf2pulumi
 
-go 1.15
+go 1.16
 
 require (
-	github.com/onsi/ginkgo v1.12.0 // indirect
-	github.com/onsi/gomega v1.9.0 // indirect
 	github.com/pulumi/pulumi-terraform-bridge/v2 v2.18.1
 	github.com/pulumi/pulumi/pkg/v2 v2.19.0
 	github.com/pulumi/pulumi/sdk/v2 v2.19.0
