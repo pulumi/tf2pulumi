@@ -11,6 +11,7 @@ builds:
     - linux
   goarch:
     - amd64
+    - arm64
   ldflags: -X github.com/pulumi/tf2pulumi/version.Version={{.Tag}}
   binary: tf2pulumi
 archives:
@@ -36,3 +37,7 @@ brews:
       email: bot@pulumi.com
     homepage: "https://pulumi.io"
     description: "A tool to convert Terraform projects to Pulumi programs"
+    folder: Formula
+    license: Apache-2.0
+    test: |
+      system "#{bin}/tf2pulumi version"
