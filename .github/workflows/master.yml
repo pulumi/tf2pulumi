@@ -131,7 +131,7 @@ jobs:
           role-to-assume: ${{ secrets.AWS_CI_ROLE_ARN }}
       - uses: hashicorp/setup-terraform@v1
         with:
-          terraform_version: 0.11.8
+          terraform_version: 0.11.15
       - run: terraform version
       - name: Install plugins
         run: make install_plugins
