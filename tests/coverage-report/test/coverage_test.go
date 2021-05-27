@@ -9,8 +9,8 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	"github.com/olekukonko/tablewriter"
 	"github.com/hashicorp/hcl/v2"
+	"github.com/olekukonko/tablewriter"
 	"github.com/pulumi/pulumi-terraform-bridge/v3/pkg/tf2pulumi/convert"
 	"github.com/russross/blackfriday/v2"
 	"github.com/spf13/afero"
@@ -25,9 +25,14 @@ import (
 	// "q"
 )
 
-var testOutputDir = flag.String("testOutputDir", "test-results", "location to write raw test output to. Defaults to ./test-results. Creates the folder if it does not exist.")
-var testInputDir = flag.String("testInputDir", "../testdata/example-snippets", "location to write example snippets to be used for input. Defaults to ../testdata/example-snippets. Creates teh folder if it does not exist.")
-var retainConverted = flag.Bool("retainConverted", false, "When set to true retains the converted files in 'testOutputDir'")
+var testOutputDir = flag.String("testOutputDir", "test-results",
+	`location to write raw test output to. Defaults to ./test-results. Creates the folder if it 
+	does not exist.`)
+var testInputDir = flag.String("testInputDir", "../testdata/example-snippets",
+	`location to write example snippets to be used for input. Defaults to 
+	../testdata/example-snippets. Creates the folder if it does not exist.`)
+var retainConverted = flag.Bool("retainConverted", false,
+	"When set to true retains the converted files in 'testOutputDir'")
 
 // These templates currently cause panics.
 var excluded = map[string]bool{
@@ -72,21 +77,21 @@ func TestTemplateCoverage(t *testing.T) {
 			// 			Resource: snippetResource,
 			// 		})
 			// 	}
-			// }()	
-			
+			// }()
+
 			var opts convert.Options
 			opts.TargetLanguage = "typescript"
-			opts.Root = afero.NewBasePathFs(afero.NewOsFs(), match);
+			opts.Root = afero.NewBasePathFs(afero.NewOsFs(), match)
 			body, diag, err := convert.Convert(opts)
 			// fmt.Println(body)
 			// t.Logf("Current template: %s", template)
 			if err != nil {
 				diagList = append(diagList, Diag{
 					CoverageDiag: CoverageDiag{
-						Summary: err.Error(),
+						Summary:  err.Error(),
 						Severity: "Fatal",
 					},
-					Snippet: snippet,
+					Snippet:  snippet,
 					Resource: snippetResource,
 				})
 			} else { // err == nil
@@ -96,12 +101,18 @@ func TestTemplateCoverage(t *testing.T) {
 				}
 				for _, d := range diag.All {
 					mappedDiag := mapDiag(t, d, match)
-					diagList = append(diagList, Diag{CoverageDiag: mappedDiag, Snippet: snippet, Resource: snippetResource, RawDiag: d})
+					diagList = append(diagList, Diag{
+						CoverageDiag: mappedDiag,
+						Snippet:      snippet,
+						Resource:     snippetResource,
+						RawDiag:      d,
+					})
 				}
 				if *retainConverted {
 					require.NoError(t, os.MkdirAll(filepath.Join(*testOutputDir, template), 0700))
 					for fileName, fileContent := range body {
-						require.NoError(t, ioutil.WriteFile(filepath.Join(*testOutputDir, template, fileName), fileContent, 0600))
+						path := filepath.Join(*testOutputDir, template, fileName)
+						require.NoError(t, ioutil.WriteFile(path, fileContent, 0600))
 					}
 				}
 			}
@@ -111,13 +122,13 @@ func TestTemplateCoverage(t *testing.T) {
 }
 
 // Maps tf2pulumi's diagnostics to our CoverageDiag, removing information we do not need for querying.
-// The full diagonstic is still stored in case that information is considered valuable.
+// The full diagnostic is still stored in case that information is considered valuable.
 func mapDiag(t *testing.T, rawDiag *hcl.Diagnostic, matchDir string) CoverageDiag {
 	var newDiag CoverageDiag
 	newDiag.Summary = rawDiag.Summary
-	if (rawDiag.Severity == hcl.DiagError) {
+	if rawDiag.Severity == hcl.DiagError {
 		newDiag.Severity = "High"
-	} else if (rawDiag.Severity == hcl.DiagWarning) { // should be only other case
+	} else if rawDiag.Severity == hcl.DiagWarning { // should be only other case
 		newDiag.Severity = "Med"
 	} else {
 		t.Errorf("Got a rawDiagnostic Severity of: %d", rawDiag.Severity)
@@ -127,7 +138,7 @@ func mapDiag(t *testing.T, rawDiag *hcl.Diagnostic, matchDir string) CoverageDia
 	fileToRead := filepath.Join(matchDir, rawDiag.Subject.Filename)
 	// t.Logf("new file to read: %s", fileToRead)
 	fileContent, err := ioutil.ReadFile(fileToRead)
-	if (err != nil) {
+	if err != nil {
 		newDiag.FileContent = "Could not load file content"
 	} else { // err == nil
 		newDiag.FileContent = string(fileContent)
@@ -139,17 +150,17 @@ func mapDiag(t *testing.T, rawDiag *hcl.Diagnostic, matchDir string) CoverageDia
 // The struct used to define the overall diagnostic we keep track of
 type Diag struct {
 	CoverageDiag
-	Snippet string `json:"snippet"`
-	Resource string `json:"resource"`
-	RawDiag *hcl.Diagnostic `json:"rawDiagnostic"`
+	Snippet  string          `json:"snippet"`
+	Resource string          `json:"resource"`
+	RawDiag  *hcl.Diagnostic `json:"rawDiagnostic"`
 }
 
 // The struct used to define the diagnositics of a single tf2pulumi call
 type CoverageDiag struct {
-	Summary string `json:"summary"`
-	Severity string `json:"severity"`
-	Subject *hcl.Range `json:"subject"`
-	FileContent string `json:"fileContent"`
+	Summary     string     `json:"summary"`
+	Severity    string     `json:"severity"`
+	Subject     *hcl.Range `json:"subject"`
+	FileContent string     `json:"fileContent"`
 }
 
 type Result struct {
@@ -197,7 +208,7 @@ func summarize(t *testing.T, diagList []Diag) {
 		marshalledSubject, err := json.MarshalIndent(d.Subject, "", "\t")
 		require.NoError(t, err)
 		marshalledRawDiag, err := json.MarshalIndent(d.RawDiag, "", "\t")
-		require.NoError(t, err)		
+		require.NoError(t, err)
 
 		_, err = db.Exec(`INSERT INTO errors(
                    resource,
@@ -216,7 +227,7 @@ func summarize(t *testing.T, diagList []Diag) {
 			nullable(d.FileContent),
 			nullable(string(marshalledRawDiag)))
 
-			require.NoError(t, err)
+		require.NoError(t, err)
 	}
 
 	var numSnippets, fatalErrors, highSevErrors, medSevErrors, success int
@@ -255,11 +266,16 @@ func summarize(t *testing.T, diagList []Diag) {
 	require.NoError(t, row.Scan(&success))
 
 	// Stores the overall results in a JSON object to compare in future tests.
+
+	successPct := float32(success) / float32(numSnippets) * 100.0
+	medSevPct := float32(medSevErrors) / float32(numSnippets) * 100.0
+	highSevPct := float32(highSevErrors) / float32(numSnippets) * 100.0
+	fatalPct := float32(fatalErrors) / float32(numSnippets) * 100.0
 	data := OverallResult{
-		NoErrors:      Result{success, float32(success) / float32(numSnippets) * 100.0},
-		LowSevErrors:  Result{medSevErrors, float32(medSevErrors) / float32(numSnippets) * 100.0},
-		HighSevErrors: Result{highSevErrors, float32(highSevErrors) / float32(numSnippets) * 100.0},
-		Fatal:         Result{fatalErrors, float32(fatalErrors) / float32(numSnippets) * 100.0},
+		NoErrors:      Result{success, successPct},
+		LowSevErrors:  Result{medSevErrors, medSevPct},
+		HighSevErrors: Result{highSevErrors, highSevPct},
+		Fatal:         Result{fatalErrors, fatalPct},
 		Total:         numSnippets,
 	}
 
@@ -272,10 +288,10 @@ func summarize(t *testing.T, diagList []Diag) {
 	table := tablewriter.NewWriter(os.Stdout)
 	table.SetCaption(true, "Overall Summary of Conversions")
 	table.SetHeader([]string{"Result", "Number", "Perc."})
-	table.Append([]string{"No Errors", fmt.Sprintf("%d", success), fmt.Sprintf("%.2f%%", float32(success)/float32(numSnippets)*100.0)})
-	table.Append([]string{"Low Sev. Errors", fmt.Sprintf("%d", medSevErrors), fmt.Sprintf("%.2f%%", float32(medSevErrors)/float32(numSnippets)*100.0)})
-	table.Append([]string{"High Sev. Errors", fmt.Sprintf("%d", highSevErrors), fmt.Sprintf("%.2f%%", float32(highSevErrors)/float32(numSnippets)*100.0)})
-	table.Append([]string{"Fatal", fmt.Sprintf("%d", fatalErrors), fmt.Sprintf("%.2f%%", float32(fatalErrors)/float32(numSnippets)*100.0)})
+	table.Append([]string{"No Errors", fmt.Sprintf("%d", success), fmt.Sprintf("%.2f%%", successPct)})
+	table.Append([]string{"Low Sev. Errors", fmt.Sprintf("%d", medSevErrors), fmt.Sprintf("%.2f%%", medSevPct)})
+	table.Append([]string{"High Sev. Errors", fmt.Sprintf("%d", highSevErrors), fmt.Sprintf("%.2f%%", highSevPct)})
+	table.Append([]string{"Fatal", fmt.Sprintf("%d", fatalErrors), fmt.Sprintf("%.2f%%", fatalPct)})
 	table.Append([]string{"Total", fmt.Sprintf("%d", numSnippets), ""})
 	table.Render()
 	fmt.Print("\n\n")
@@ -286,10 +302,14 @@ func summarize(t *testing.T, diagList []Diag) {
 	table.SetHeader([]string{"# of Times", "Reason"})
 	var desc string
 	var cnt int
-	rows, err := db.Query(`SELECT summary, COUNT(*) AS cnt FROM errors WHERE severity='Fatal' GROUP BY summary ORDER BY cnt DESC LIMIT 5`)
+	rows, err := db.Query(`SELECT summary, COUNT(*) AS cnt 
+						   FROM errors 
+						   WHERE severity='Fatal' 
+						   GROUP BY summary 
+						   ORDER BY cnt DESC LIMIT 5`)
 	require.NoError(t, err)
 	for rows.Next() {
-		rows.Scan(&desc, &cnt)
+		require.NoError(t, rows.Scan(&desc, &cnt))
 		table.Append([]string{fmt.Sprintf("%d", cnt), desc})
 	}
 	table.Render()
@@ -299,10 +319,14 @@ func summarize(t *testing.T, diagList []Diag) {
 	table.SetCaption(true, "Top Reasons For High Sev Errors")
 	table.SetRowLine(true)
 	table.SetHeader([]string{"# of Times", "Reason"})
-	rows, err = db.Query(`SELECT summary, COUNT(*) AS cnt FROM errors WHERE severity='High' GROUP BY summary ORDER BY cnt DESC LIMIT 5`)
+	rows, err = db.Query(`SELECT summary, COUNT(*) AS cnt 
+						  FROM errors 
+						  WHERE severity='High' 
+						  GROUP BY summary 
+						  ORDER BY cnt DESC LIMIT 5`)
 	require.NoError(t, err)
 	for rows.Next() {
-		rows.Scan(&desc, &cnt)
+		require.NoError(t, rows.Scan(&desc, &cnt))
 		table.Append([]string{fmt.Sprintf("%d", cnt), desc})
 	}
 	table.Render()
@@ -329,7 +353,7 @@ func genProviderSnippets(t *testing.T, providerSnippetsDir string, providerDocsP
 	for _, match := range matches {
 		counter := 0
 		// t.Logf("Current match: %s", match)
-		
+
 		// Make directory to store all snippets for the current resource
 		currResource := strings.ReplaceAll(filepath.Base(match), ".html.markdown", "")
 		currResourceSnippetsDir := filepath.Join(providerSnippetsDir, currResource)
@@ -340,9 +364,12 @@ func genProviderSnippets(t *testing.T, providerSnippetsDir string, providerDocsP
 		md := blackfriday.New(blackfriday.WithExtensions(blackfriday.FencedCode))
 		rootNode := md.Parse(mdDocContent)
 		rootNode.Walk(func(node *blackfriday.Node, entering bool) blackfriday.WalkStatus {
-			if (entering) {
-				if node.Type == blackfriday.CodeBlock && (string(node.CodeBlockData.Info) == "terraform" || string(node.CodeBlockData.Info) == "hcl") {
-					counter += 1
+			if entering {
+				if node.Type == blackfriday.CodeBlock &&
+					string(node.CodeBlockData.Info) == "terraform" ||
+					string(node.CodeBlockData.Info) == "hcl" {
+
+					counter++
 					// Make directory for snippet
 					var snippetDir string
 					// If there is a header for the snippet use that as it's title
@@ -356,12 +383,12 @@ func genProviderSnippets(t *testing.T, providerSnippetsDir string, providerDocsP
 						snippetName := fmt.Sprintf("%s%d", "example-usage", counter)
 						snippetDir = filepath.Join(currResourceSnippetsDir, snippetName)
 					}
-					os.MkdirAll(snippetDir, 0700)
-						
+					require.NoError(t, os.MkdirAll(snippetDir, 0700))
+
 					// Write snippet to a `main.tf` file in the newly created snippet directory
 					snippetFile := filepath.Join(snippetDir, "main.tf")
 					require.NoError(t, ioutil.WriteFile(snippetFile, node.Literal, 0600))
-					
+
 					// q.Q(string(node.Prev.FirstChild.Literal))
 					// printNodeInfo(node)
 					// q.Q(fmt.Sprint(node.CodeBlockData))
