@@ -27,7 +27,7 @@ import (
 
 var testOutputDir = flag.String("testOutputDir", "test-results", "location to write raw test output to. Defaults to ./test-results. Creates the folder if it does not exist.")
 var testInputDir = flag.String("testInputDir", "../testdata/example-snippets", "location to write example snippets to be used for input. Defaults to ../testdata/example-snippets. Creates teh folder if it does not exist.")
-var retainConverted = flag.Bool("retainConverted", true, "When set to true retains the converted files in 'testOutputDir'")
+var retainConverted = flag.Bool("retainConverted", false, "When set to true retains the converted files in 'testOutputDir'")
 
 // These templates currently cause panics.
 var excluded = map[string]bool{
