@@ -37,7 +37,7 @@ jobs:
         run: make install_plugins
       - name: Generate coverage report
         run: make tf2pulumi_coverage_report
-      - name: test usage of results.json
+      - name: Display results.json
         run: cat tests/coverage-report/test/results.json
       # - name: Configure AWS Credentials
       #   uses: aws-actions/configure-aws-credentials@v1

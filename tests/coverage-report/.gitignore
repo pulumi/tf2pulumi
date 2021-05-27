@@ -1,3 +1,3 @@
 test-results/
 testdata/*/
-./results.json
+test/results.json

@@ -94,6 +94,9 @@ func TestTemplateCoverage(t *testing.T) {
 					Snippet:  snippet,
 					Resource: snippetResource,
 				})
+				t.Logf("Fatal error in snippet: %s of resource: %s \n", snippet, snippetResource)
+				t.Logf("Error: %s \n", fmt.Sprint(err.Error()))
+				t.Logf("---------------------\n")
 			} else { // err == nil
 				if len(diag.All) == 0 {
 					// Success is represented by no diagnostic information apart from template name.
