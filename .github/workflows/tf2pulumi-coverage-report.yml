@@ -33,10 +33,22 @@ jobs:
       #     repo: pulumi/pulumictl
       # - name: Install Pulumi CLI
       #   uses: pulumi/action-install-pulumi-cli@v1.0.1
-      - name: Install plugins
-        run: make install_plugins
-      - name: Install tls
-        run: pulumi plugin install resource tls 4.0.0
+      # - name: Install plugins
+      #   run: make install_plugins
+      - name: Install exact plugins
+        run: |
+          pulumi plugin install resource aws 4.3.0
+          pulumi plugin install resource aws 4.1.0
+          pulumi plugin install resource aws 4.0.0
+          pulumi plugin install resource aws 3.38.1
+          pulumi plugin install resource aws 3.36.0
+          pulumi plugin install resource aws 3.34.2
+          pulumi plugin install resource aws 2.13.1
+          pulumi plugin install resource docker 3.0.0
+          pulumi plugin install resource docker 2.10.0
+          pulumi plugin install resource docker 2.9.1
+          pulumi plugin install resource github 4.0.0
+          pulumi plugin install resource tls 4.0.0
       - name: Generate coverage report
         run: make tf2pulumi_coverage_report
       - name: Display results.json
