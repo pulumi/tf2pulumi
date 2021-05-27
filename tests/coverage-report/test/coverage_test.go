@@ -22,7 +22,7 @@ import (
 	"testing"
 
 	_ "modernc.org/sqlite"
-	"q"
+	// "q"
 )
 
 var testOutputDir = flag.String("testOutputDir", "test-results", "location to write raw test output to. Defaults to ./test-results. Creates the folder if it does not exist.")
@@ -375,10 +375,10 @@ func genProviderSnippets(t *testing.T, providerSnippetsDir string, providerDocsP
 	}
 }
 
-func printNodeInfo(node *blackfriday.Node) {
-	q.Q(fmt.Sprint(node.Type))
-	q.Q(string(node.Title))
-	q.Q(string(node.Literal))
-	// q.Q(string(node.FirstChild.Literal))
-	q.Q(fmt.Sprint(node.Parent))
-}
+// func printNodeInfo(node *blackfriday.Node) {
+// 	q.Q(fmt.Sprint(node.Type))
+// 	q.Q(string(node.Title))
+// 	q.Q(string(node.Literal))
+// 	// q.Q(string(node.FirstChild.Literal))
+// 	q.Q(fmt.Sprint(node.Parent))
+// }
