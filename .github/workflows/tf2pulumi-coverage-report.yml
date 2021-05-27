@@ -35,6 +35,8 @@ jobs:
       #   uses: pulumi/action-install-pulumi-cli@v1.0.1
       - name: Install plugins
         run: make install_plugins
+      - name: Install tls
+        run: pulumi plugin install resource tls 4.0.0
       - name: Generate coverage report
         run: make tf2pulumi_coverage_report
       - name: Display results.json
