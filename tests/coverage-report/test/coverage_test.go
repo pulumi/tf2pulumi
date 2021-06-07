@@ -12,17 +12,14 @@ import (
 	"github.com/hashicorp/hcl/v2"
 	"github.com/olekukonko/tablewriter"
 	"github.com/pulumi/pulumi-terraform-bridge/v3/pkg/tf2pulumi/convert"
-	"github.com/russross/blackfriday/v2"
 	"github.com/spf13/afero"
 	"github.com/stretchr/testify/require"
 	"io/ioutil"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	_ "modernc.org/sqlite"
-	// "q"
 )
 
 var testOutputDir = flag.String("testOutputDir", "test-results",
@@ -35,15 +32,18 @@ var retainConverted = flag.Bool("retainConverted", false,
 	"When set to true retains the converted files in 'testOutputDir'")
 
 // These templates currently cause panics.
+// Uncomment them if you want to ignore these examples, otherwise they will be recorded as panics
+// due to the defer function on line 73.
 var excluded = map[string]bool{
-	// "../testdata/terraform-guides/infrastructure-as-code/k8s-cluster-openshift-aws": true,
-	// "../testdata/terraform-guides/infrastructure-as-code/README.md": true,
-	// "../testdata/terraform-provider-aws/examples/README.md": true,
-	"../testdata/example-snippets/aws/autoscaling_group/example-usage": true,
+	// "../testdata/example-snippets/aws/autoscaling_group/example-usage": true,
+	// "../testdata/example-snippets/azurerm/spatial_anchors_account/example-usage": true,
+	// "../testdata/example-snippets/azurerm/spring_cloud_app_cosmosdb_association/example-usage": true,
+	// "../testdata/example-snippets/azurerm/monitor_scheduled_query_rules_log/example-usage": true,
 }
 
+//go:generate go run generate.go
 func TestTemplateCoverage(t *testing.T) {
-	matches, err := filepath.Glob("../testdata/example-snippets/aws/*/*")
+	matches, err := filepath.Glob("../testdata/example-snippets/*/*/*")
 	// matches, err := filepath.Glob("../testdata/terraform-provider-aws/examples/*")
 	// matches, err := filepath.Glob("../testdata/terraform-guides/infrastructure-as-code/*")
 	// matches, err := filepath.Glob("./temp-tf2pulumi")
@@ -62,22 +62,26 @@ func TestTemplateCoverage(t *testing.T) {
 			// t.Logf("Current match: %s", match)
 			snippet := filepath.Base(match)
 			snippetResource := filepath.Base(filepath.Dir(match))
+			snippetProvider := filepath.Base(filepath.Dir(filepath.Dir(match)))
 			template := snippetResource + "-" + snippet // Edit as needed to match format of data
 
-			// defer func() {
-			// 	v := recover()
-			// 	if v != nil {
-			// 		t.Logf("Panic in template: %s", template)
-			// 		diagList = append(diagList, Diag{
-			// 			CoverageDiag: CoverageDiag{
-			// 				Summary: "Panic",
-			// 				Severity: "Fatal",
-			// 			},
-			// 			Snippet: snippet,
-			// 			Resource: snippetResource,
-			// 		})
-			// 	}
-			// }()
+			// Comment out if we don't want to record panics
+			// If commented out requires manually adding panic causing files to `excluded`
+			defer func() {
+				v := recover()
+				if v != nil {
+					t.Logf("Panic in template: %s", template)
+					diagList = append(diagList, Diag{
+						CoverageDiag: CoverageDiag{
+							Summary:  "Panic",
+							Severity: "Fatal",
+						},
+						Snippet:  snippet,
+						Resource: snippetResource,
+						Provider: snippetProvider,
+					})
+				}
+			}()
 
 			var opts convert.Options
 			opts.TargetLanguage = "typescript"
@@ -93,6 +97,7 @@ func TestTemplateCoverage(t *testing.T) {
 					},
 					Snippet:  snippet,
 					Resource: snippetResource,
+					Provider: snippetProvider,
 				})
 				t.Logf("Fatal error in snippet: %s of resource: %s \n", snippet, snippetResource)
 				t.Logf("Error: %s \n", fmt.Sprint(err.Error()))
@@ -108,6 +113,7 @@ func TestTemplateCoverage(t *testing.T) {
 						CoverageDiag: mappedDiag,
 						Snippet:      snippet,
 						Resource:     snippetResource,
+						Provider:     snippetProvider,
 						RawDiag:      d,
 					})
 				}
@@ -155,6 +161,7 @@ type Diag struct {
 	CoverageDiag
 	Snippet  string          `json:"snippet"`
 	Resource string          `json:"resource"`
+	Provider string          `json:"provider"`
 	RawDiag  *hcl.Diagnostic `json:"rawDiagnostic"`
 }
 
@@ -187,6 +194,7 @@ func summarize(t *testing.T, diagList []Diag) {
 	_, err = db.Exec(`
 				DROP TABLE IF EXISTS errors;
 				CREATE TABLE errors(
+					provider TEXT NOT NULL,
 					resource TEXT NOT NULL,
 					snippet TEXT NOT NULL,
 					severity TEXT,
@@ -214,14 +222,16 @@ func summarize(t *testing.T, diagList []Diag) {
 		require.NoError(t, err)
 
 		_, err = db.Exec(`INSERT INTO errors(
-                   resource,
-				   snippet,
-                   severity,
-                   subject,
-                   summary,
-                   file_content,
-				   raw_diagnostic
-        	) values(?, ?, ?, ?, ?, ?, ?)`,
+					provider,
+                   	resource,
+					snippet,
+					severity,
+					subject,
+					summary,
+					file_content,
+					raw_diagnostic
+        	) values(?, ?, ?, ?, ?, ?, ?, ?)`,
+			d.Provider,
 			d.Resource,
 			d.Snippet,
 			nullable(d.Severity),
@@ -269,7 +279,6 @@ func summarize(t *testing.T, diagList []Diag) {
 	require.NoError(t, row.Scan(&success))
 
 	// Stores the overall results in a JSON object to compare in future tests.
-
 	successPct := float32(success) / float32(numSnippets) * 100.0
 	medSevPct := float32(medSevErrors) / float32(numSnippets) * 100.0
 	highSevPct := float32(highSevErrors) / float32(numSnippets) * 100.0
@@ -334,81 +343,3 @@ func summarize(t *testing.T, diagList []Diag) {
 	}
 	table.Render()
 }
-
-func TestGenInput(t *testing.T) {
-	// t.Logf("Test outputs will be logged to: %s", *testOutputDir)
-
-	require.NoError(t, os.MkdirAll(*testInputDir, 0700))
-
-	t.Run("aws", func(t *testing.T) {
-		providerPath := filepath.Join(*testInputDir, "aws")
-		require.NoError(t, os.MkdirAll(providerPath, 0700))
-		providerDocsPath := "../testdata/terraform-provider-aws/website/docs/r/*"
-		genProviderSnippets(t, providerPath, providerDocsPath)
-	})
-}
-
-func genProviderSnippets(t *testing.T, providerSnippetsDir string, providerDocsPath string) {
-	matches, err := filepath.Glob(providerDocsPath)
-	require.NoError(t, err)
-	// q.Q(matches)
-
-	for _, match := range matches {
-		counter := 0
-		// t.Logf("Current match: %s", match)
-
-		// Make directory to store all snippets for the current resource
-		currResource := strings.ReplaceAll(filepath.Base(match), ".html.markdown", "")
-		currResourceSnippetsDir := filepath.Join(providerSnippetsDir, currResource)
-		require.NoError(t, os.MkdirAll(currResourceSnippetsDir, 0700))
-		mdDocContent, err := ioutil.ReadFile(match)
-		require.NoError(t, err)
-
-		md := blackfriday.New(blackfriday.WithExtensions(blackfriday.FencedCode))
-		rootNode := md.Parse(mdDocContent)
-		rootNode.Walk(func(node *blackfriday.Node, entering bool) blackfriday.WalkStatus {
-			if entering {
-				if node.Type == blackfriday.CodeBlock &&
-					string(node.CodeBlockData.Info) == "terraform" ||
-					string(node.CodeBlockData.Info) == "hcl" {
-
-					counter++
-					// Make directory for snippet
-					var snippetDir string
-					// If there is a header for the snippet use that as it's title
-					if node.Prev != nil && node.Prev.Type == blackfriday.Heading && node.Prev.FirstChild != nil {
-						snippetName := string(node.Prev.FirstChild.Literal)
-						snippetDir = filepath.Join(currResourceSnippetsDir, snippetName)
-						snippetDir = strings.ReplaceAll(snippetDir, "/ ", "-")
-						snippetDir = strings.ReplaceAll(snippetDir, " ", "-")
-						snippetDir = strings.ToLower(snippetDir)
-					} else { // Else use a numbered title
-						snippetName := fmt.Sprintf("%s%d", "example-usage", counter)
-						snippetDir = filepath.Join(currResourceSnippetsDir, snippetName)
-					}
-					require.NoError(t, os.MkdirAll(snippetDir, 0700))
-
-					// Write snippet to a `main.tf` file in the newly created snippet directory
-					snippetFile := filepath.Join(snippetDir, "main.tf")
-					require.NoError(t, ioutil.WriteFile(snippetFile, node.Literal, 0600))
-
-					// q.Q(string(node.Prev.FirstChild.Literal))
-					// printNodeInfo(node)
-					// q.Q(fmt.Sprint(node.CodeBlockData))
-					// q.Q(node.CodeBlockData)
-					// q.Q(string(node.CodeBlockData.Info))
-					// q.Q("---------")
-				}
-			}
-			return blackfriday.GoToNext
-		})
-	}
-}
-
-// func printNodeInfo(node *blackfriday.Node) {
-// 	q.Q(fmt.Sprint(node.Type))
-// 	q.Q(string(node.Title))
-// 	q.Q(string(node.Literal))
-// 	// q.Q(string(node.FirstChild.Literal))
-// 	q.Q(fmt.Sprint(node.Parent))
-// }
