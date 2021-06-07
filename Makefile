@@ -11,7 +11,7 @@ lint::
 	golangci-lint run --timeout 5m
 
 test_acceptance::
-	generate_tf2pulumi_coverage_input
+	make generate_tf2pulumi_coverage_input
 	go test -v -count=1 -cover -timeout 2h -parallel ${TESTPARALLELISM} ./tests/...
 
 generate_tf2pulumi_coverage_input::
@@ -21,7 +21,7 @@ generate_tf2pulumi_coverage_input::
 	(cd tests/coverage-report/testdata && if [ ! -d example-snippets ]; then cd ../test && go generate; fi)
 
 tf2pulumi_coverage_report::
-	generate_tf2pulumi_coverage_input
+	make generate_tf2pulumi_coverage_input
 	(cd tests/coverage-report/test && go test -v -tags=coverage -timeout 20m -run TestTemplateCoverage)
 
 install_plugins::
