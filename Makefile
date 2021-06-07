@@ -11,13 +11,18 @@ lint::
 	golangci-lint run --timeout 5m
 
 test_acceptance::
+	generate_tf2pulumi_coverage_input
 	go test -v -count=1 -cover -timeout 2h -parallel ${TESTPARALLELISM} ./tests/...
 
-tf2pulumi_coverage_report::
-	# (cd pkg/tf2pulumi/testdata && if [ ! -d terraform-gudies ]; then git clone https://github.com/hashicorp/terraform-provider-aws && cd azure-quickstart-templates && git checkout 3b2757465c2de537e333f5e2d1c3776c349b8483; fi)
+generate_tf2pulumi_coverage_input::
 	(cd tests/coverage-report/testdata && if [ ! -d terraform-provider-aws ]; then git clone https://github.com/hashicorp/terraform-provider-aws && cd terraform-provider-aws && git checkout 59d66d6283496aa47e90ec78d0eb3851e0a640e1; fi)
-	(cd tests/coverage-report/testdata && if [ ! -d example-snippets ]; then cd ../test && go test -v -tags=coverage -run TestGenInput; fi)
-	(cd tests/coverage-report/test && go test -v -tags=coverage -run TestTemplateCoverage)
+	(cd tests/coverage-report/testdata && if [ ! -d terraform-provider-azurerm ]; then git clone https://github.com/terraform-providers/terraform-provider-azurerm && cd terraform-provider-azurerm && git checkout 8fc7613206855de21b1771a209510890f701a24b; fi)
+	(cd tests/coverage-report/testdata && if [ ! -d terraform-provider-google ]; then git clone https://github.com/hashicorp/terraform-provider-google && cd terraform-provider-google && git checkout ce331bb9c3984301ac3e7132a49aebb93e656832; fi)
+	(cd tests/coverage-report/testdata && if [ ! -d example-snippets ]; then cd ../test && go generate; fi)
+
+tf2pulumi_coverage_report::
+	generate_tf2pulumi_coverage_input
+	(cd tests/coverage-report/test && go test -v -tags=coverage -timeout 20m -run TestTemplateCoverage)
 
 install_plugins::
 	[ -x $(shell which pulumi) ] || curl -fsSL https://get.pulumi.com | sh

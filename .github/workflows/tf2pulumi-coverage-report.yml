@@ -27,17 +27,11 @@ jobs:
         uses: actions/setup-go@v2
         with:
           go-version: ${{ matrix.goversion }}
-      # - name: Install pulumictl
-      #   uses: jaxxstorm/action-install-gh-release@v1.1.0
-      #   with:
-      #     repo: pulumi/pulumictl
-      # - name: Install Pulumi CLI
-      #   uses: pulumi/action-install-pulumi-cli@v1.0.1
-      # - name: Install plugins
-      #   run: make install_plugins
       - name: Install plugins
         run: |
           pulumi plugin install resource aws 4.3.0
+          pulumi plugin install resource azure 4.6.0
+          pulumi plugin install resource gcp 5.7.0
           pulumi plugin install resource github 4.0.0
           pulumi plugin install resource tls 4.0.0
       - name: Generate coverage report
