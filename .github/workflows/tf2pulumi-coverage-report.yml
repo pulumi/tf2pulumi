@@ -29,10 +29,11 @@ jobs:
           go-version: ${{ matrix.goversion }}
       - name: Install plugins
         run: |
-          pulumi plugin install resource aws 4.3.0
+          pulumi plugin install resource aws 4.7.0
           pulumi plugin install resource azure 4.6.0
           pulumi plugin install resource gcp 5.7.0
           pulumi plugin install resource github 4.0.0
+          pulumi plugin install resource random 4.2.0
           pulumi plugin install resource tls 4.0.0
       - name: Generate coverage report
         run: make tf2pulumi_coverage_report
