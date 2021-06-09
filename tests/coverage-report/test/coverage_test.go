@@ -102,7 +102,11 @@ func TestTemplateCoverage(t *testing.T) {
 			} else { // err == nil
 				if len(diag.All) == 0 {
 					// Success is represented by no diagnostic information apart from template name.
-					diagList = append(diagList, Diag{Snippet: snippet, Resource: snippetResource})
+					diagList = append(diagList, Diag{
+						Snippet:  snippet,
+						Resource: snippetResource,
+						Provider: snippetProvider,
+					})
 				}
 				for _, d := range diag.All {
 					mappedDiag := mapDiag(t, d, match)

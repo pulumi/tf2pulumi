@@ -1,15 +1,15 @@
 name: tf2pulumi-coverage-report
 "on":
-  # schedule:
-  #   - cron: 35 17 * * *
-  # workflow_dispatch: {}
+  schedule:
+    - cron: 35 17 * * *
+  workflow_dispatch: {}
   pull_request:
     branches:
       - master
 
 env:
   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-  # AWS_REGION: us-west-2
+  AWS_REGION: us-west-2
   
 jobs:
   generate-coverage:
@@ -39,14 +39,14 @@ jobs:
         run: make tf2pulumi_coverage_report
       - name: Display results.json
         run: cat tests/coverage-report/test/results.json
-      # - name: Configure AWS Credentials
-      #   uses: aws-actions/configure-aws-credentials@v1
-      #   with:
-      #     aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-      #     aws-region: ${{ env.AWS_REGION }}
-      #     aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-      #     role-duration-seconds: 3600
-      #     role-session-name: arm2pulumiCvg@githubActions
-      #     role-to-assume: ${{ secrets.AWS_CI_ROLE_ARN }}
-      # - name: Upload results to S3
-      #   run: cd provider/pkg/arm2pulumi/internal/test && bash s3-upload-script.sh
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-region: ${{ env.AWS_REGION }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          role-duration-seconds: 3600
+          role-session-name: tf2pulumi@githubActions
+          role-to-assume: ${{ secrets.AWS_CI_ROLE_ARN }}
+      - name: Upload results to S3
+        run: cd tests/coverage-report/test && bash s3-upload-script.sh
