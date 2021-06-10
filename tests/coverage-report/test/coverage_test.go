@@ -41,9 +41,6 @@ var excluded = map[string]bool{
 //go:generate go run generate.go
 func TestTemplateCoverage(t *testing.T) {
 	matches, err := filepath.Glob("../testdata/example-snippets/*/*/*")
-	// matches, err := filepath.Glob("../testdata/terraform-provider-aws/examples/*")
-	// matches, err := filepath.Glob("../testdata/terraform-guides/infrastructure-as-code/*")
-	// matches, err := filepath.Glob("./temp-tf2pulumi")
 	require.NoError(t, err)
 
 	require.NoError(t, os.MkdirAll(*testOutputDir, 0700))
@@ -56,7 +53,6 @@ func TestTemplateCoverage(t *testing.T) {
 			if excluded[match] {
 				t.Skip()
 			}
-			// t.Logf("Current match: %s", match)
 			snippet := filepath.Base(match)
 			snippetResource := filepath.Base(filepath.Dir(match))
 			snippetProvider := filepath.Base(filepath.Dir(filepath.Dir(match)))
@@ -84,8 +80,7 @@ func TestTemplateCoverage(t *testing.T) {
 			opts.TargetLanguage = "typescript"
 			opts.Root = afero.NewBasePathFs(afero.NewOsFs(), match)
 			body, diag, err := convert.Convert(opts)
-			// fmt.Println(body)
-			// t.Logf("Current template: %s", template)
+
 			if err != nil {
 				diagList = append(diagList, Diag{
 					CoverageDiag: CoverageDiag{
@@ -96,9 +91,6 @@ func TestTemplateCoverage(t *testing.T) {
 					Resource: snippetResource,
 					Provider: snippetProvider,
 				})
-				t.Logf("Fatal error in snippet: %s of resource: %s \n", snippet, snippetResource)
-				t.Logf("Error: %s \n", fmt.Sprint(err.Error()))
-				t.Logf("---------------------\n")
 			} else { // err == nil
 				if len(diag.All) == 0 {
 					// Success is represented by no diagnostic information apart from template name.
@@ -146,14 +138,12 @@ func mapDiag(t *testing.T, rawDiag *hcl.Diagnostic, matchDir string) CoverageDia
 	newDiag.Subject = rawDiag.Subject
 
 	fileToRead := filepath.Join(matchDir, rawDiag.Subject.Filename)
-	// t.Logf("new file to read: %s", fileToRead)
 	fileContent, err := ioutil.ReadFile(fileToRead)
 	if err != nil {
 		newDiag.FileContent = "Could not load file content"
 	} else { // err == nil
 		newDiag.FileContent = string(fileContent)
 	}
-	// require.NoError(t, err)
 	return newDiag
 }
 

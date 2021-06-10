@@ -31,5 +31,12 @@ install_plugins::
 	pulumi plugin install resource gcp 2.0.0
 	pulumi plugin install resource terraform-template 0.16.0
 	pulumi plugin install resource random 2.0.0
+	# Required for coverage report
+	pulumi plugin install resource aws 4.7.0
+	pulumi plugin install resource azure 4.6.0
+	pulumi plugin install resource gcp 5.7.0
+	pulumi plugin install resource github 4.0.0
+	pulumi plugin install resource random 4.2.0
+	pulumi plugin install resource tls 4.0.0
 
 dev:: build lint test_acceptance
