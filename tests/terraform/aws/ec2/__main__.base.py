@@ -2,11 +2,11 @@ import pulumi
 import pulumi_aws as aws
 
 ubuntu = aws.ec2.get_ami(filters=[
-        aws.GetAmiFilterArgs(
+        aws.ec2.GetAmiFilterArgs(
             name="name",
             values=["ubuntu/images/hvm-ssd/ubuntu-trusty-14.04-amd64-server-*"],
         ),
-        aws.GetAmiFilterArgs(
+        aws.ec2.GetAmiFilterArgs(
             name="virtualization-type",
             values=["hvm"],
         ),
