@@ -93,7 +93,7 @@ func TestTemplateCoverage(t *testing.T) {
 				})
 			} else { // err == nil
 				if len(diag.All) == 0 {
-					// Success is represented by no diagnostic information apart from template name.
+					// Success is represented by no diagnostic information apart from snippet info.
 					diagList = append(diagList, Diag{
 						Snippet:  snippet,
 						Resource: snippetResource,
@@ -174,6 +174,8 @@ type OverallResult struct {
 	Total                                        int
 }
 
+// Summarizes the results in a JSON file and sqlite database. Also generates `results.json` which
+// contains overall results.
 func summarize(t *testing.T, diagList []Diag) {
 	jsonOutputLocation := filepath.Join(*testOutputDir, "summary.json")
 	marshalled, err := json.MarshalIndent(diagList, "", "\t")
