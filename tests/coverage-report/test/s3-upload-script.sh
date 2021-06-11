@@ -1,4 +1,6 @@
 #!/bin/bash
+# Formats the results of the coverage test in a way that matches the converter's JSONPath file
+# in the specified S3 bucket, then upload the data into that bucket.
 set -euf -o pipefail
 
 currDateTime=$(date +"%Y-%m-%d_%H-%M-%S")

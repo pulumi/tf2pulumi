@@ -11,8 +11,7 @@ lint::
 	golangci-lint run --timeout 5m
 
 test_acceptance::
-	make generate_tf2pulumi_coverage_input
-	go test -v -count=1 -cover -timeout 2h -parallel ${TESTPARALLELISM} ./tests/...
+	go test -v -count=1 -cover -timeout 2h -parallel ${TESTPARALLELISM} ./tests/terraform/...
 
 generate_tf2pulumi_coverage_input::
 	(cd tests/coverage-report/testdata && if [ ! -d terraform-provider-aws ]; then git clone https://github.com/hashicorp/terraform-provider-aws && cd terraform-provider-aws && git checkout 59d66d6283496aa47e90ec78d0eb3851e0a640e1; fi)
@@ -31,12 +30,5 @@ install_plugins::
 	pulumi plugin install resource gcp 2.0.0
 	pulumi plugin install resource terraform-template 0.16.0
 	pulumi plugin install resource random 2.0.0
-	# Required for coverage report
-	pulumi plugin install resource aws 4.7.0
-	pulumi plugin install resource azure 4.6.0
-	pulumi plugin install resource gcp 5.7.0
-	pulumi plugin install resource github 4.0.0
-	pulumi plugin install resource random 4.2.0
-	pulumi plugin install resource tls 4.0.0
 
 dev:: build lint test_acceptance

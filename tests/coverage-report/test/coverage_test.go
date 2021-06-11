@@ -36,6 +36,8 @@ var excluded = map[string]bool{
 	// "../testdata/example-snippets/azurerm/spatial_anchors_account/example-usage": true,
 	// "../testdata/example-snippets/azurerm/spring_cloud_app_cosmosdb_association/example-usage": true,
 	// "../testdata/example-snippets/azurerm/monitor_scheduled_query_rules_log/example-usage": true,
+	// "../testdata/example-snippets/google/google_service_account_key/example-usage,-save-key-in-kubernetes-secret---deprecated": true,
+	// "../testdata/example-snippets/google/cloud_run_service/example-usage---cloud-run-anthos": true,
 }
 
 //go:generate go run generate.go
@@ -133,7 +135,7 @@ func mapDiag(t *testing.T, rawDiag *hcl.Diagnostic, matchDir string) CoverageDia
 	} else if rawDiag.Severity == hcl.DiagWarning { // should be only other case
 		newDiag.Severity = "Med"
 	} else {
-		t.Errorf("Got a rawDiagnostic Severity of: %d", rawDiag.Severity)
+		newDiag.Severity = "High" // This way we still get logs, but it wasn't Fatal since there was no panic
 	}
 	newDiag.Subject = rawDiag.Subject
 

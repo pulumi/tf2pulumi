@@ -1,8 +1,8 @@
 import pulumi
 import pulumi_aws as aws
 
-ubuntu = aws.ec2.get_ami(filters=[
-        aws.ec2.GetAmiFilterArgs(
+ubuntu = aws.get_ami(filters=[
+        aws.GetAmiFilterArgs(
             name="name",
             values=["ubuntu/images/hvm-ssd/ubuntu-trusty-14.04-amd64-server-*"],
         ),
@@ -13,7 +13,7 @@ ubuntu = aws.ec2.get_ami(filters=[
     ],
     most_recent=True,
     owners=["099720109477"])
-web = aws.ec2.Instance("web",
+web = aws.Instance("web",
     ami=ubuntu.id,
     instance_type="t2.micro",
     tags={
