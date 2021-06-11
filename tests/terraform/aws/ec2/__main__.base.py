@@ -6,14 +6,14 @@ ubuntu = aws.get_ami(filters=[
             name="name",
             values=["ubuntu/images/hvm-ssd/ubuntu-trusty-14.04-amd64-server-*"],
         ),
-        aws.ec2.GetAmiFilterArgs(
+        aws.GetAmiFilterArgs(
             name="virtualization-type",
             values=["hvm"],
         ),
     ],
     most_recent=True,
     owners=["099720109477"])
-web = aws.Instance("web",
+web = aws.ec2.Instance("web",
     ami=ubuntu.id,
     instance_type="t2.micro",
     tags={
