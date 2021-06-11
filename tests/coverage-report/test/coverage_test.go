@@ -182,7 +182,6 @@ func summarize(t *testing.T, diagList []Diag) {
 	db, err := sql.Open("sqlite", filepath.Join(*testOutputDir, "summary.db"))
 	require.NoError(t, err)
 	_, err = db.Exec(`DROP TABLE IF EXISTS errors;
-
 	CREATE TABLE errors (
 		provider       TEXT NOT NULL,
 		resource       TEXT NOT NULL,
