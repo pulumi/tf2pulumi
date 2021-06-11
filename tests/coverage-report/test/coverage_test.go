@@ -31,15 +31,7 @@ var retainConverted = flag.Bool("retainConverted", false,
 // These templates currently cause panics.
 // Uncomment them if you want to ignore these examples, otherwise they will be recorded as panics
 // due to the defer function on line 73.
-var excluded = map[string]bool{
-	// "../testdata/example-snippets/aws/autoscaling_group/example-usage": true,
-	// "../testdata/example-snippets/azurerm/spatial_anchors_account/example-usage": true,
-	// "../testdata/example-snippets/azurerm/spring_cloud_app_cosmosdb_association/example-usage": true,
-	// "../testdata/example-snippets/azurerm/monitor_scheduled_query_rules_log/example-usage": true,
-	`../testdata/example-snippets/google/google_service_account_key/example-usage,-save-key-in-
-	kubernetes-secret---deprecated`: true,
-	// "../testdata/example-snippets/google/cloud_run_service/example-usage---cloud-run-anthos": true,
-}
+var excluded = map[string]bool{}
 
 //go:generate go run generate.go
 func TestTemplateCoverage(t *testing.T) {
@@ -94,31 +86,32 @@ func TestTemplateCoverage(t *testing.T) {
 					Resource: snippetResource,
 					Provider: snippetProvider,
 				})
-			} else { // err == nil
-				if len(diag.All) == 0 {
-					// Success is represented by no diagnostic information apart from snippet info.
-					diagList = append(diagList, Diag{
-						Snippet:  snippet,
-						Resource: snippetResource,
-						Provider: snippetProvider,
-					})
-				}
-				for _, d := range diag.All {
-					mappedDiag := mapDiag(t, d, match)
-					diagList = append(diagList, Diag{
-						CoverageDiag: mappedDiag,
-						Snippet:      snippet,
-						Resource:     snippetResource,
-						Provider:     snippetProvider,
-						RawDiag:      d,
-					})
-				}
-				if *retainConverted {
-					require.NoError(t, os.MkdirAll(filepath.Join(*testOutputDir, template), 0700))
-					for fileName, fileContent := range body {
-						path := filepath.Join(*testOutputDir, template, fileName)
-						require.NoError(t, ioutil.WriteFile(path, fileContent, 0600))
-					}
+				return
+			}
+			// err == nil
+			if len(diag.All) == 0 {
+				// Success is represented by no diagnostic information apart from snippet info.
+				diagList = append(diagList, Diag{
+					Snippet:  snippet,
+					Resource: snippetResource,
+					Provider: snippetProvider,
+				})
+			}
+			for _, d := range diag.All {
+				mappedDiag := mapDiag(t, d, match)
+				diagList = append(diagList, Diag{
+					CoverageDiag: mappedDiag,
+					Snippet:      snippet,
+					Resource:     snippetResource,
+					Provider:     snippetProvider,
+					RawDiag:      d,
+				})
+			}
+			if *retainConverted {
+				require.NoError(t, os.MkdirAll(filepath.Join(*testOutputDir, template), 0700))
+				for fileName, fileContent := range body {
+					path := filepath.Join(*testOutputDir, template, fileName)
+					require.NoError(t, ioutil.WriteFile(path, fileContent, 0600))
 				}
 			}
 		})
@@ -131,11 +124,12 @@ func TestTemplateCoverage(t *testing.T) {
 func mapDiag(t *testing.T, rawDiag *hcl.Diagnostic, matchDir string) CoverageDiag {
 	var newDiag CoverageDiag
 	newDiag.Summary = rawDiag.Summary
-	if rawDiag.Severity == hcl.DiagError {
+	switch rawDiag.Severity {
+	case hcl.DiagError:
 		newDiag.Severity = "High"
-	} else if rawDiag.Severity == hcl.DiagWarning { // should be only other case
+	case hcl.DiagWarning: // should be only other case
 		newDiag.Severity = "Med"
-	} else {
+	default:
 		newDiag.Severity = "High" // This way we still get logs, but it wasn't Fatal since there was no panic
 	}
 	newDiag.Subject = rawDiag.Subject
@@ -187,19 +181,27 @@ func summarize(t *testing.T, diagList []Diag) {
 
 	db, err := sql.Open("sqlite", filepath.Join(*testOutputDir, "summary.db"))
 	require.NoError(t, err)
-	_, err = db.Exec(`
-				DROP TABLE IF EXISTS errors;
-				CREATE TABLE errors(
-					provider TEXT NOT NULL,
-					resource TEXT NOT NULL,
-					snippet TEXT NOT NULL,
-					severity TEXT,
-					subject TEXT,
-					summary TEXT,
-					file_content TEXT,
-					raw_diagnostic TEXT,
-					PRIMARY KEY (resource, snippet, severity, subject, summary, file_content, raw_diagnostic)
-				);`)
+	_, err = db.Exec(`DROP TABLE IF EXISTS errors;
+
+	CREATE TABLE errors (
+		provider       TEXT NOT NULL,
+		resource       TEXT NOT NULL,
+		snippet        TEXT NOT NULL,
+		severity       TEXT,
+		subject        TEXT,
+		summary        TEXT,
+		file_content   TEXT,
+		raw_diagnostic TEXT,
+		PRIMARY KEY (
+			resource,
+			snippet,
+			severity,
+			subject,
+			summary,
+			file_content,
+			raw_diagnostic
+		)
+	);`)
 	require.NoError(t, err)
 
 	nullable := func(val string) sql.NullString {
@@ -219,7 +221,7 @@ func summarize(t *testing.T, diagList []Diag) {
 
 		_, err = db.Exec(`INSERT INTO errors(
 					provider,
-                   	resource,
+					resource,
 					snippet,
 					severity,
 					subject,
@@ -241,20 +243,12 @@ func summarize(t *testing.T, diagList []Diag) {
 
 	var numSnippets, fatalErrors, highSevErrors, medSevErrors, success int
 
-	countAllQuery := `SELECT COUNT(*) 
-					FROM (
-						SELECT DISTINCT resource, snippet 
-						FROM errors
-						)`
+	countAllQuery := `SELECT count(*) FROM (SELECT DISTINCT resource, snippet FROM errors);`
 	row := db.QueryRow(countAllQuery)
 	require.NoError(t, row.Scan(&numSnippets))
 
-	countGenQuery := `SELECT COUNT(*) 
-					FROM (
-						SELECT DISTINCT resource, snippet 
-						FROM errors
-						WHERE severity=?
-						)`
+	countGenQuery := `SELECT count(*)
+	  FROM (SELECT DISTINCT resource, snippet FROM errors WHERE severity = ?);`
 
 	row = db.QueryRow(countGenQuery, "Fatal")
 	require.NoError(t, row.Scan(&fatalErrors))
@@ -265,12 +259,8 @@ func summarize(t *testing.T, diagList []Diag) {
 	row = db.QueryRow(countGenQuery, "Med")
 	require.NoError(t, row.Scan(&medSevErrors))
 
-	countSuccessQuery := `SELECT COUNT(*) 
-							FROM (
-								SELECT DISTINCT resource, snippet 
-								FROM errors
-								WHERE severity is NULL
-								)`
+	countSuccessQuery := `SELECT count(*)
+	  FROM (SELECT DISTINCT resource, snippet FROM errors WHERE severity IS NULL);`
 	row = db.QueryRow(countSuccessQuery)
 	require.NoError(t, row.Scan(&success))
 
