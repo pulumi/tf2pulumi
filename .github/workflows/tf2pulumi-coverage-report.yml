@@ -3,9 +3,6 @@ name: tf2pulumi-coverage-report
   schedule:
     - cron: 35 17 * * *
   workflow_dispatch: {}
-  pull_request:
-    branches:
-      - master
 
 env:
   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
