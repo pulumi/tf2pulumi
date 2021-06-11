@@ -1,0 +1,51 @@
+name: tf2pulumi-coverage-report
+"on":
+  schedule:
+    - cron: 35 17 * * *
+  workflow_dispatch: {}
+
+env:
+  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  AWS_REGION: us-west-2
+  
+jobs:
+  generate-coverage:
+    name: prerequisites
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        goversion: [1.16.x]
+    steps:
+      - name: Checkout Repo
+        uses: actions/checkout@v2
+        with:
+          lfs: true
+      - name: Install Go
+        uses: actions/setup-go@v2
+        with:
+          go-version: ${{ matrix.goversion }}
+      - name: Install plugins
+        run: |
+          pulumi plugin install resource aws 4.7.0
+          pulumi plugin install resource azure 4.6.0
+          pulumi plugin install resource azuread 4.2.0
+          pulumi plugin install resource gcp 5.7.0
+          pulumi plugin install resource github 4.0.0
+          pulumi plugin install resource kubernetes 3.3.0
+          pulumi plugin install resource random 4.2.0
+          pulumi plugin install resource tls 4.0.0
+      - name: Generate coverage report
+        run: make tf2pulumi_coverage_report
+      - name: Display results.json
+        run: cat tests/coverage-report/test/results.json
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-region: ${{ env.AWS_REGION }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          role-duration-seconds: 3600
+          role-session-name: tf2pulumi@githubActions
+          role-to-assume: ${{ secrets.AWS_CI_ROLE_ARN }}
+      - name: Upload results to S3
+        run: cd tests/coverage-report/test && bash s3-upload-script.sh

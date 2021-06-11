@@ -1,0 +1,3 @@
+test-results/
+testdata/*/
+test/results.json
