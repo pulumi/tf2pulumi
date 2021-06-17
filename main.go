@@ -20,8 +20,9 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
+	"path/filepath"
 
-	"github.com/pulumi/pulumi-terraform-bridge/v2/pkg/tf2pulumi/convert"
+	"github.com/pulumi/pulumi-terraform-bridge/v3/pkg/tf2pulumi/convert"
 	"github.com/spf13/cobra"
 
 	"github.com/pulumi/tf2pulumi/version"
@@ -29,7 +30,7 @@ import (
 
 func main() {
 	var opts convert.Options
-	resourceNameProperty, filterAutoNames, tarout := "", false, false
+	resourceNameProperty, filterAutoNames, out, tarout := "", false, "", false
 
 	rootCmd := &cobra.Command{
 		Use:   "tf2pulumi",
@@ -76,7 +77,8 @@ Pulumi TypeScript program that describes the same resource graph.`,
 			}
 
 			for filename, contents := range files {
-				if err := ioutil.WriteFile(filename, contents, 0600); err != nil {
+				target := filepath.Join(out, filename)
+				if err := ioutil.WriteFile(target, contents, 0600); err != nil {
 					return err
 				}
 			}
@@ -99,6 +101,8 @@ Pulumi TypeScript program that describes the same resource graph.`,
 		"when set, the property with the given key will be removed from all resources")
 	flag.BoolVar(&filterAutoNames, "filter-auto-names", false,
 		"when set, properties that are auto-generated names will be removed from all resources")
+	flag.StringVarP(&out, "output", "o", "",
+		"write files to the target base directory (defaults to working directory if unspecified)")
 	flag.StringVar(&opts.TargetLanguage, "target-language", "typescript",
 		"sets the language to target")
 	flag.StringVar(&opts.TargetSDKVersion, "target-sdk-version", "0.17.28",
