@@ -71,6 +71,9 @@ $ tf2pulumi --target-language python
 $ tf2pulumi --target-language csharp
 ```
 
+By default, the conversion output will be stored in the current working directory. To override
+this, use the `--output` (`-o` for short) flag.
+
 If `tf2pulumi` complains about missing Terraform resource plugins, install those plugins as per the
 instructions in the error message and re-run the command above.
 
