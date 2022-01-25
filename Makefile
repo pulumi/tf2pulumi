@@ -5,7 +5,7 @@ TESTPARALLELISM := 1
 WORKING_DIR     := $(shell pwd)
 
 build::
-	go build -a -o ${WORKING_DIR}/bin/tf2pulumi -ldflags "-X github.com/pulumi/tf2pulumi/version.Version=${VERSION}" github.com/pulumi/tf2pulumi
+	go build -o ${WORKING_DIR}/bin/tf2pulumi -ldflags "-X github.com/pulumi/tf2pulumi/version.Version=${VERSION}" github.com/pulumi/tf2pulumi
 
 lint::
 	golangci-lint run --timeout 5m
