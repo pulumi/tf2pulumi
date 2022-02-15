@@ -145,6 +145,7 @@ func (test *targetTest) Run(t *testing.T) {
 	if err = fsutil.CopyFile(targetDir, filepath.Join(cwd, test.runOpts.Dir), nil); err != nil {
 		t.Fatalf("failed to create intermediate directory: %v", err)
 	}
+	realDir := test.runOpts.Dir
 	test.runOpts.Dir = targetDir
 
 	// Generate the Pulumi TypeScript program.
@@ -163,8 +164,16 @@ func (test *targetTest) Run(t *testing.T) {
 		if err != nil {
 			t.Fatalf("failed to read program file %v: %v", programPath, err)
 		}
-		assert.Equalf(t, string(baseline), string(program),
-			"baseline file %v does not match program file %v", baselinePath, programPath)
+		accept := os.Getenv("PULUMI_ACCEPT") == "true"
+		if accept && string(baseline) != string(program) {
+			realBaselinePath := filepath.Join(cwd, realDir, test.targetBaselineFile())
+			err := ioutil.WriteFile(realBaselinePath, program, 0o644) //nolint:gosec // just test data
+			assert.NoError(t, err)
+			t.Logf("Updating baseline file %v", realBaselinePath)
+		} else {
+			assert.Equalf(t, string(baseline), string(program),
+				"baseline file %v does not match program file %v", baselinePath, programPath)
+		}
 	}
 
 	// Now, if desired, finally ensure that it actually compiles (and anything else the specific test requires).
