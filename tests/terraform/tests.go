@@ -69,7 +69,11 @@ func (c ConvertOptions) With(other ConvertOptions) ConvertOptions {
 // Run executes this test, spawning subtests for each supported target.
 func (test Test) Run(t *testing.T) {
 	t.Helper()
-	t.Parallel()
+	// Double negative cannot be helped, this is intended to mitigate test failures where a global
+	// resource is manipulated, e.g.: the default AWS security group.
+	if !test.RunOptions.NoParallel {
+		t.Parallel()
+	}
 	t.Run("Python", func(t *testing.T) {
 		runOpts := integration.ProgramTestOptions{}
 		if test.RunOptions != nil {
@@ -281,6 +285,11 @@ func FilterName(value string) TestOptionsFunc {
 // Skip skips the test for the given reason.
 func Skip(reason string) TestOptionsFunc {
 	return func(_ *testing.T, test *Test) { test.Options.Skip = reason }
+}
+
+// Sets the NoParallel flag on the test to run
+func NoParallel() TestOptionsFunc {
+	return func(_ *testing.T, test *Test) { test.RunOptions.NoParallel = true }
 }
 
 // AllowChanges allows changes on the empty preview and update for the given test.
