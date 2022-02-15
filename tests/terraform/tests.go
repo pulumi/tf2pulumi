@@ -68,6 +68,7 @@ func (c ConvertOptions) With(other ConvertOptions) ConvertOptions {
 
 // Run executes this test, spawning subtests for each supported target.
 func (test Test) Run(t *testing.T) {
+	t.Logf("Starting test %v", t.Name())
 	t.Helper()
 	// Double negative cannot be helped, this is intended to mitigate test failures where a global
 	// resource is manipulated, e.g.: the default AWS security group.
