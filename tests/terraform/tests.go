@@ -68,8 +68,13 @@ func (c ConvertOptions) With(other ConvertOptions) ConvertOptions {
 
 // Run executes this test, spawning subtests for each supported target.
 func (test Test) Run(t *testing.T) {
+	t.Logf("Starting test %v", t.Name())
 	t.Helper()
-	t.Parallel()
+	// Double negative cannot be helped, this is intended to mitigate test failures where a global
+	// resource is manipulated, e.g.: the default AWS security group.
+	if !test.RunOptions.NoParallel {
+		t.Parallel()
+	}
 	t.Run("Python", func(t *testing.T) {
 		runOpts := integration.ProgramTestOptions{}
 		if test.RunOptions != nil {
@@ -141,6 +146,7 @@ func (test *targetTest) Run(t *testing.T) {
 	if err = fsutil.CopyFile(targetDir, filepath.Join(cwd, test.runOpts.Dir), nil); err != nil {
 		t.Fatalf("failed to create intermediate directory: %v", err)
 	}
+	realDir := test.runOpts.Dir
 	test.runOpts.Dir = targetDir
 
 	// Generate the Pulumi TypeScript program.
@@ -159,8 +165,16 @@ func (test *targetTest) Run(t *testing.T) {
 		if err != nil {
 			t.Fatalf("failed to read program file %v: %v", programPath, err)
 		}
-		assert.Equalf(t, string(baseline), string(program),
-			"baseline file %v does not match program file %v", baselinePath, programPath)
+		accept := os.Getenv("PULUMI_ACCEPT") == "true"
+		if accept && string(baseline) != string(program) {
+			realBaselinePath := filepath.Join(cwd, realDir, test.targetBaselineFile())
+			err := ioutil.WriteFile(realBaselinePath, program, 0o644) //nolint:gosec // just test data
+			assert.NoError(t, err)
+			t.Logf("Updating baseline file %v", realBaselinePath)
+		} else {
+			assert.Equalf(t, string(baseline), string(program),
+				"baseline file %v does not match program file %v", baselinePath, programPath)
+		}
 	}
 
 	// Now, if desired, finally ensure that it actually compiles (and anything else the specific test requires).
@@ -281,6 +295,11 @@ func FilterName(value string) TestOptionsFunc {
 // Skip skips the test for the given reason.
 func Skip(reason string) TestOptionsFunc {
 	return func(_ *testing.T, test *Test) { test.Options.Skip = reason }
+}
+
+// Sets the NoParallel flag on the test to run
+func NoParallel() TestOptionsFunc {
+	return func(_ *testing.T, test *Test) { test.RunOptions.NoParallel = true }
 }
 
 // AllowChanges allows changes on the empty preview and update for the given test.

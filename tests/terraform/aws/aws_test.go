@@ -43,7 +43,7 @@ func RunAWSTest(t *testing.T, dir string, opts ...terraform.TestOptionsFunc) {
 }
 
 func TestASG(t *testing.T) {
-	RunAWSTest(t, "asg")
+	RunAWSTest(t, "asg", terraform.NoParallel())
 }
 
 func TestCognitoUserPool(t *testing.T) {
@@ -60,16 +60,16 @@ func TestECSALB(t *testing.T) {
 }
 
 func TestEIP(t *testing.T) {
-	RunAWSTest(t, "eip")
+	RunAWSTest(t, "eip", terraform.NoParallel())
 }
 
 func TestELB(t *testing.T) {
 	// Skip Python due to a bug in depends_on codegen
-	RunAWSTest(t, "elb", terraform.SkipPython())
+	RunAWSTest(t, "elb", terraform.SkipPython(), terraform.NoParallel())
 }
 
 func TestELB2(t *testing.T) {
-	RunAWSTest(t, "elb2")
+	RunAWSTest(t, "elb2", terraform.NoParallel())
 }
 
 func TestLBListener(t *testing.T) {

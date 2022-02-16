@@ -9,21 +9,23 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io/ioutil"
+	"os"
+	"path/filepath"
+	"sync"
+	"testing"
+
 	"github.com/hashicorp/hcl/v2"
 	"github.com/olekukonko/tablewriter"
 	"github.com/pulumi/pulumi-terraform-bridge/v3/pkg/tf2pulumi/convert"
 	"github.com/spf13/afero"
 	"github.com/stretchr/testify/require"
-	"io/ioutil"
-	"os"
-	"path/filepath"
-	"testing"
 
 	_ "modernc.org/sqlite"
 )
 
 var testOutputDir = flag.String("testOutputDir", "test-results",
-	`location to write raw test output to. Defaults to ./test-results. Creates the folder if it 
+	`location to write raw test output to. Defaults to ./test-results. Creates the folder if it
 	does not exist.`)
 var retainConverted = flag.Bool("retainConverted", false,
 	"When set to true retains the converted files in 'testOutputDir'")
@@ -35,19 +37,32 @@ var excluded = map[string]bool{}
 
 //go:generate go run generate.go
 func TestTemplateCoverage(t *testing.T) {
+	t.Parallel()
 	matches, err := filepath.Glob("../testdata/example-snippets/*/*/*")
 	require.NoError(t, err)
 
 	require.NoError(t, os.MkdirAll(*testOutputDir, 0700))
 
 	t.Logf("Test outputs will be logged to: %s", *testOutputDir)
+	t.Logf("Found %v example snippets to test", len(matches))
 
 	var diagList []Diag
+	var diagMutex sync.Mutex
+
+	appendDiag := func(diag Diag) {
+		diagMutex.Lock()
+		diagList = append(diagList, diag)
+		diagMutex.Unlock()
+	}
+
 	for _, match := range matches {
+		match := match
 		t.Run(match, func(t *testing.T) {
 			if excluded[match] {
 				t.Skip()
 			}
+			t.Parallel()
+			t.Logf("Starting test %v", t.Name())
 			snippet := filepath.Base(match)
 			snippetResource := filepath.Base(filepath.Dir(match))
 			snippetProvider := filepath.Base(filepath.Dir(filepath.Dir(match)))
@@ -59,7 +74,7 @@ func TestTemplateCoverage(t *testing.T) {
 				v := recover()
 				if v != nil {
 					t.Logf("Panic in template: %s", template)
-					diagList = append(diagList, Diag{
+					appendDiag(Diag{
 						CoverageDiag: CoverageDiag{
 							Summary:  "Panic",
 							Severity: "Fatal",
@@ -77,7 +92,7 @@ func TestTemplateCoverage(t *testing.T) {
 			body, diag, err := convert.Convert(opts)
 
 			if err != nil {
-				diagList = append(diagList, Diag{
+				appendDiag(Diag{
 					CoverageDiag: CoverageDiag{
 						Summary:  err.Error(),
 						Severity: "Fatal",
@@ -91,7 +106,7 @@ func TestTemplateCoverage(t *testing.T) {
 			// err == nil
 			if len(diag.All) == 0 {
 				// Success is represented by no diagnostic information apart from snippet info.
-				diagList = append(diagList, Diag{
+				appendDiag(Diag{
 					Snippet:  snippet,
 					Resource: snippetResource,
 					Provider: snippetProvider,
@@ -99,7 +114,7 @@ func TestTemplateCoverage(t *testing.T) {
 			}
 			for _, d := range diag.All {
 				mappedDiag := mapDiag(t, d, match)
-				diagList = append(diagList, Diag{
+				appendDiag(Diag{
 					CoverageDiag: mappedDiag,
 					Snippet:      snippet,
 					Resource:     snippetResource,
@@ -116,7 +131,14 @@ func TestTemplateCoverage(t *testing.T) {
 			}
 		})
 	}
-	summarize(t, diagList)
+
+	// Ordinarily waiting on the above tests - such as via WaitGroup - would deadlock, as parallel
+	// subtests wait for the parent test to complete.
+	//
+	// Cleanup registers a callback when the entire tree of tests is complete.
+	t.Cleanup(func() {
+		summarize(t, diagList)
+	})
 }
 
 // Maps tf2pulumi's diagnostics to our CoverageDiag, removing information we do not need for querying.
