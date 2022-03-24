@@ -25,10 +25,10 @@ tf2pulumi_coverage_report:: generate_tf2pulumi_coverage_input
 
 install_plugins::
 	[ -x $(shell which pulumi) ] || curl -fsSL https://get.pulumi.com | sh
-	pulumi plugin install resource aws 2.0.0
-	pulumi plugin install resource azure 2.0.0
-	pulumi plugin install resource gcp 2.0.0
+	pulumi plugin install resource aws 5.0.0
+	pulumi plugin install resource azure 4.42.0
+	pulumi plugin install resource gcp 6.17.0
 	pulumi plugin install resource terraform-template 0.16.0
-	pulumi plugin install resource random 2.0.0
+	pulumi plugin install resource random 4.4.2
 
 dev:: build lint test_acceptance

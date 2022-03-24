@@ -15,7 +15,7 @@ const ubuntu = pulumi.output(aws.ec2.getAmi({
     ],
     mostRecent: true,
     owners: ["099720109477"],
-}, { async: true }));
+}));
 // Originally defined at main.tf:21
 const web = new aws.ec2.Instance("web", {
     ami: ubuntu.id,
