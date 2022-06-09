@@ -78,22 +78,40 @@ if (importFromStatefile) {
     // ids defined in it.
     const statefileString = fs.readFileSync(importFromStatefile).toString()
     const data = JSON.parse(statefileString);
-    if (data.version !== 3) throw new Error("Only version '3' tfstate files currently supported: " + data.version);
-    if (data.modules.length != 1) throw new Error("Only a single module is currently supported.");
     const mapping: Record<string, string> = {};
-    for (const tfname of Object.keys(data.modules[0].resources)) {
-        const tfdata = data.modules[0].resources[tfname];
-        const propMapper = idMapping[tfdata.type];
-        mapping[tfname] = propMapper 
-            ? propMapper(tfdata.primary.attributes) 
-            : tfdata.primary.id;
+    switch(data.version) {
+        case 3:
+            if (data.modules.length != 1) throw new Error("Only a single module is currently supported.");
+            for (const tfname of Object.keys(data.modules[0].resources)) {
+                const tfdata = data.modules[0].resources[tfname];
+                const propMapper = idMapping[tfdata.type];
+                mapping[tfname] = propMapper
+                    ? propMapper(tfdata.primary.attributes)
+                    : tfdata.primary.id;
+            }
+            break;
+        case 4:
+            for (const tfdata of data.resources) {
+                const propMapper = idMapping[tfdata.type];
+                for (const instance of tfdata.instances) {
+                    let tfname = `${tfdata.type}.${tfdata.name}`;
+                    if (instance.index_key !== undefined)
+                        tfname += `.${instance.index_key}`;
+                    mapping[tfname] = propMapper
+                        ? propMapper(instance.attributes)
+                        : instance.attributes.id;
+                }
+            }
+            break;
+        default:
+            throw new Error("Only version '3' and '4' tfstate files currently supported: " + data.version);
     }
 
-    // Add an `import` mapping to every resource defined in this stack. 
+    // Add an `import` mapping to every resource defined in this stack.
     pulumi.runtime.registerStackTransformation(({ type, name, props, opts }) => {
         return {
             props,
-            opts: pulumi.mergeOptions(opts, { 
+            opts: pulumi.mergeOptions(opts, {
                 import: lookupId(type, name),
             }),
         };
