@@ -3,17 +3,14 @@ module github.com/pulumi/tf2pulumi
 go 1.16
 
 require (
-	github.com/hashicorp/hcl/v2 v2.3.0
+	github.com/hashicorp/hcl/v2 v2.11.1
 	github.com/olekukonko/tablewriter v0.0.5
-	github.com/pulumi/pulumi-terraform-bridge/v2 v2.18.1
-	github.com/pulumi/pulumi-terraform-bridge/v3 v3.2.1
-	github.com/pulumi/pulumi/pkg/v2 v2.19.0 // indirect
-	github.com/pulumi/pulumi/pkg/v3 v3.4.0
-	github.com/pulumi/pulumi/sdk/v2 v2.19.0 // indirect
-	github.com/pulumi/pulumi/sdk/v3 v3.4.0
+	github.com/pulumi/pulumi-terraform-bridge/v3 v3.25.2
+	github.com/pulumi/pulumi/pkg/v3 v3.34.1
+	github.com/pulumi/pulumi/sdk/v3 v3.34.1
 	github.com/spf13/afero v1.6.0
-	github.com/spf13/cobra v1.0.0
-	github.com/stretchr/testify v1.6.1
+	github.com/spf13/cobra v1.4.0
+	github.com/stretchr/testify v1.7.1
 	modernc.org/sqlite v1.10.7
 )
 
