@@ -1,5 +1,8 @@
 ## HEAD (Unreleased)
 
+- Add Java & YAML support.
+  [#256](https://github.com/pulumi/tf2pulumi/pull/256)
+
 - Move most of the implementation of the converter into [`pulumi-terraform-bridge`](https://github.com/pulumi/pulumi-terraform-bridge).
   [#207](https://github.com/pulumi/tf2pulumi/pull/207)
 
