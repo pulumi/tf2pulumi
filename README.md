@@ -12,7 +12,7 @@ time, it will also translate Terraform state files into Pulumi checkpoint files.
 
 ## Building and Installation
 
-If you wish to use `tf2pulumi` without developing the tool itself, you can use one of the [binary
+To use `tf2pulumi` you can build the tool from source or you can use one of the [binary
 releases](https://github.com/pulumi/tf2pulumi/releases) hosted on GitHub.
 
 ### Homebrew
