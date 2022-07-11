@@ -1,6 +1,6 @@
 # tf2pulumi
 
-[![Build Status](https://travis-ci.com/pulumi/tf2pulumi.svg?branch=master)](https://travis-ci.com/pulumi/tf2pulumi)
+[![Build Status](https://github.com/pulumi/tf2pulumi/actions/workflows/master.yml/badge.svg)](https://github.com/pulumi/tf2pulumi/actions/workflows/master.yml)
 
 Convert Terraform projects to Pulumi TypeScript programs.
 
