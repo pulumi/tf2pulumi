@@ -1,5 +1,8 @@
 ## HEAD (Unreleased)
 
+- Upgrade `pulumi-terraform-bridge` dependency to v3. This adds YAML and Java support.
+  [#259](https://github.com/pulumi/tf2pulumi/pull/259)
+
 - Move most of the implementation of the converter into [`pulumi-terraform-bridge`](https://github.com/pulumi/pulumi-terraform-bridge).
   [#207](https://github.com/pulumi/tf2pulumi/pull/207)
 
