@@ -1,6 +1,6 @@
 module import-go
 
-go 1.17
+go 1.18
 
 require (
 	github.com/pulumi/pulumi-aws/sdk v1.28.0

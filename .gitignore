@@ -3,7 +3,7 @@
 **/bin/
 Pulumi.*.yaml
 .idea
-
+**/.DS_Store
 **/command-output/
 
 dist/
