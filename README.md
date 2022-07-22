@@ -52,6 +52,12 @@ $ pulumi new python -f
 
 // For a C# project
 $ pulumi new csharp -f
+
+// For a Java project
+$ pulumi new java -f
+
+// For a YAML project
+$ pulumi new yaml -f
 ```
 
 Then run `tf2pulumi` which will write a file in the directory that
@@ -69,6 +75,12 @@ $ tf2pulumi --target-language python
 
 // For a C# project
 $ tf2pulumi --target-language csharp
+
+// For a Java project
+$ tf2pulumi --target-language java
+
+// For a YAML project
+$ tf2pulumi --target-language yaml
 ```
 
 If `tf2pulumi` complains about missing Terraform resource plugins, install those plugins as per the
