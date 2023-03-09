@@ -2,7 +2,7 @@
 
 [![Build Status](https://github.com/pulumi/tf2pulumi/actions/workflows/master.yml/badge.svg)](https://github.com/pulumi/tf2pulumi/actions/workflows/master.yml)
 
-Convert Terraform projects to Pulumi TypeScript programs.
+Convert Terraform projects to Pulumi programs written in your favorite languages.
 
 ## Goals
 
