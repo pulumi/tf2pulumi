@@ -5,23 +5,20 @@ env:
   PULUMI_ACCESS_TOKEN: ${{ secrets.PULUMI_ACCESS_TOKEN }}
   PULUMI_API: https://api.pulumi-staging.io
   SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
-  GOVERSION: 1.17.x
 jobs:
   lint:
-    container: golangci/golangci-lint:latest
     name: lint
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout Repo
-        uses: actions/checkout@v2
-      - name: Unshallow clone for tags
-        run: git fetch --prune --unshallow --tags
-      - name: Install pulumictl
-        uses: jaxxstorm/action-install-gh-release@v1.1.0
+      - uses: actions/setup-go@v4
         with:
-          repo: pulumi/pulumictl
-      - name: Run lint
-        run: make lint
+          go-version: stable
+      - uses: actions/checkout@v3
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v3
+        with:
+          version: v1.52.1
+          args: --timeout=5m
       - if: failure() && github.event_name == 'push'
         name: Notify Slack
         uses: 8398a7/action-slack@v3
@@ -42,10 +39,9 @@ jobs:
           repository: pulumi/scripts
       - name: Unshallow clone for tags
         run: git fetch --prune --unshallow --tags
-      - name: Install Go
-        uses: actions/setup-go@v2
+      - uses: actions/setup-go@v4
         with:
-          go-version: ${{ env.GOVERSION }}
+          go-version: stable
       - name: Install pulumictl
         uses: jaxxstorm/action-install-gh-release@v1.1.0
         with:
@@ -82,10 +78,9 @@ jobs:
           repository: pulumi/scripts
       - name: Unshallow clone for tags
         run: git fetch --prune --unshallow --tags
-      - name: Install Go
-        uses: actions/setup-go@v2
+      - uses: actions/setup-go@v4
         with:
-          go-version: ${{ env.GOVERSION }}
+          go-version: stable
       - name: Install pulumictl
         uses: jaxxstorm/action-install-gh-release@v1.1.0
         with:

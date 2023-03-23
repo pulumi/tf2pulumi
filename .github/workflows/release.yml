@@ -18,10 +18,9 @@ jobs:
         uses: jaxxstorm/action-install-gh-release@v1.1.0
         with:
           repo: pulumi/pulumictl
-      - name: Install Go 1.17.x
-        uses: actions/setup-go@v2
+      - uses: actions/setup-go@v4
         with:
-          go-version: '1.17.x'
+          go-version: stable
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v2
         with:
@@ -35,4 +34,3 @@ jobs:
           pulumictl create choco-deploy -a tf2pulumi ${CURRENT_TAG}
         env:
           GITHUB_TOKEN: ${{ secrets.PULUMI_BOT_TOKEN }}
-

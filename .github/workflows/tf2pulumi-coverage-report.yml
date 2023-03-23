@@ -7,21 +7,21 @@ name: tf2pulumi-coverage-report
 env:
   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
   AWS_REGION: us-west-2
-  
+
 jobs:
   generate-coverage:
     name: prerequisites
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        goversion: [1.16.x]
+        goversion: [stable]
     steps:
       - name: Checkout Repo
         uses: actions/checkout@v2
         with:
           lfs: true
       - name: Install Go
-        uses: actions/setup-go@v2
+        uses: actions/setup-go@v4
         with:
           go-version: ${{ matrix.goversion }}
       - name: Install plugins
