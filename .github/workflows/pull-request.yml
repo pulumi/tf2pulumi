@@ -74,9 +74,9 @@ jobs:
       - name: Install Pulumi CLI
         uses: pulumi/action-install-pulumi-cli@v1.0.1
       - name: Setup Node
-        uses: actions/setup-node@v1
+        uses: actions/setup-node@v3
         with:
-          node-version: 13.x
+          node-version: lts/*
           registry-url: https://registry.npmjs.org
       - name: Setup DotNet
         uses: actions/setup-dotnet@v1
