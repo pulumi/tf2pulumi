@@ -33,3 +33,4 @@ jobs:
           skip-cache: true
           skip-pkg-cache: true
           skip-build-cache: true
+          args: --timeout=5m
