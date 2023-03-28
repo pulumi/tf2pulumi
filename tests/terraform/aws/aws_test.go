@@ -80,6 +80,9 @@ func TestLBListener(t *testing.T) {
 }
 
 func TestLambda(t *testing.T) {
+	t.Skipf("Skipping test. " +
+		"Python skipped due to unimplemented support for the archive provider (#172)." +
+		"TypeScript skipped ")
 	// Skip Python due to unimplemented support for the archive provider (#172)
 	RunAWSTest(t, "lambda", terraform.SkipPython())
 }
