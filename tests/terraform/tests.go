@@ -328,8 +328,8 @@ func SkipPython() TestOptionsFunc {
 	return Python(Skip("Python not yet implemented"))
 }
 
-// TypeScript sets up a new context that also accepts any number of test options, but applies those test options only when
-// running with the TypeScript target. Options that affect the Pulumi CLI integration test framework are ignored.
+// TypeScript sets up a new context that also accepts any number of test options, but applies those test options only
+// when running with the TypeScript target. Options that affect the Pulumi CLI integration test framework are ignored.
 func TypeScript(opts ...TestOptionsFunc) TestOptionsFunc {
 	return func(t *testing.T, test *Test) {
 		child := Test{}
