@@ -95,7 +95,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v1
         with:
-          node-version: 13.x
+          node-version: 14.x
           registry-url: https://registry.npmjs.org
       - name: Setup DotNet
         uses: actions/setup-dotnet@v1
