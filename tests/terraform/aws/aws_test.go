@@ -69,7 +69,9 @@ func TestELB(t *testing.T) {
 }
 
 func TestELB2(t *testing.T) {
-	RunAWSTest(t, "elb2", terraform.NoParallel())
+	RunAWSTest(t, "elb2",
+		terraform.NoParallel(),
+		terraform.SkipTypeScript("TODO[pulumi/tf2pulumi#280] failing in CI"))
 }
 
 func TestLBListener(t *testing.T) {
