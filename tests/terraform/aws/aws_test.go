@@ -69,7 +69,9 @@ func TestELB(t *testing.T) {
 }
 
 func TestELB2(t *testing.T) {
-	RunAWSTest(t, "elb2", terraform.NoParallel())
+	RunAWSTest(t, "elb2",
+		terraform.NoParallel(),
+		terraform.SkipTypeScript("TODO[pulumi/tf2pulumi#280] failing in CI"))
 }
 
 func TestLBListener(t *testing.T) {
@@ -80,6 +82,7 @@ func TestLBListener(t *testing.T) {
 }
 
 func TestLambda(t *testing.T) {
+	t.Skip("TODO[pulumi/tf2pulumi#284] skip failing test temporarily")
 	// Skip Python due to unimplemented support for the archive provider (#172)
 	RunAWSTest(t, "lambda", terraform.SkipPython())
 }

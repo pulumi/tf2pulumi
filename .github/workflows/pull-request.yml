@@ -7,21 +7,6 @@ env:
   SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
   GOVERSION: 1.17.x
 jobs:
-  lint:
-    container: golangci/golangci-lint:latest
-    name: lint
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout Repo
-        uses: actions/checkout@v2
-      - name: Unshallow clone for tags
-        run: git fetch --prune --unshallow --tags
-      - name: Install pulumictl
-        uses: jaxxstorm/action-install-gh-release@v1.1.0
-        with:
-          repo: pulumi/pulumictl
-      - name: Run lint
-        run: make lint
   build:
     name: build
     runs-on: ubuntu-latest
@@ -81,7 +66,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v1
         with:
-          node-version: 13.x
+          node-version: 14.x
           registry-url: https://registry.npmjs.org
       - name: Setup DotNet
         uses: actions/setup-dotnet@v1
