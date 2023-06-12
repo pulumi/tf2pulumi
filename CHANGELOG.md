@@ -1,10 +1,13 @@
-## HEAD (Unreleased)
+## 0.12.0 (Released June 12, 2023)
 
 - Add Java & YAML support.
   [#256](https://github.com/pulumi/tf2pulumi/pull/256)
 
 - Move most of the implementation of the converter into [`pulumi-terraform-bridge`](https://github.com/pulumi/pulumi-terraform-bridge).
   [#207](https://github.com/pulumi/tf2pulumi/pull/207)
+
+- Add deprecation message. The functionality has moved to
+  `pulumi convert --from terraform` in the Pulumi CLI.
 
 ## 0.9.0 (Released September 9, 2020)
 

@@ -31,6 +31,11 @@ func main() {
 	var opts convert.Options
 	resourceNameProperty, filterAutoNames, tarout := "", false, false
 
+	os.Stderr.WriteString("Warning: tf2pulumi is deprecated and no longer maintained. The functionality is now " +
+		"available from the Pulumi CLI's `pulumi convert --from terraform` command. See " +
+		"https://www.pulumi.com/docs/using-pulumi/adopting-pulumi/migrating-to-pulumi/from-terraform/ " +
+		"for more information on migrating from Terraform.\n\n")
+
 	rootCmd := &cobra.Command{
 		Use:   "tf2pulumi",
 		Short: "tf2pulumi converts Terraform configuration to a Pulumi TypeScript program",
