@@ -1,4 +1,4 @@
-## 0.12.0 (Released June 12, 2023)
+## 0.12.0 (Released June 24, 2023)
 
 - Add Java & YAML support.
   [#256](https://github.com/pulumi/tf2pulumi/pull/256)
